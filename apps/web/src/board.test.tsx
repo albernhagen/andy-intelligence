@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { WorkTrackerError } from "@andy/contracts";
 import { STAGES } from "@/lib/tickets";
+import { DROP_ANIMATION } from "@/components/DragPreview";
 import { readyStory, renderApp } from "@/test/harness";
 
 /**
@@ -16,6 +17,11 @@ const CARD_STEP = 60;
 const LANES = STAGES.filter((s) => s !== "verifying");
 
 function fakeRect(el: Element): DOMRect {
+  // The dragged copy (AI-396) starts where its card is; dnd-kit moves it by the drag's transform.
+  if (el.closest("[data-drag-overlay]") || el.querySelector(":scope > [data-drag-overlay]")) {
+    const source = document.querySelector("[data-dragging]");
+    return source ? fakeRect(source) : new DOMRect(0, 0, 0, 0);
+  }
   const lane = el.closest("[data-stage]");
   const i = lane ? LANES.indexOf(lane.getAttribute("data-stage") as never) : -1;
   if (i < 0) return new DOMRect(0, 0, 0, 0);
@@ -223,6 +229,66 @@ describe("board drop keeps the board in view (AI-25)", () => {
     const done = await expand(harness.user, "Done");
     expect(await within(done).findByText(ticket.key)).toBeTruthy();
     expect(harness.router.state.location.pathname).toBe("/p/ai");
+  });
+});
+
+/** AI-396: the dragged card stays visible under the pointer. */
+describe("board drag preview", () => {
+  const overlay = () => document.querySelector<HTMLElement>("[data-drag-overlay]");
+
+  async function pickUp(user: ReturnType<typeof renderApp>["user"], key: string) {
+    document.querySelector<HTMLElement>(`[data-ticket="${key}"]`)!.focus();
+    await user.keyboard(" ");
+  }
+
+  it("GivenABacklogCard_WhenItIsPickedUp_ThenACopyOfItShowsUnderThePointer", async () => {
+    const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
+
+    await pickUp(harness.user, ticket.key);
+
+    const copy = await waitFor(() => {
+      expect(overlay()).not.toBeNull();
+      return overlay()!;
+    });
+    expect(copy.textContent).toContain(ticket.key);
+    expect(copy.textContent).toContain("Spike");
+    // A picture of the card, not a second link or card for the drag code and screen readers.
+    expect(copy.getAttribute("aria-hidden")).toBe("true");
+    expect(copy.querySelector("a, [data-ticket]")).toBeNull();
+  });
+
+  it("GivenACardIsDragged_WhenItIsOverAnotherLane_ThenItsSlotIsAPlaceholderAndThatLaneIsHighlighted", async () => {
+    const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
+
+    await pickUp(harness.user, ticket.key);
+    await harness.user.keyboard("{ArrowRight}".repeat(COLUMN_WIDTH / 25));
+
+    const backlog = screen.getByRole("region", { name: "Backlog" });
+    const placeholder = backlog.querySelector(`[data-ticket="${ticket.key}"]`)!;
+    expect(placeholder.hasAttribute("data-dragging")).toBe(true);
+    expect(placeholder.className).toContain("border-dashed");
+    const ready = screen.getByRole("region", { name: "Ready" });
+    await waitFor(() => expect(ready.hasAttribute("data-drop-over")).toBe(true));
+    expect(ready.className).toContain("bg-selected");
+    expect(backlog.hasAttribute("data-drop-over")).toBe(false);
+  });
+
+  it("GivenACardIsDragged_WhenItIsDroppedOrTheDragIsCancelled_ThenTheCopyIsGoneWithin200ms", async () => {
+    const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
+
+    await pickUp(harness.user, ticket.key);
+    await waitFor(() => expect(overlay()).not.toBeNull());
+    await harness.user.keyboard("{Escape}");
+    await waitFor(() => expect(overlay()).toBeNull(), { timeout: 200 });
+    expect(document.querySelector("[data-dragging]")).toBeNull();
+
+    await pickUp(harness.user, ticket.key);
+    await waitFor(() => expect(overlay()).not.toBeNull());
+    await harness.user.keyboard("{ArrowRight}".repeat(COLUMN_WIDTH / 25) + " ");
+    await waitFor(() => expect(overlay()).toBeNull(), { timeout: 200 });
+    expect(document.querySelector("[data-drop-over]")).toBeNull();
+    // Where a browser animates the drop, the settle is shorter than that limit.
+    expect(DROP_ANIMATION.duration).toBeLessThanOrEqual(200);
   });
 });
 

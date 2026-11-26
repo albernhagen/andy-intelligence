@@ -25,7 +25,8 @@ import {
   workViews,
   type WorkView,
 } from "@andy/domain";
-import { BoardCard } from "@/components/board/BoardCard";
+import { BoardCard, BoardCardPreview } from "@/components/board/BoardCard";
+import { DragPreview } from "@/components/DragPreview";
 import { BoardDispatchStatus } from "@/components/DispatchControls";
 import { IdeateForm } from "@/components/IdeateForm";
 import { SetupNextStep } from "@/components/setup/SetupNextStep";
@@ -314,6 +315,8 @@ function Lanes({
   const [errors, setErrors] = useState<Record<string, Error>>({});
   const [expanded, setExpanded] = useState<Stage[]>([]);
   const [overLane, setOverLane] = useState<Stage | null>(null);
+  // The card being dragged, drawn under the pointer (AI-396).
+  const [activeId, setActiveId] = useState<string | null>(null);
   // AI-181: the Verifying lane for projects that deploy, or while a ticket is in it.
   const project = useProjects().data?.find((p) => p.id === projectId);
   const deploys = (project?.deployKind ?? "none") !== "none";
@@ -365,6 +368,7 @@ function Lanes({
 
   async function onDragEnd({ active, over }: DragEndEvent) {
     setOverLane(null);
+    setActiveId(null);
     const ticket = byId.get(String(active.id));
     if (!ticket || !over) return;
     // Grouped, a drop on a card under another epic's header in the same lane part would reorder
@@ -428,22 +432,23 @@ function Lanes({
     }
   }
 
+  /** What a card shows, the same on the board and in its dragged copy. */
+  const cardFacts = (t: BoardTicket) => ({
+    ticket: t,
+    blockers: openBlockers(t, byId),
+    position: t.stage === "ready" ? lanes.ready.indexOf(t) + 1 : null,
+    next: t.id === next?.id,
+    now,
+  });
+  const dragged = activeId ? byId.get(activeId) : undefined;
+
   const lanesByStage = stages.map((stage) => {
     const collapsible = !phone && COLLAPSED_STAGES.includes(stage);
     const collapsed = collapsible && !expanded.includes(stage);
     const toggle = () =>
       setExpanded((e) => (e.includes(stage) ? e.filter((s) => s !== stage) : [...e, stage]));
     const card = (t: BoardTicket) => (
-      <BoardCard
-        key={t.id}
-        ticket={t}
-        projectId={projectId}
-        blockers={openBlockers(t, byId)}
-        position={stage === "ready" ? lanes.ready.indexOf(t) + 1 : null}
-        next={t.id === next?.id}
-        now={now}
-        error={errors[t.id] ?? null}
-      />
+      <BoardCard key={t.id} {...cardFacts(t)} projectId={projectId} error={errors[t.id] ?? null} />
     );
     // Backlog shows two parts (Up next, then Ideas); each is grouped on its own.
     const split = stage === "backlog" ? splitBacklog(lanes.backlog) : null;
@@ -539,12 +544,16 @@ function Lanes({
   return (
     <DndContext
       sensors={sensors}
-      onDragStart={({ activatorEvent }: DragStartEvent) => {
+      onDragStart={({ active, activatorEvent }: DragStartEvent) => {
+        setActiveId(String(active.id));
         // A keyboard drag ends with Space, which never clicks the link.
         if (!(activatorEvent instanceof KeyboardEvent)) suppressDropClick();
       }}
       onDragOver={({ over }: DragOverEvent) => setOverLane(laneOf(over?.id))}
-      onDragCancel={() => setOverLane(null)}
+      onDragCancel={() => {
+        setOverLane(null);
+        setActiveId(null);
+      }}
       onDragEnd={(e) => void onDragEnd(e)}
     >
       {phone && (
@@ -567,6 +576,7 @@ function Lanes({
       <div className="relative flex items-stretch gap-3 overflow-x-auto pb-2">
         {lanesByStage.filter(({ stage }) => !phone || stage === shownStage).map((l) => l.lane)}
       </div>
+      <DragPreview>{dragged ? <BoardCardPreview {...cardFacts(dragged)} /> : null}</DragPreview>
     </DndContext>
   );
 }
