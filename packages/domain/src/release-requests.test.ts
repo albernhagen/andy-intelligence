@@ -289,6 +289,33 @@ describe("ReleaseService", () => {
       expect(stored?.error).toContain("ask Andy");
     });
 
+    it("GivenTheRunCannotBeSavedAfterTheDispatch_WhenRolledBack_ThenItSaysTheRunStartedAndQueuesTheCheck", async () => {
+      vi.spyOn(requests, "update").mockRejectedValueOnce(new Error("store down"));
+      const { request, summary } = await service.rollback({ projectId }, OWNER);
+      expect(summary).toContain(
+        "release.yml started (https://github.com/albernhagen/shop/actions/runs/1)",
+      );
+      expect(request.status).toBe("requested");
+      expect([...queue.queued.values()]).toMatchObject([
+        { kind: "release", requestId: request.id },
+      ]);
+
+      advance(RELEASE_CHECK_DELAY_MS);
+      expect(await service.check(projectId, request.id)).toBe("unlinked");
+      expect((await requests.get(request.id))?.status).toBe("ended_unreported");
+    });
+
+    it("GivenNoRunSavedButTheWorkflowReportedItsStart_WhenChecked_ThenItWaitsForTheEnd", async () => {
+      vi.spyOn(requests, "update").mockRejectedValueOnce(new Error("store down"));
+      const { request } = await service.rollback({ projectId }, OWNER);
+      await requests.update(request.id, { status: "started", updatedAt: clock.toISOString() }, [
+        "requested",
+      ]);
+      advance(RELEASE_CHECK_DELAY_MS);
+      expect(await service.check(projectId, request.id)).toBe("rescheduled");
+      expect((await requests.get(request.id))?.status).toBe("started");
+    });
+
     it("GivenTheAppIsNotInstalled_WhenRolledBack_ThenDispatchFailed", async () => {
       host = new InMemoryCodeHost([]);
       await expect(service.rollback({ projectId }, OWNER)).rejects.toMatchObject({

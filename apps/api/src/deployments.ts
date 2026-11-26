@@ -208,6 +208,22 @@ export function registerDeploymentCallbacks(
           });
           return c.json({ error: mismatch }, 422);
         }
+        // Claim it atomically before recording, so two start reports for one request (a re-run,
+        // or two instances) can't both record a deployment: the second gets 422.
+        try {
+          await deps.releaseRequests.update(
+            body.data.request,
+            { status: "started", updatedAt: now().toISOString() },
+            ["requested", "dispatched"],
+          );
+        } catch (err) {
+          if (!(err instanceof WorkTrackerError && err.code === "conflict")) throw err;
+          log("WARNING", "deployment start refused", {
+            reason: "release request already matched",
+            request: body.data.request,
+          });
+          return c.json({ error: "release request already matched" }, 422);
+        }
       }
     }
     const previous = await deps.deployments.latestGood(caller.project.id, plan.environment);
@@ -236,7 +252,7 @@ export function registerDeploymentCallbacks(
       runId: caller.claims.run_id ?? null,
     });
     if (deployment.request) {
-      await followRequest(deployment.request, "started", ["requested", "dispatched"], {
+      await followRequest(deployment.request, "started", ["started"], {
         deploymentId: deployment.id,
       });
     }
@@ -278,7 +294,8 @@ export function registerDeploymentCallbacks(
       });
       log("INFO", "deployment finished", { deploymentId: done.id, status: done.status });
       if (done.request && done.status !== "started") {
-        await followRequest(done.request, done.status, ["started"], {});
+        // `dispatched` too: a claim that raced the run's bookkeeping must still end (ADR-0160).
+        await followRequest(done.request, done.status, ["dispatched", "started"], {});
       }
       return c.json({ deploymentId: done.id, status: done.status }, 200);
     } catch (err) {

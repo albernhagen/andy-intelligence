@@ -57,13 +57,7 @@ export interface ReleaseResult {
 
 /** What a check found; logged by the caller. */
 export type ReleaseCheckOutcome =
-  | "not_found"
-  | "final"
-  | "rescheduled"
-  | "gave_up"
-  | "cancelled"
-  | "ended_unreported"
-  | "never_dispatched";
+  "not_found" | "final" | "rescheduled" | "gave_up" | "cancelled" | "ended_unreported" | "unlinked";
 
 export interface ReleaseServiceDeps {
   tracker: Pick<WorkTracker, "getProject">;
@@ -243,9 +237,19 @@ export class ReleaseService {
     const host = await this.deps.codeHost();
     const repo = project?.repos[0];
     if (request.runId === null) {
-      if (age < RELEASE_CHECK_DELAY_MS) return this.recheck(request);
-      return (await this.end(request, "dispatch_failed", "the workflow start was never confirmed"))
-        ? "never_dispatched"
+      // No run on the request: its save failed after the dispatch, or the process stopped. A
+      // workflow that reported its start still ends it; one that never did is closed here.
+      if (request.status !== "requested" || age < RELEASE_CHECK_DELAY_MS) {
+        if (age < RELEASE_CHECK_MAX_MS) return this.recheck(request);
+        log("WARNING", "release run check gave up", { requestId, runId: null, age });
+        return "gave_up";
+      }
+      return (await this.end(
+        request,
+        "ended_unreported",
+        "no workflow run was linked to this request and none reported; look for it in the repo's runs",
+      ))
+        ? "unlinked"
         : "final";
     }
     const run = host && repo ? await host.getWorkflowRun(repo, request.runId) : null;
@@ -357,8 +361,19 @@ export class ReleaseService {
       log("ERROR", "release dispatch failed", { ...audit, error: reason });
       throw new DomainError("dispatch_failed", reason);
     }
-    const stored = await this.recordRun(request.id, dispatched.id, dispatched.url);
     log("INFO", "release dispatched", { ...audit, runId: dispatched.id });
+    let stored: ReleaseRequest;
+    try {
+      stored = await this.recordRun(request.id, dispatched.id, dispatched.url);
+    } catch (err) {
+      // The run is going: say so rather than fail, and still queue the check that closes it.
+      log("ERROR", "release run not saved on its request", { ...audit, error: errorText(err) });
+      await this.recheck(request);
+      return {
+        request,
+        summary: `${plan.summary}; release.yml started (${dispatched.url}), but the run couldn't be saved on the request`,
+      };
+    }
     await this.recheck(stored);
     return { request: stored, summary: plan.summary };
   }

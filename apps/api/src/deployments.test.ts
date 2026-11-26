@@ -379,6 +379,26 @@ describe("release requests matched to reports (AI-199: M6.12)", () => {
     expect((await s.start(release(), body)).status).toBe(422);
   });
 
+  it("GivenTwoStartReportsForOneRequestAtOnce_WhenBothArrive_ThenOnlyOneDeploymentIsRecorded", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+    const body = {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    };
+    const statuses = (await Promise.all([s.start(release(), body), s.start(release(), body)])).map(
+      (r) => r.status,
+    );
+    expect(statuses.sort()).toEqual([201, 422]);
+    expect(
+      (await s.deployments.list("ai", "prod")).filter((d) => d.kind === "promote"),
+    ).toHaveLength(1);
+  });
+
   it("GivenAReleaseRunByHand_WhenItReportsWithoutARequest_ThenItIsRecordedAsBefore", async () => {
     const requests = new InMemoryReleaseRequestStore();
     const s = setup(undefined, undefined, requests);
