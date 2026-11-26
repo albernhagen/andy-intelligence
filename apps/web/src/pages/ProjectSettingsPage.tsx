@@ -28,6 +28,7 @@ import { showsError } from "@/lib/live";
 import { dateOnly } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
+  DEPLOY_KIND_OPTIONS,
   ENVIRONMENT_OPTIONS,
   MERGE_MODE_OPTIONS,
   PLAN_APPROVAL_OPTIONS,
@@ -179,6 +180,7 @@ function Section({ id, project }: { id: SectionId; project: Project }) {
           </div>
           <DefaultWorkerSelect project={project} />
           <DefaultExecutorSelect project={project} />
+          <DeployKindPicker project={project} />
           <EnvironmentsPicker project={project} />
         </Rows>
       );
@@ -306,13 +308,36 @@ function PlanApprovalPicker({ project }: { project: Project }) {
   );
 }
 
-/** Where the project's releases go (ADR-0050, AI-160: M6.2); later M6 tickets read it. */
+/** How the project ships (ADR-0114, AI-387: M6.21); later M6 tickets read it. */
+function DeployKindPicker({ project }: { project: Project }) {
+  const update = useUpdateProject(project.id);
+  return (
+    <PickerRow
+      label={SETTING_LABELS.deployKind}
+      description="How this project ships. Nothing deploys from it yet."
+      value={project.deployKind}
+      options={DEPLOY_KIND_OPTIONS}
+      disabled={update.isPending}
+      onValueChange={(deployKind) => update.mutate({ deployKind })}
+      state={update}
+    />
+  );
+}
+
+/**
+ * Where the project's releases go (ADR-0050, AI-160: M6.2); read only when the deploy kind is
+ * Cloud Run (ADR-0114), so with no deploys it says it is not in use. Still editable either way.
+ */
 function EnvironmentsPicker({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
     <PickerRow
       label={SETTING_LABELS.environments}
-      description="Where releases go. Nothing deploys from it yet."
+      description={
+        project.deployKind === "none"
+          ? "Not in use: this project does not deploy. Set Deploy kind to Cloud Run to use it."
+          : "Where releases go. Nothing deploys from it yet."
+      }
       value={project.environments}
       options={ENVIRONMENT_OPTIONS}
       disabled={update.isPending}

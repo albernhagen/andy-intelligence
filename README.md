@@ -18,7 +18,7 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
 
 **Working** (full list: [`docs/how-it-works.md`](docs/how-it-works.md)): a board and Needs-you inbox, the Claude connector (MCP), Refine and Build agent tasks on GitHub Actions or a local runner, PR checks and review agents, the merge gate and MCP `merge_pr` for coordinator sessions through a merge queue per repo, dispatch under quota and spend caps, product discovery before the brief (`/discover`), epics and the roadmap (a case per milestone; the `epic` merge mode merges child tickets into the epic's branch), digest, What's new, dashboards and Needs-you email. Each feature: [`docs/features/`](docs/features/). New detail goes in `docs/how-it-works.md`, so this section stays one screen.
 
-**Not built yet:** Needs you has no push notification (M7); one task at a time per ticket; the digest is not sent anywhere.
+**Not built yet:** releases: each project stores a deploy kind (`none` or `cloud-run`) and its environments, but nothing deploys from them (M6); Needs you has no push notification (M7); one task at a time per ticket; the digest is not sent anywhere.
 
 ## Docs
 

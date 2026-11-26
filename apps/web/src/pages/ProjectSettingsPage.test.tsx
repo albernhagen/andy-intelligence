@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
-import { EnvironmentPolicy, ExecutorKind, MergeMode, PlanApproval, Worker } from "@andy/contracts";
+import {
+  DeployKind,
+  EnvironmentPolicy,
+  ExecutorKind,
+  MergeMode,
+  PlanApproval,
+  Worker,
+} from "@andy/contracts";
 import { DEFAULT_ROUTE, MERGE_MODE_TEXT } from "@andy/domain";
 import { renderApp } from "@/test/harness";
 
@@ -126,7 +133,7 @@ describe("project settings page", () => {
     expect(await limits.findByRole("region", { name: "Spend caps" })).toBeTruthy();
 
     const defaults = await open(h, "Defaults");
-    for (const name of ["Default worker", "Default executor", "Environments"])
+    for (const name of ["Default worker", "Default executor", "Deploy kind", "Environments"])
       expect(defaults.getByRole("radiogroup", { name })).toBeTruthy();
 
     const notifications = await open(h, "Notifications");
@@ -153,6 +160,7 @@ describe("project settings page", () => {
       defaultWorker: "ask",
       executor: "local",
       environments: "dev-and-prod",
+      deployKind: "cloud-run",
       lastDispatch: { decision: "paused", at: "2026-11-09T12:00:00.000Z" },
     });
     await h.queryClient.invalidateQueries();
@@ -181,7 +189,24 @@ describe("project settings page", () => {
     expect(picked(defaults.getByRole("radiogroup", { name: "Default executor" }))).toBe(
       "Local runner",
     );
+    expect(picked(defaults.getByRole("radiogroup", { name: "Deploy kind" }))).toBe("Cloud Run");
     expect(picked(defaults.getByRole("radiogroup", { name: "Environments" }))).toBe("Dev and prod");
+    expect(defaults.queryByText(/^Not in use/)).toBeNull();
+  });
+
+  it("GivenNoDeploys_WhenDefaultsOpen_ThenEnvironmentsSaysNotInUseUntilCloudRunIsPicked", async () => {
+    const h = await withProjects("/p/ai/settings");
+    const defaults = await open(h, "Defaults");
+    expect(picked(defaults.getByRole("radiogroup", { name: "Deploy kind" }))).toBe("No deploys");
+    expect(defaults.getByText(/^Not in use: this project does not deploy/)).toBeTruthy();
+
+    await h.user.click(defaults.getByRole("radio", { name: /^Cloud Run/ }));
+
+    await waitFor(async () =>
+      expect((await h.tracker.getProject("ai"))?.deployKind).toBe("cloud-run"),
+    );
+    await waitFor(() => expect(defaults.queryByText(/^Not in use/)).toBeNull());
+    expect((await h.tracker.getProject("ops"))?.deployKind).toBe("none");
   });
 
   it("GivenMergeMode_WhenAndyOpensAutomation_ThenAllFourModesShowWithNameDescriptionAndWhatWaits", async () => {
@@ -212,6 +237,7 @@ describe("project settings page", () => {
       ...Worker.options,
       ...ExecutorKind.options,
       ...EnvironmentPolicy.options,
+      ...DeployKind.options,
     ]);
     const groups = [...(await open(h, "Automation")).getAllByRole("radiogroup")].map((g) => ({
       name: g.getAttribute("aria-label"),
@@ -241,6 +267,7 @@ describe("project settings page", () => {
     expect(defaults.map((x) => x.names)).toEqual([
       ["Agent", "Me", "Ask each ticket"],
       ["GitHub Actions", "Local runner"],
+      ["No deploys", "Cloud Run"],
       ["Prod only", "Dev and prod"],
     ]);
   });

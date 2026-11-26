@@ -11,6 +11,7 @@ import type {
   MergeMode,
   MilestoneCase,
   MilestoneStatus,
+  DeployKind,
   EnvironmentPolicy,
   ExecutorKind,
   PlanApproval,
@@ -553,6 +554,7 @@ export function useUpdateProject(projectId: string) {
       executor?: ExecutorKind;
       emailNotifications?: boolean;
       environments?: EnvironmentPolicy;
+      deployKind?: DeployKind;
     }) =>
       unwrap(
         await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),
