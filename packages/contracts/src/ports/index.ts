@@ -46,6 +46,7 @@ import {
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type CommitRange,
   type PullRequestDetails,
   type ProposedPullRequest,
   type Repo,
@@ -627,6 +628,9 @@ export interface OAuthGrantStore {
   take(key: string): Promise<OAuthGrant | null>;
 }
 
+/** At most this many commits per `listCommitsBetween` (ADR-0028); a release past it is cut. */
+export const RANGE_COMMITS_MAX = 100;
+
 // ── CodeHost ─────────────────────────────────────────────────────────────────
 // The code host through our App (ARCHITECTURE §6). v1.x: GitHub App. Grows with the slices
 // that need it (workflow dispatch: M1.6a; PR/check reads for the watchdog: M1.6b).
@@ -687,6 +691,12 @@ export interface CodeHost {
    * ahead of it or the same. Null when the repo or a ref isn't known.
    */
   headContains(fullName: string, head: string, base: string): Promise<boolean | null>;
+  /**
+   * The commits `head` has that `base` lacks, oldest first, at most `RANGE_COMMITS_MAX`
+   * (`complete` false past it), and how the two relate (AI-169: M6.8). Null when the repo, the
+   * App's install or a commit isn't known.
+   */
+  listCommitsBetween(fullName: string, base: string, head: string): Promise<CommitRange | null>;
   /**
    * Commits one file on a new branch cut from the default branch, with the App's identity, and
    * opens a pull request into the default branch (AI-107). Null when the App isn't installed.

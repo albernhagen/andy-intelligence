@@ -511,6 +511,57 @@ describe("GitHubCodeHost", () => {
         null,
       );
     });
+
+    const A = "a".repeat(40);
+    const B = "b".repeat(40);
+
+    it("GivenTwoCommits_WhenTheRangeIsListed_ThenOldestFirstWithFirstLineTitlesAndTheStatus", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/compare/${A}...${B}`]: () =>
+          json(200, {
+            status: "ahead",
+            total_commits: 2,
+            commits: [
+              { sha: "1".repeat(40), commit: { message: "First (#7)\n\nbody" } },
+              { sha: "2".repeat(40), commit: { message: `${"x".repeat(300)} (#8)` } },
+            ],
+          }),
+      });
+      const range = await host(fetch).listCommitsBetween("albernhagen/andy-intelligence", A, B);
+      expect(range?.status).toBe("ahead");
+      expect(range?.commits.complete).toBe(true);
+      expect(range?.commits.items.map((c) => [c.sha[0], c.title.length])).toEqual([
+        ["1", "First (#7)".length],
+        ["2", 256],
+      ]);
+      const url = fetch.mock.calls.map(([u]) => String(u)).find((u) => u.includes("/compare/"));
+      expect(url).toContain("per_page=100");
+    });
+
+    it("GivenMoreCommitsThanTheCap_WhenTheRangeIsListed_ThenIncomplete", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/compare/${A}...${B}`]: () =>
+          json(200, {
+            status: "ahead",
+            total_commits: 101,
+            commits: [{ sha: "1".repeat(40), commit: { message: "One" } }],
+          }),
+      });
+      const range = await host(fetch).listCommitsBetween("albernhagen/andy-intelligence", A, B);
+      expect(range?.commits.complete).toBe(false);
+    });
+
+    it("GivenAnUnknownCommit_WhenTheRangeIsListed_ThenNull", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`GET ${R}/compare/${A}...${B}`]: () => json(404, { message: "Not Found" }),
+      });
+      expect(
+        await host(fetch).listCommitsBetween("albernhagen/andy-intelligence", A, B),
+      ).toBeNull();
+    });
   });
   describe("proposeFile", () => {
     const R = "/repos/albernhagen/andy-intelligence";

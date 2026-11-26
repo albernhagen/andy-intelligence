@@ -239,7 +239,7 @@ export function whatsNewWindow(now: Date, since?: string, until?: string): Whats
 const DONE_STAGES = new Set(["done"]);
 
 /** The top-level epic over a ticket (itself when it is one); null when it has none. */
-function topEpic(ticket: Ticket, byId: ReadonlyMap<string, Ticket>): Ticket | null {
+export function topEpic(ticket: Ticket, byId: ReadonlyMap<string, Ticket>): Ticket | null {
   let top: Ticket | null = ticket.type === "epic" ? ticket : null;
   let current = ticket;
   // Bounded walk: a parent cycle can't loop forever.
