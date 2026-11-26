@@ -76,6 +76,8 @@ runs:
         fi
 
     # No traffic: the service's own URL keeps serving what it served; only the tag reaches this one.
+    # The label changes the template, so every deploy makes a new revision even for an unchanged
+    # image: revision generation then orders previews by deploy time for the cap.
     - name: Deploy the PR's revision with no traffic
       if: inputs.mode == 'deploy'
       shell: bash
@@ -86,7 +88,7 @@ runs:
         PR: ${{ inputs.pr }}
       run: |
         gcloud run deploy "$SERVICE" --region "$REGION" --image "$IMAGE" \
-          --no-traffic --tag "pr-$PR" --quiet
+          --no-traffic --tag "pr-$PR" --update-labels "preview-deployed-at=$(date +%s)" --quiet
 
     # Another PR's preview may have deployed at the same time: trim again, keeping this one.
     - name: Trim to the cap again

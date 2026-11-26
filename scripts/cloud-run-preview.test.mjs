@@ -266,6 +266,15 @@ describe("template preview.yml", () => {
     expect(steps).not.toContain("outputs.deployer-sa }}");
   });
 
+  it.each(["deploy", "remove"])(
+    "GivenNoPreviewServiceVariable_WhenThe%sJobIsEvaluated_ThenItSkipsRatherThanFails",
+    (name) => {
+      expect(job(name)).toContain(
+        "(vars.GCP_PREVIEW_SERVICE != '' || vars.GCP_DEV_PREVIEW_SERVICE != '')",
+      );
+    },
+  );
+
   it("GivenTheRemoveJob_WhenRead_ThenItRunsOnlyOnCloseAndNeverChecksOutPrCode", () => {
     const text = job("remove");
     expect(text).toContain("github.event.action == 'closed'");
@@ -286,6 +295,16 @@ describe("cloud-run-preview action", () => {
     const lines = ACTION.split("\n").filter((l) => l.includes("${{"));
     expect(lines.length).toBeGreaterThan(0);
     for (const l of lines) expect(l).toMatch(/^\s+(if|value|[A-Z_]+): /);
+  });
+
+  it("GivenARedeployOfTheSameImage_WhenDeployed_ThenTheLabelForcesANewRevisionForTheCapOrder", () => {
+    expect(ACTION).toContain('--update-labels "preview-deployed-at=$(date +%s)"');
+  });
+
+  it("GivenARedeployedTagWithAnOldGeneration_WhenTrimmed_ThenItGoesFirst", () => {
+    // Without the deploy label a rebuild of the same image kept its old revision: guard the order.
+    const tags = tenTags.map(([n, g]) => (n === 10 ? [10, 1] : [n, g]));
+    expect(tagsToRemove(service(tags), { keep: "pr-99" })).toEqual(["pr-10"]);
   });
 
   it("GivenTheAction_WhenRead_ThenItTrimsBeforeAndAfterTheNoTrafficDeploy", () => {

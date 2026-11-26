@@ -29,6 +29,7 @@ import { dateOnly } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   DEPLOY_KIND_OPTIONS,
+  PR_SYNC_OPTIONS,
   ENVIRONMENT_OPTIONS,
   MERGE_MODE_OPTIONS,
   PLAN_APPROVAL_OPTIONS,
@@ -154,6 +155,7 @@ function Section({ id, project }: { id: SectionId; project: Project }) {
       return (
         <Rows label="Automation">
           <MergeModePicker project={project} />
+          <PrSyncPicker project={project} />
           <PlanApprovalPicker project={project} />
           <AutoRefineSwitch project={project} />
           <BuildsSwitch project={project} />
@@ -303,6 +305,25 @@ function PlanApprovalPicker({ project }: { project: Project }) {
       options={PLAN_APPROVAL_OPTIONS}
       disabled={update.isPending}
       onValueChange={(planApproval) => update.mutate({ planApproval })}
+      state={update}
+    />
+  );
+}
+
+/**
+ * Which open PRs are kept up to date with main (AI-388, ADR-0157): only the merge queue's next
+ * one, or every open PR after each merge (the re-sync workflow, ADR-0111).
+ */
+function PrSyncPicker({ project }: { project: Project }) {
+  const update = useUpdateProject(project.id);
+  return (
+    <PickerRow
+      label={SETTING_LABELS.prSync}
+      description="Which open PRs get main merged in when it moves. The repo variable RESYNC_PRS still pauses it."
+      value={project.prSync}
+      options={PR_SYNC_OPTIONS}
+      disabled={update.isPending}
+      onValueChange={(prSync) => update.mutate({ prSync })}
       state={update}
     />
   );

@@ -5,6 +5,7 @@
 # | Identity           | Federates from                                           | Can                                         |
 # | ------------------ | -------------------------------------------------------- | ------------------------------------------- |
 # | <svc>-deploy       | main_deployer_workflows on refs/heads/main               | push to repo <svc>, deploy service <svc>    |
+# |                    |                                                          | (promote set) read the dev repo             |
 # | <svc>-pr-deploy    | pull_request runs of the repo (forks get no OIDC token)  | push to <svc>-preview, deploy that service  |
 # | <svc>-run          | (Cloud Run service <svc>)                                | logs, traces, runtime_project_roles         |
 # | <svc>-pr-run       | (Cloud Run service <svc>-preview)                        | logs, traces; nothing else                  |
@@ -81,6 +82,17 @@ resource "google_cloud_run_v2_service_iam_member" "deployer_run" {
   location = google_cloud_run_v2_service.main.location
   role     = "roles/run.developer"
   member   = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+# Promote (dev-and-prod, on prod): release.yml checks the dev digest exists before traffic moves
+# (cloud-run-release-check), as this identity. Read on that one dev repo; no write anywhere there.
+resource "google_artifact_registry_repository_iam_member" "deployer_promote_read" {
+  count      = var.promote_source_repository == null ? 0 : 1
+  project    = var.promote_source_repository.project_id
+  location   = var.promote_source_repository.location
+  repository = var.promote_source_repository.repository
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.deployer.email}"
 }
 
 # Cloud Run checks actAs on the revision's runtime identity: this one only, so a deploy can't

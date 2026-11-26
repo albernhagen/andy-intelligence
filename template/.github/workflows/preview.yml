@@ -30,11 +30,13 @@ jobs:
       id-token: write # OIDC → the preview deployer, which federates only from pull_request runs
       pull-requests: write # the one preview comment
     # Same-repo PRs only, checked before any step: GitHub gives fork runs no id-token anyway, and
-    # Dependabot runs get a read-only token, so neither could deploy.
+    # Dependabot runs get a read-only token, so neither could deploy. Previews are opt-in
+    # (project-env `preview_enabled`): without a preview service variable the job skips, not fails.
     if: >-
       github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login != 'dependabot[bot]'
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      (vars.GCP_PREVIEW_SERVICE != '' || vars.GCP_DEV_PREVIEW_SERVICE != '')
     steps:
       # Before any cloud call or build: fails naming every missing repo variable.
       - id: config
@@ -92,7 +94,8 @@ jobs:
     if: >-
       github.event.action == 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login != 'dependabot[bot]'
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      (vars.GCP_PREVIEW_SERVICE != '' || vars.GCP_DEV_PREVIEW_SERVICE != '')
     steps:
       - id: config
         uses: ./platform/actions/cloud-run-caller-config

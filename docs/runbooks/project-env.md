@@ -19,9 +19,9 @@ Expected **adds, 0 to change, 0 to destroy**, where N = entries in `runtime_proj
 | Environment                                                     | Adds   |
 | --------------------------------------------------------------- | ------ |
 | First environment, with previews (`prod-only`, or dev)          | 38 + N |
-| Prod in `dev-and-prod` (`preview_enabled = false`, promote set) | 29 + N |
+| Prod in `dev-and-prod` (`preview_enabled = false`, promote set) | 30 + N |
 
-38 = 7 APIs, 2 registry repos, pool + provider, 4 service accounts, 4 runtime role grants, main deployer 5 grants (2 federation, push, run, actAs), preview deployer 4 grants, 2 services, 1 log exclusion, 1 email channel, 6 alerts. Anything else (a change or destroy) is drift: stop and check.
+38 = 7 APIs, 2 registry repos, pool + provider, 4 service accounts, 4 runtime role grants, main deployer 5 grants (2 federation, push, run, actAs), preview deployer 4 grants, 2 services, 1 log exclusion, 1 email channel, 6 alerts. Prod in `dev-and-prod` drops the 10 preview resources and adds 2 reads on the dev repo (Cloud Run service agent, main deployer). Anything else (a change or destroy) is drift: stop and check.
 
 ```bash
 terraform apply env.tfplan
@@ -47,7 +47,7 @@ terraform apply env.tfplan
   | `PREVIEW_DEPLOYER_SA`       | output `preview_deployer_email`   |
   | `PREVIEW_IMAGE_REPO`        | output `preview_image_repository` |
 
-  Without them every same-repo PR's `Preview` run fails at its first step, naming them. Check: open a PR that changes code; its `Preview` run comments a `pr-<n>` URL; close it and the comment says the preview was removed.
+  Without `PREVIEW_SERVICE` the `Preview` jobs skip; with only some set, the run fails at its first step naming the missing ones. Check: open a PR that changes code; its `Preview` run comments a `pr-<n>` URL; close it and the comment says the preview was removed.
 
 - Check: the alert email channel shows in Monitoring → Alerting → Notification channels (Google sends no confirmation for email).
 - A deleted pool keeps its ID for 30 days: re-creating within that window fails; undelete it (`gcloud iam workload-identity-pools undelete`) or set another `wif_pool_id`.

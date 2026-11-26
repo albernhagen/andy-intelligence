@@ -172,6 +172,33 @@ describe("ProjectService config change log (M4.11)", () => {
     expect(change?.diff).toEqual({ deployKind: { from: "none", to: "cloud-run" } });
   });
 
+  it("GivenThePrSyncSetting_WhenTheOwnerSetsAll_ThenItIsSavedAndLogged", async () => {
+    const updated = await service.update("ai", { prSync: "all" }, OWNER);
+    const [change] = await changes.listForProject("ai");
+    expect(updated.prSync).toBe("all");
+    expect(change?.diff).toEqual({ prSync: { from: "queue", to: "all" } });
+  });
+
+  it("GivenAPrSyncChange_WhenReverted_ThenTheProjectIsBackToQueueAndTheRevertIsLogged", async () => {
+    await service.update("ai", { prSync: "all" }, OWNER);
+    const [change] = await changes.listForProject("ai");
+    expect(revertPatch(change!)).toEqual({ prSync: "queue" });
+
+    await service.update("ai", revertPatch(change!), OWNER);
+
+    expect((await tracker.getProject("ai"))?.prSync).toBe("queue");
+    expect(await changes.listForProject("ai")).toHaveLength(2);
+  });
+
+  it.each(["agent:r1", "system"] as const)(
+    "GivenTheActor%s_WhenChangingPrSync_ThenForbidden",
+    async (actor) => {
+      await expect(
+        service.update("ai", { prSync: "all" }, { actor, email: "x@example.com" }),
+      ).rejects.toMatchObject({ code: "forbidden" });
+    },
+  );
+
   it("GivenADeployKindChange_WhenReverted_ThenTheProjectIsBackToNoneAndTheRevertIsLogged", async () => {
     await service.update("ai", { deployKind: "cloud-run" }, OWNER);
     const [change] = await changes.listForProject("ai");

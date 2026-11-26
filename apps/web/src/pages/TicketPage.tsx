@@ -17,6 +17,7 @@ import { EpicChildren } from "@/components/EpicChildren";
 import { OverridesEditor } from "@/components/OverridesEditor";
 import { RouteLayers } from "@/components/RouteLayers";
 import { PullRequestLink, waitingPullRequest } from "@/components/PullRequestLink";
+import { MergeButton, repoOfPullRequest } from "@/components/inbox/MergeButton";
 import {
   EditableList,
   InlineText,
@@ -314,6 +315,9 @@ function Story({ ticket: t }: { ticket: Ticket }) {
 function Next({ ticket: t }: { ticket: Ticket }) {
   const events = useEvents(pathOf(t)).data ?? [];
   const repos = useProjects().data?.find((p) => p.id === t.projectId)?.repos ?? [];
+  // AI-388: in Ready for review, its open PR can be merged from here, through the merge queue.
+  const pr = t.stage === "ready_for_review" ? waitingPullRequest(events, repos) : null;
+  const repo = pr ? repoOfPullRequest(pr.url) : null;
   return (
     <section aria-label="Next" className="space-y-2">
       <MoveControls
@@ -321,6 +325,14 @@ function Next({ ticket: t }: { ticket: Ticket }) {
         aside={
           <>
             <PullRequestLink events={events} repos={repos} />
+            {pr && repo && (
+              <MergeButton
+                projectId={t.projectId}
+                repo={repo}
+                number={pr.number}
+                variant="outline"
+              />
+            )}
             <Readiness {...pathOf(t)} />
           </>
         }

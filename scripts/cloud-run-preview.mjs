@@ -23,7 +23,8 @@ export const previewTag = (pr) => `pr-${prNumber(pr)}`;
 
 /**
  * Cloud Run names a deployed revision `<service>-<generation>-<suffix>`, generation counting up
- * per deploy. A name that doesn't parse (a custom `--revision-suffix`) counts as oldest.
+ * per new revision; the action's deploy label makes every deploy a new revision, so this is deploy
+ * order even when a push rebuilds the same image. A name that doesn't parse (a custom `--revision-suffix`) counts as oldest.
  */
 export function generationOf(revisionName) {
   const match = /-(\d+)-[a-z0-9]+$/.exec(revisionName ?? "");

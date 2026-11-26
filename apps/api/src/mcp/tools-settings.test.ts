@@ -94,6 +94,7 @@ describe("get_project_settings", () => {
       emailNotifications: false,
       environments: "dev-and-prod",
       deployKind: "cloud-run",
+      prSync: "all",
       lastDispatch: { decision: "paused", at: "2026-11-09T12:00:00.000Z" },
     });
 
@@ -119,6 +120,7 @@ describe("get_project_settings", () => {
       emailNotifications: false,
       environments: "dev-and-prod",
       deployKind: "cloud-run",
+      prSync: "all",
       lastDispatch: { decision: "paused", at: "2026-11-09T12:00:00.000Z" },
     });
   });
@@ -217,6 +219,33 @@ describe("set_environments (AI-160)", () => {
     expect((await ctx.rest("/api/projects/ai", { environments: "dev-and-prod" })).status).toBe(200);
     expect((await ctx.rest("/api/projects/ai", { environments: "staging" })).status).toBe(400);
     expect((await ctx.tracker.getProject("ai"))?.environments).toBe("dev-and-prod");
+  });
+});
+
+/** AI-388 (ADR-0157): which open PRs are kept up to date. */
+describe("set_pr_sync (AI-388)", () => {
+  it("GivenANewProject_WhenSetToAll_ThenSavedReadBackAndRevertable", async () => {
+    const ctx = await setup();
+    expect((await ctx.call("get_project_settings", { project: "AI" })).data).toMatchObject({
+      prSync: "queue",
+    });
+
+    const res = await ctx.call("set_pr_sync", { project: "ai", prSync: "all" });
+
+    expect(res.data).toEqual({ project: "AI", prSync: "all" });
+    expect((await ctx.tracker.getProject("ops"))?.prSync).toBe("queue");
+    const [change] = (await ctx.call("list_settings_changes", { project: "AI" })).data.changes;
+    expect(change.diff).toEqual({ prSync: { from: "queue", to: "all" } });
+    expect(
+      (await ctx.call("revert_settings_change", { project: "AI", id: change.id })).isError,
+    ).toBe(false);
+    expect((await ctx.tracker.getProject("ai"))?.prSync).toBe("queue");
+  });
+
+  it("GivenAnUnknownValue_WhenSet_ThenRefusedAndNothingChanges", async () => {
+    const ctx = await setup();
+    expect((await ctx.call("set_pr_sync", { project: "AI", prSync: "none" })).isError).toBe(true);
+    expect((await ctx.tracker.getProject("ai"))?.prSync).toBe("queue");
   });
 });
 
