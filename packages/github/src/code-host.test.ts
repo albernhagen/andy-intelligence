@@ -386,6 +386,72 @@ describe("GitHubCodeHost", () => {
       },
     );
 
+    it("GivenACleanUpdate_WhenTheBranchIsUpdated_ThenItIsPinnedToTheHeadAndUpdated", async () => {
+      const put = vi.fn((_init?: RequestInit) =>
+        json(202, { message: "Updating pull request branch." }),
+      );
+      const fetch = fakeGitHub({ ...installed, [`PUT ${R}/pulls/5/update-branch`]: put });
+      expect(await host(fetch).updateBranch("albernhagen/andy-intelligence", 5, "abc")).toBe(
+        "updated",
+      );
+      expect(JSON.parse(String(put.mock.calls[0]![0]!.body))).toMatchObject({
+        expected_head_sha: "abc",
+      });
+    });
+
+    it.each([
+      ["expected head sha didn't match current head ref.", "head_moved"],
+      ["merge conflict between base and head", "conflict"],
+    ])("GivenA422Saying%s_WhenTheBranchIsUpdated_ThenItAnswers%s", async (message, expected) => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`PUT ${R}/pulls/5/update-branch`]: () => json(422, { message }),
+      });
+      expect(await host(fetch).updateBranch("albernhagen/andy-intelligence", 5, "abc")).toBe(
+        expected,
+      );
+    });
+
+    it("GivenAnotherRefusal_WhenTheBranchIsUpdated_ThenItThrows", async () => {
+      const fetch = fakeGitHub({
+        ...installed,
+        [`PUT ${R}/pulls/5/update-branch`]: () => json(403, { message: "forbidden" }),
+      });
+      await expect(
+        host(fetch).updateBranch("albernhagen/andy-intelligence", 5, "abc"),
+      ).rejects.toThrow(/forbidden/);
+    });
+
+    const file = (patch: string | undefined, changes = 1) => ({
+      filename: "a.ts",
+      status: "modified",
+      changes,
+      ...(patch === undefined ? {} : { patch }),
+    });
+    const digestOf = async (files: unknown[]) =>
+      host(
+        fakeGitHub({ ...installed, [`GET ${R}/pulls/5/files`]: () => json(200, files) }),
+      ).diffDigest("albernhagen/andy-intelligence", 5);
+
+    it("GivenTheSameLinesAtOtherLineNumbers_WhenDigested_ThenTheDigestIsTheSame", async () => {
+      const before = await digestOf([file("@@ -1,2 +1,3 @@ fn\n a\n+b")]);
+      const after = await digestOf([file("@@ -40,2 +41,3 @@ other\n a\n+b")]);
+      expect(before).toMatch(/^[0-9a-f]{64}$/);
+      expect(after).toBe(before);
+    });
+
+    it("GivenAChangedLine_WhenDigested_ThenTheDigestDiffers", async () => {
+      const before = await digestOf([file("@@ -1,2 +1,3 @@\n a\n+b")]);
+      expect(await digestOf([file("@@ -1,2 +1,3 @@\n a\n+c")])).not.toBe(before);
+    });
+
+    it("GivenAFileWithNoPatch_WhenDigested_ThenNullButAPureRenameStillDigests", async () => {
+      expect(await digestOf([file(undefined, 10)])).toBeNull();
+      expect(
+        await digestOf([{ ...file(undefined, 0), status: "renamed", previous_filename: "b.ts" }]),
+      ).toMatch(/^[0-9a-f]{64}$/);
+    });
+
     const SHA = "a".repeat(40);
     // The fake matches decoded paths, so the ref's encoded slashes read as `/` here.
     const refPath = (branch: string) => `GET ${R}/git/ref/heads/${branch}`;

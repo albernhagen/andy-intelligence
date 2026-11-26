@@ -123,6 +123,7 @@ describe("project settings page", () => {
     const automation = await open(h, "Automation");
     expect(automation.getByRole("radiogroup", { name: "Merge mode" })).toBeTruthy();
     expect(automation.getByRole("radiogroup", { name: "Plan approval" })).toBeTruthy();
+    expect(automation.getByRole("radiogroup", { name: "Keep open PRs up to date" })).toBeTruthy();
     for (const name of ["Auto-refine", "Builds", "Auto-build"])
       expect(automation.getByRole("switch", { name })).toBeTruthy();
 
@@ -192,6 +193,22 @@ describe("project settings page", () => {
     expect(picked(defaults.getByRole("radiogroup", { name: "Deploy kind" }))).toBe("Cloud Run");
     expect(picked(defaults.getByRole("radiogroup", { name: "Environments" }))).toBe("Dev and prod");
     expect(defaults.queryByText(/^Not in use/)).toBeNull();
+  });
+
+  it("GivenANewProject_WhenAutomationOpens_ThenPrSyncShowsBothOptionsWithADescriptionAndSavesAll", async () => {
+    const h = await withProjects("/p/ai/settings");
+    const automation = await open(h, "Automation");
+    const group = automation.getByRole("radiogroup", { name: "Keep open PRs up to date" });
+    expect(picked(group)).toBe("Next in the queue");
+    expect(within(group).getByText(/^Only the PR next in the merge queue is synced/)).toBeTruthy();
+    expect(
+      within(group).getByText(/^After each merge, main is merged into every open PR/),
+    ).toBeTruthy();
+
+    await h.user.click(within(group).getByRole("radio", { name: /^Every open PR/ }));
+
+    await waitFor(async () => expect((await h.tracker.getProject("ai"))?.prSync).toBe("all"));
+    expect((await h.tracker.getProject("ops"))?.prSync).toBe("queue");
   });
 
   it("GivenNoDeploys_WhenDefaultsOpen_ThenEnvironmentsSaysNotInUseUntilCloudRunIsPicked", async () => {

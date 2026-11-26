@@ -612,6 +612,8 @@ export function createServices(raw: AppDeps): Services {
       connection ? new ConnectedCodeHost(connection) : null,
       tickets,
       now,
+      // AI-388: each listed PR's place in its repo's merge queue.
+      mergeQueue,
     ),
     digestSummaries,
     // AI-220: MCP `merge_pr`, through the connected host with the gate's findings source.

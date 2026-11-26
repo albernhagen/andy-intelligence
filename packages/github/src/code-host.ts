@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   assertSettingSubpath,
   BaselineProposal,
@@ -16,6 +17,7 @@ import {
   WorkflowRun,
   type CheckConclusion,
   type RepoSettingRead,
+  type UpdateBranchResult,
   type CodeHost,
   type Listing,
   EPIC_BRANCH_PATTERN,
@@ -57,6 +59,13 @@ const PER_PAGE = 100;
 const MAX_FILE_PAGES = 3;
 
 type GitHubRepo = { full_name: string; default_branch: string; private: boolean; html_url: string };
+
+/**
+ * A file's patch with each hunk header's line numbers left out (AI-388): merging an unrelated
+ * default branch into the PR moves its hunks but leaves their lines the same.
+ */
+export const ownPatch = (patch: string | undefined): string =>
+  (patch ?? "").replace(/^@@ [^@]* @@.*$/gm, "@@");
 
 const toRepo = (r: GitHubRepo) =>
   Repo.parse({
@@ -402,6 +411,52 @@ export class GitHubCodeHost implements CodeHost {
     );
     if (!res) return null;
     return res.data.status === "ahead" || res.data.status === "identical";
+  }
+
+  async updateBranch(
+    fullName: string,
+    number: number,
+    expectedHeadSha: string,
+  ): Promise<UpdateBranchResult> {
+    const client = await this.repoClient(fullName);
+    if (!client) throw new Error(`the App isn't installed on ${fullName}`);
+    try {
+      // GitHub merges the base branch in (a merge commit, as the re-sync workflow does: ADR-0111).
+      await client.octokit.request("PUT /repos/{owner}/{repo}/pulls/{pull_number}/update-branch", {
+        ...client.repo,
+        pull_number: number,
+        expected_head_sha: expectedHeadSha,
+      });
+      return "updated";
+    } catch (err) {
+      if ((err as { status?: number }).status !== 422) throw err;
+      // 422 is both a moved head ("expected head sha didn't match") and a merge conflict.
+      const message = err instanceof Error ? err.message : String(err);
+      return /expected head sha/i.test(message) ? "head_moved" : "conflict";
+    }
+  }
+
+  async diffDigest(fullName: string, number: number): Promise<string | null> {
+    const client = await this.repoClient(fullName);
+    if (!client) return null;
+    const parts: string[] = [];
+    for (let page = 1; page <= MAX_FILE_PAGES; page++) {
+      const res = await client.octokit.request(
+        "GET /repos/{owner}/{repo}/pulls/{pull_number}/files",
+        { ...client.repo, pull_number: number, per_page: PER_PAGE, page },
+      );
+      for (const f of res.data) {
+        // GitHub leaves `patch` out of binary and very large files: the diff can't be compared.
+        if (f.patch === undefined && f.changes > 0) return null;
+        parts.push(
+          JSON.stringify([f.filename, f.previous_filename ?? null, f.status, ownPatch(f.patch)]),
+        );
+      }
+      if (res.data.length < PER_PAGE) {
+        return createHash("sha256").update(parts.sort().join("\n")).digest("hex");
+      }
+    }
+    return null;
   }
 
   /** The branch's tip commit; null when the branch (or the App's install) is missing. */

@@ -6,6 +6,7 @@ import {
   MergeMode,
   EnvironmentPolicy,
   DeployKind,
+  PrSync,
   ProjectSpendCaps,
   BillingType,
   DorStatus,
@@ -237,6 +238,7 @@ export const ProjectPatch = z.strictObject({
   executor: ExecutorKind.optional(),
   environments: EnvironmentPolicy.optional(),
   deployKind: DeployKind.optional(),
+  prSync: PrSync.optional(),
   spendCaps: ProjectSpendCaps.optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
@@ -257,6 +259,7 @@ export const ProjectSettings = ProjectPatch.pick({
   emailNotifications: true,
   environments: true,
   deployKind: true,
+  prSync: true,
   spendCaps: true,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettings>;
@@ -631,6 +634,9 @@ export interface OAuthGrantStore {
 // The code host through our App (ARCHITECTURE §6). v1.x: GitHub App. Grows with the slices
 // that need it (workflow dispatch: M1.6a; PR/check reads for the watchdog: M1.6b).
 
+/** What `CodeHost.updateBranch` did (AI-388). */
+export type UpdateBranchResult = "updated" | "conflict" | "head_moved";
+
 export interface CodeHost {
   /** The repo, or null when it doesn't exist or our App isn't installed on it. */
   getRepo(fullName: string): Promise<Repo | null>;
@@ -687,6 +693,24 @@ export interface CodeHost {
    * ahead of it or the same. Null when the repo or a ref isn't known.
    */
   headContains(fullName: string, head: string, base: string): Promise<boolean | null>;
+  /**
+   * Merges the default branch into the PR's branch with the App's identity (a merge commit, never
+   * a rebase), only if its head is still `expectedHeadSha` (AI-388: the merge queue's own sync).
+   * `conflict`: the merge isn't clean; `head_moved`: the head changed first. Throws for any other
+   * refusal, or when the App isn't installed.
+   */
+  updateBranch(
+    fullName: string,
+    number: number,
+    expectedHeadSha: string,
+  ): Promise<UpdateBranchResult>;
+  /**
+   * A fingerprint of the PR's own changes against its base (AI-388): each changed path, its old
+   * path and its patch, with hunk line numbers left out, so merging an unrelated default branch in
+   * keeps it. Null when the host can't show every patch (too many files, a binary or huge file):
+   * callers treat that as changed.
+   */
+  diffDigest(fullName: string, number: number): Promise<string | null>;
   /**
    * Commits one file on a new branch cut from the default branch, with the App's identity, and
    * opens a pull request into the default branch (AI-107). Null when the App isn't installed.

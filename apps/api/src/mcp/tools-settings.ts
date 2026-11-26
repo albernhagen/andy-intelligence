@@ -1,6 +1,7 @@
 import {
   DeployKind,
   EnvironmentPolicy,
+  PrSync,
   MergeMode,
   Project,
   WorkTrackerError,
@@ -48,6 +49,7 @@ export const settingsOf = (p: Project) => ({
   emailNotifications: p.emailNotifications,
   environments: p.environments,
   deployKind: p.deployKind,
+  prSync: p.prSync,
   lastDispatch: p.lastDispatch,
 });
 
@@ -63,6 +65,14 @@ const DeployKindInput = {
   project: SettingsInput.project,
   deployKind: DeployKind.describe(
     "none (default): the project does not deploy. cloud-run: it ships to Cloud Run on GCP, and its environments setting applies.",
+  ),
+};
+
+// AI-388: which open PRs are kept up to date (ADR-0157).
+const PrSyncInput = {
+  project: SettingsInput.project,
+  prSync: PrSync.describe(
+    "queue (default): only the PR next in the merge queue is synced with main, by the queue. all: after each merge the re-sync workflow merges main into every open PR (each one's checks run again).",
   ),
 };
 
@@ -92,7 +102,7 @@ export function registerSettingsTools(
     "get_project_settings",
     {
       description:
-        "Reads every setting of one project: Builds (buildEnabled, with who turned it on or off and when; set only in the app), auto-build, plan approval, auto-refine, questions per day, merge mode (mergeMode: who merges PRs; null until one is saved, and then nothing merges without Andy; suggestedMergeMode while unset), agent tasks at once (runsAtOnce), paused, default worker, default executor (actions or local), email notifications (sent only once email is configured: set_email_notifications says), release environments (prod-only or dev-and-prod; read only when deployKind is cloud-run), deploy kind (deployKind: none or cloud-run), and the dispatcher's last decision (lastDispatch: why it is idle, or what it did). Each setting has its own set_* tool except Builds.",
+        "Reads every setting of one project: Builds (buildEnabled, with who turned it on or off and when; set only in the app), auto-build, plan approval, auto-refine, questions per day, merge mode (mergeMode: who merges PRs; null until one is saved, and then nothing merges without Andy; suggestedMergeMode while unset), agent tasks at once (runsAtOnce), paused, default worker, default executor (actions or local), email notifications (sent only once email is configured: set_email_notifications says), release environments (prod-only or dev-and-prod; read only when deployKind is cloud-run), deploy kind (deployKind: none or cloud-run), PR sync (prSync: queue or all), and the dispatcher's last decision (lastDispatch: why it is idle, or what it did). Each setting has its own set_* tool except Builds.",
       inputSchema: SettingsInput,
       annotations: { readOnlyHint: true },
     },
@@ -141,6 +151,26 @@ export function registerSettingsTools(
           { actor: deps.actor, email: deps.email },
         );
         return { project: updated.key, deployKind: updated.deployKind };
+      }),
+  );
+
+  // AI-388: PR sync; same rule as PATCH /api/projects/{id} (AI-40 parity).
+  server.registerTool(
+    "set_pr_sync",
+    {
+      description:
+        "Sets which open PRs are kept up to date with main: queue (default; only the PR next in the merge queue is synced, by the queue, so each merge reruns one PR's checks) or all (after each merge the re-sync workflow merges main into every open PR, ADR-0111). The repo variable RESYNC_PRS still pauses the workflow. Only Andy. Logged in the config change log.",
+      inputSchema: PrSyncInput,
+      annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    ({ project, prSync }) =>
+      run(async () => {
+        const updated = await deps.projects.update(
+          project.toLowerCase(),
+          { prSync },
+          { actor: deps.actor, email: deps.email },
+        );
+        return { project: updated.key, prSync: updated.prSync };
       }),
   );
 

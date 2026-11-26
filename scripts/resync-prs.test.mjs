@@ -62,6 +62,8 @@ function world({
   comments = [],
   update = { status: 202, data: {} },
   token = { status: 200, body: { token: "write-token", actor: ACTOR } },
+  // AI-388: the project's PR sync setting; `all` keeps today's behaviour.
+  prSync = { status: 200, body: { prSync: "all" } },
 } = {}) {
   const calls = [];
   const gitCalls = [];
@@ -102,6 +104,9 @@ function world({
     calls.push({ method: "FETCH", path: url });
     if (new URL(url).host === "oidc.example") {
       return { ok: true, status: 200, json: async () => ({ value: "oidc-jwt" }) };
+    }
+    if (url.endsWith("/github/pr-sync")) {
+      return { ok: prSync.status === 200, status: prSync.status, json: async () => prSync.body };
     }
     return { ok: token.status === 200, status: token.status, json: async () => token.body };
   };
@@ -199,6 +204,25 @@ describe("conflictFiles and stopComment", () => {
 });
 
 describe("resync", () => {
+  it("GivenThePrSyncSettingIsQueue_WhenRun_ThenNothingIsFetchedListedOrWrittenAndNoWriteTokenIsAsked", async () => {
+    const w = world({ prSync: { status: 200, body: { prSync: "queue" } } });
+    const out = await w.run();
+    expect(out).toEqual({ capped: false, results: [], prSync: "queue" });
+    expect(w.gitCalls).toEqual([]);
+    expect(w.calls.some((c) => c.path.includes("/pulls?"))).toBe(false);
+    expect(w.calls.some((c) => String(c.path).endsWith("/github/token"))).toBe(false);
+    expect(w.lines.some((l) => l.includes("PR sync is `queue`"))).toBe(true);
+  });
+
+  it.each([
+    ["a refusal", { status: 403, body: { error: "forbidden" } }],
+    ["an unknown value", { status: 200, body: { prSync: "some" } }],
+  ])("GivenThePrSyncReadIs %s_WhenRun_ThenItFailsAndWritesNothing", async (_name, prSync) => {
+    const w = world({ prSync });
+    await expect(w.run()).rejects.toThrow(/PR sync setting/);
+    expect(writes(w.calls)).toEqual([]);
+  });
+
   it("GivenABehindPrThatMergesCleanly_WhenRun_ThenUpdateBranchWithTheExpectedHeadAndTheWriteToken", async () => {
     const w = world();
     const { results } = await w.run();
@@ -236,7 +260,7 @@ describe("resync", () => {
     expect(w.lines).toContain(
       `::warning::${MAX_RUNS_PER_HOUR} re-syncs in the last hour (cap ${MAX_RUNS_PER_HOUR}): no re-sync`,
     );
-    expect(w.calls.filter((c) => c.method === "FETCH")).toEqual([]);
+    expect(w.calls.some((c) => String(c.path).endsWith("/github/token"))).toBe(false);
     expect(writes(w.calls)).toEqual([]);
   });
 
@@ -374,7 +398,7 @@ describe("resync", () => {
     const w = world({ prs: [pr({ draft: true })] });
     const { results } = await w.run();
     expect(results[0].outcome).toBe("skipped");
-    expect(w.calls.some((c) => c.method === "FETCH")).toBe(false);
+    expect(w.calls.some((c) => String(c.path).endsWith("/github/token"))).toBe(false);
   });
 
   it("GivenTheControlPlaneRefusesAToken_WhenRun_ThenThrowsBeforeAnyWrite", async () => {

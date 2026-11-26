@@ -219,6 +219,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "set_merge_mode",
       "set_paused",
       "set_plan_approval",
+      "set_pr_sync",
       "set_runs_at_once",
       "set_spend_caps",
       "set_ticket_parent",

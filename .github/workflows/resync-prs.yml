@@ -4,7 +4,10 @@ name: Re-sync open PRs
 # update-branch API: clean merges only, a conflict gets one comment naming the files (AI-147,
 # ADR-0111). Agent PRs are left to sync tasks (ADR-0083). Project baseline caller (ADR-0038).
 #
-# Off until the repo variable RESYNC_PRS is `on` (also the pause switch). Loop guard: it runs only
+# Off until the repo variable RESYNC_PRS is `on` (also the pause switch). Then the project's PR sync
+# setting decides (AI-388, ADR-0157), read from the control plane with the same OIDC token:
+# `queue` (the default) ends the run with no write (the merge queue syncs the PR that is next);
+# `all` re-syncs every open PR as below. Loop guard: it runs only
 # on pushes to main, and its own updates push to PR branches, never main. Newer pushes cancel an
 # older run (the newer one covers every PR). Caps live in scripts/resync-prs.mjs.
 #

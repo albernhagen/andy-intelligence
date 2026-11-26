@@ -203,8 +203,9 @@ describe("list_needs_me", () => {
           prUrl: "https://github.com/albernhagen/andy-intelligence/pull/9",
           mergeMode: "all-clean",
           reasons: ["kept_path"],
-          // No code host connected here: listed without its release note.
+          // No code host connected here: listed without its release note or a queue.
           note: null,
+          queue: null,
         },
       ],
       truncated: false,

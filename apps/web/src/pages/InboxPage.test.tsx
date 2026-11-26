@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Question, Ticket, WaitingMerge } from "@andy/contracts";
 import { inboxCards } from "@andy/domain";
@@ -46,6 +46,7 @@ const merge = (projectId: string, ticketKey: string): WaitingMerge => ({
   mergeMode: "all-clean",
   reasons: ["kept_path", "mode_manual"],
   note: { whatChanged: "Lanes show.", howItWorks: "One read.", needsYou: null },
+  queue: null,
 });
 const data = {
   questions,
@@ -57,9 +58,18 @@ vi.mock("@tanstack/react-router", () => ({
   useParams: () => ({ projectId: "ai" }),
   Link: ({ children }: { children: unknown }) => <a>{children as string}</a>,
 }));
+/** AI-388: the Merge button's mutation; a test sets what it answers. */
+const mergeMutation = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  isPending: false,
+  isError: false,
+  error: null as unknown,
+  data: undefined as unknown,
+}));
 vi.mock("@/lib/queries", () => ({
   useNeedsYou: () => ({ isPending: false, isError: false, data }),
   useProjects: () => ({ data: [] }),
+  useMergePr: () => mergeMutation,
 }));
 vi.mock("@/components/ProjectPlan", () => ({
   ProjectPlansWaiting: () => null,
@@ -102,5 +112,47 @@ describe("InboxPage", () => {
     );
     // Three tickets, as the header counts them; the merge has its own heading (AI-347).
     expect(screen.getByRole("heading", { name: /Needs you/ }).textContent).toBe("Needs you 3");
+  });
+
+  it("GivenAPrWaitingForAndysMerge_WhenHeClicksMerge_ThenItAsksForThatRepoAndPr", () => {
+    mergeMutation.mutate.mockClear();
+    mergeMutation.data = undefined;
+    render(<InboxPage />);
+    const detail = screen.getByRole("article", { name: "AI-9: AI-9 title" });
+    fireEvent.click(within(detail).getByRole("button", { name: "Merge PR #9" }));
+    expect(mergeMutation.mutate).toHaveBeenCalledWith({
+      repo: "albernhagen/andy-intelligence",
+      number: 9,
+    });
+  });
+
+  it("GivenTheMergeIsQueued_WhenRendered_ThenItSaysItsPlaceAndWhatTheQueueWaitsFor", () => {
+    mergeMutation.data = {
+      merged: false,
+      queued: true,
+      queuePosition: 1,
+      queueNote: "sync requested",
+      reasons: [],
+      number: 9,
+    };
+    render(<InboxPage />);
+    expect(screen.getByRole("status").textContent).toBe("In the merge queue: #1 · sync requested");
+    mergeMutation.data = undefined;
+  });
+
+  it("GivenTheMergeStillWaits_WhenRendered_ThenItSaysWhatHoldsItInWords", () => {
+    mergeMutation.data = {
+      merged: false,
+      queued: false,
+      queuePosition: null,
+      queueNote: null,
+      reasons: ["gate_not_clean", "main_red"],
+      number: 9,
+    };
+    render(<InboxPage />);
+    expect(screen.getByRole("status").textContent).toBe(
+      "Not merged: checks or reviews haven't all passed, main is red",
+    );
+    mergeMutation.data = undefined;
   });
 });

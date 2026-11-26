@@ -57,6 +57,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Design file seed; UI tickets follow it (agent rule, build prompt) | 0045, 0132 | `template/design.md` | S | carried (AI-128) |
 | Dispatch, sync, night and local-runner caps (2 runners, claim/10 s, lookup caps), pause, warn cap | 0079, 0083, 0094, 0049, 0100 | `dispatch-caps.ts`, `night-budget.ts`, `sync-runs.ts`, `runners.ts`, `local-claims.ts` | — | control plane |
 | Merge queue caps: 20 PRs/repo, 3 syncs/PR, 60 min queued, 90 s lease | 0150 | `merge-queue.ts` | — | control plane |
+| Merge button and `/github/pr-sync` caps: 30 merges/project/h (shared with `merge_pr`), 30 reads/min | 0157 | `merges.ts`, `github/pr-sync.ts` | — | control plane |
 | Merges hold while the default branch is red (`main_red`: a required check failed on its tip); one Needs-you note after 30 min held | 0154 | `merge-verdict.ts`, `merge-facts.ts`, `merge-queue.ts` | — | control plane (every repo with the App) |
 | Spend gate (AI-248): a `pay_per_use` task reserves its per-task cap (`--max-budget-usd`, AI-260) before it starts; no price, unreadable caps or ledger, or a passed cap refuses it (`spend_cap`); a reservation is released or kept in full, never dropped | 0028 | `packages/domain/src/spend-gate.ts`, `runs.ts` | — | control plane |
 | Night merges into `epic/<KEY>`: same gate (rules from the default branch), once per child ticket (claim before the merge call), ≤ 50 per launch; morning PR never auto-merges | 0049, 0107 | `night-merge.ts`, `gate-service.ts` | — | control plane |
@@ -86,5 +87,5 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Baseline PR on registration: missing files only, never workflows or settings, capped | 0142 | `github/registration.ts`, `baseline/plan.mjs` | — | control plane |
 | Webhook caps (1 MB body, 300 signed deliveries/minute per instance) + HMAC + 30-day TTL on records | 0028, 0041 | `apps/api/src/webhooks.ts`, `infra/control-plane` | — | control plane only (managed repos only send webhooks) |
 | Bot-opened PRs run their checks (repo token from the control plane via Actions OIDC; agent job holds no write credential) | 0041, 0043 | `system-security-review.yml` (`publish` job), `apps/api/src/github/token.ts` | — | not yet carried (until M6: Dev → prod releases) |
-| Re-sync open PRs (clean merges only, capped; `no-auto-sync` label) | 0111 | `platform/actions/resync-prs` | A, G | label carried; caller needs per-project tokens |
+| Re-sync open PRs (clean merges only, capped; `no-auto-sync` label; only when PR sync is `all`) | 0111, 0157 | `platform/actions/resync-prs` | A, G | label carried; caller needs per-project tokens |
 | Sandbox self-test on executor changes | 0071 | `platform/actions/sandbox-self-test` | A | platform only; a project hosting an executor pins the action. Required here only (`github/source-only.json`, AI-352) |

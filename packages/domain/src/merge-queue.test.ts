@@ -86,7 +86,11 @@ class World implements QueueJudge {
     return { merged: true as const, sha: this.tip };
   }
 
+  /** Test seam: PRs whose sync conflicts with the default branch (AI-388). */
+  readonly conflicting = new Set<number>();
+
   async requestSync(_repo: string, entry: MergeQueueEntry, headSha: string) {
+    if (this.conflicting.has(entry.number)) return "conflict" as const;
     this.syncs.push({ number: entry.number, head: headSha });
   }
 
@@ -204,6 +208,58 @@ describe("MergeQueue", () => {
     expect(world.merges).toEqual([1]);
     expect(world.syncs).toEqual([]);
     expect(await store.get(REPO)).toMatchObject({ entries: [], lease: null });
+  });
+
+  it("GivenAnOwnerApprovedOffer_WhenQueued_ThenTheEntryKeepsTheApprovalAndTheDiffItCovers", async () => {
+    world.add(1, { checks: "pending" });
+    await queue().offer(REPO, {
+      projectId: "ai",
+      number: 1,
+      kind: "merge_pr",
+      actor: "user:andy",
+      headSha: world.prs.get(1)!.head,
+      approval: { by: "owner", diff: "diff-1" },
+    });
+    expect((await store.get(REPO)).entries[0]).toMatchObject({
+      approval: "owner",
+      approvedDiff: "diff-1",
+      lastNote: "pending: checks_pending",
+    });
+  });
+
+  it("GivenAQueuedPrWithoutApproval_WhenOfferedAgainWithIt_ThenTheApprovalIsAddedAndItKeepsItsPlace", async () => {
+    const q = queue();
+    world.add(1, { checks: "pending" });
+    world.add(2, { checks: "pending" });
+    await offer(q, 1);
+    await offer(q, 2);
+    await q.offer(REPO, {
+      projectId: "ai",
+      number: 2,
+      kind: "merge_pr",
+      actor: "user:andy",
+      headSha: world.prs.get(2)!.head,
+      approval: { by: "owner", diff: "diff-2" },
+    });
+    const entries = (await store.get(REPO)).entries;
+    expect(entries.map((e) => [e.number, e.approval])).toEqual([
+      [1, null],
+      [2, "owner"],
+    ]);
+  });
+
+  it("GivenABehindHeadWhoseSyncConflicts_WhenAdvanced_ThenDroppedAndPutInNeedsYouNamingTheConflict", async () => {
+    world.add(1, { contains: sha(0) });
+    world.conflicting.add(1);
+    expect(await offer(queue(), 1)).toMatchObject({ result: "dropped" });
+    expect(world.notes).toEqual([
+      expect.objectContaining({
+        number: 1,
+        flag: true,
+        reason: expect.stringContaining("conflicts with the default branch"),
+      }),
+    ]);
+    expect(await queued()).toEqual([]);
   });
 
   it("GivenThreeOfferedPrs_WhenTheHeadWaits_ThenTheyKeepOldestFirstAndOnlyTheHeadIsJudgedForMerge", async () => {
@@ -358,6 +414,9 @@ describe("MergeQueue", () => {
             syncs: 0,
             syncRequestedSha: null,
             judgedSince: clock.toISOString(),
+            approval: null,
+            approvedDiff: null,
+            lastNote: null,
           },
         ],
         lease: { holder: "crashed", until },
