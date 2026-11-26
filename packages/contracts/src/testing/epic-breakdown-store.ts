@@ -28,6 +28,7 @@ export const breakdown = (over: Partial<EpicBreakdown> = {}): EpicBreakdown => (
   decidedAt: null,
   reason: null,
   ticketIds: [],
+  approvalLeaseUntil: null,
   updatedAt: "2026-11-25T12:00:00.000Z",
   ...over,
 });

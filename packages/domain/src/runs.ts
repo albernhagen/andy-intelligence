@@ -1415,6 +1415,8 @@ export class RunService {
     else if (result.status === "failed") await this.retryOrFlag(done, "reported a failure");
     else if (done.step === "sync" && status === "failed") await this.flagTicket(done);
     else if (done.step === "refine" && status === "failed") await this.flagFailedRefine(done);
+    // AI-383: a rejected draft flags the epic, so Andy sees it was lost (the comment says why).
+    else if (done.step === "plan-epic" && status === "failed") await this.flagTicket(done);
     else if (done.step === "build" && status === "failed") {
       await this.flagTicket(done);
       await this.stopForTheNight(done, `its build was rejected: ${error ?? "no reason recorded"}`);

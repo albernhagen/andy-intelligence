@@ -90,6 +90,12 @@ export const EpicBreakdown = z.object({
   reason: z.string().max(BREAKDOWN_LIMITS.reason).nullable(),
   /** The tickets approval created, in proposal order. */
   ticketIds: z.array(Id).max(BREAKDOWN_LIMITS.tickets),
+  /**
+   * While an approval creates tickets: until when it holds the breakdown. Another approval (any
+   * instance) is refused until then, so two can't create the same tickets; a crashed one's lease
+   * runs out and approving again resumes. Null otherwise; the default keeps older documents.
+   */
+  approvalLeaseUntil: Timestamp.nullable().default(null),
   /** Optimistic concurrency stamp for the store. */
   updatedAt: Timestamp,
 });

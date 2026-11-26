@@ -227,6 +227,7 @@ describe("epic breakdowns (AI-383)", () => {
       expect(run.status).toBe("failed");
       expect(run.error).toContain("nothing was recorded");
       expect((await breakdowns.get(project.id, epic.key)).breakdown).toBeNull();
+      expect((await tracker.getTicket(project.id, epic.id))?.needsAttention).toBe(true);
     });
 
     it("GivenAFailedTask_WhenReported_ThenItIsNotRetried", async () => {
@@ -325,6 +326,69 @@ describe("epic breakdowns (AI-383)", () => {
       await expect(breakdowns.propose(project.id, epic.key, proposal, OWNER)).rejects.toThrow(
         /already drafted and approved/,
       );
+    });
+
+    it("GivenAChildTheEpicAlreadyHad_WhenADraftWithTheSameTitleIsApproved_ThenItIsNotAdoptedAndKeepsItsBlockers", async () => {
+      const had = await tickets.create(
+        project.id,
+        { title: "Log a run", body: "A form that saves a run.", parentId: epic.id },
+        OWNER,
+      );
+      await breakdowns.propose(project.id, epic.key, proposal, OWNER);
+
+      const { tickets: made } = await breakdowns.decide(
+        project.id,
+        epic.key,
+        { decision: "approved" },
+        OWNER,
+      );
+
+      expect(made.map((t) => t.id)).not.toContain(had.id);
+      expect(await children()).toHaveLength(3);
+      expect((await tracker.getTicket(project.id, had.id))?.blockedBy).toEqual([]);
+    });
+
+    it("GivenTwoInstances_WhenBothApproveAtOnce_ThenOneWinsAndTheTicketsAreCreatedOnce", async () => {
+      await breakdowns.propose(project.id, epic.key, proposal, OWNER);
+      const other = new EpicBreakdownService(tracker, store, tickets, milestones, () => NOW);
+
+      const results = await Promise.allSettled([
+        breakdowns.decide(project.id, epic.key, { decision: "approved" }, OWNER),
+        other.decide(project.id, epic.key, { decision: "approved" }, OWNER),
+      ]);
+
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      expect((await children()).map((t) => t.title)).toEqual(["List runs", "Log a run"]);
+    });
+
+    it("GivenAnApprovalHoldingTheLease_WhenApprovedFromElsewhere_ThenRefusedUntilTheLeaseRunsOut", async () => {
+      const proposed = await breakdowns.propose(project.id, epic.key, proposal, OWNER);
+      const later = new Date(NOW.getTime() + 60_000).toISOString();
+      await store.put(
+        {
+          ...proposed,
+          status: "approving",
+          decidedBy: OWNER,
+          decidedAt: NOW.toISOString(),
+          approvalLeaseUntil: new Date(NOW.getTime() + 120_000).toISOString(),
+          updatedAt: later,
+        },
+        proposed.updatedAt,
+      );
+
+      await expect(
+        breakdowns.decide(project.id, epic.key, { decision: "approved" }, OWNER),
+      ).rejects.toThrow(/approval of .* is running/);
+
+      const afterLease = new EpicBreakdownService(
+        tracker,
+        store,
+        tickets,
+        milestones,
+        () => new Date(NOW.getTime() + 180_000),
+      );
+      await afterLease.decide(project.id, epic.key, { decision: "approved" }, OWNER);
+      expect(await children()).toHaveLength(2);
     });
 
     it("GivenNoProposal_WhenDecided_ThenNotDecidable", async () => {

@@ -30,6 +30,8 @@ import type { TicketService } from "./tickets";
 /** Existing children's titles the prompt lists at most, and the epic body it quotes at most. */
 const PROMPT_CHILDREN_MAX = 50;
 const PROMPT_BODY_MAX = 4000;
+/** How long an approval holds the breakdown, renewed after each ticket it creates. */
+const APPROVAL_LEASE_MS = 2 * 60_000;
 
 export interface EpicTaskStart {
   epic: Ticket;
@@ -164,6 +166,7 @@ export class EpicBreakdownService {
         decidedAt: null,
         reason: null,
         ticketIds: [],
+        approvalLeaseUntil: null,
         updatedAt: at,
       },
       current,
@@ -211,11 +214,12 @@ export class EpicBreakdownService {
     actor: EventActor,
   ): Promise<{ breakdown: EpicBreakdown; tickets: Ticket[] }> {
     const stored = await this.store.get(epic.projectId, epic.id);
-    const resumable = stored?.status === "approving" && decision.decision === "approved";
-    if (!stored || (stored.status !== "proposed" && !resumable)) {
+    const resuming = stored?.status === "approving" && decision.decision === "approved";
+    if (!stored || (stored.status !== "proposed" && !resuming)) {
       throw new DomainError("plan_not_decidable", `${epic.key} has no breakdown to decide`);
     }
-    const at = this.now().toISOString();
+    const now = this.now();
+    const at = now.toISOString();
     if (decision.decision === "rejected") {
       const rejected = await this.write(
         { ...stored, status: "rejected", reason: decision.reason, decidedBy: actor, decidedAt: at },
@@ -224,13 +228,65 @@ export class EpicBreakdownService {
       log("epic breakdown sent back", { projectId: epic.projectId, epic: epic.key });
       return { breakdown: rejected, tickets: [] };
     }
-    let current =
-      stored.status === "approving"
-        ? stored
-        : await this.write(
-            { ...stored, status: "approving", decidedBy: actor, decidedAt: at },
-            stored,
-          );
+    if (
+      resuming &&
+      stored.approvalLeaseUntil &&
+      Date.parse(stored.approvalLeaseUntil) > now.getTime()
+    ) {
+      throw new DomainError(
+        "plan_not_decidable",
+        `an approval of ${epic.key}'s breakdown is running: try again in a few minutes`,
+      );
+    }
+    // The claim: a stamp-checked write only one caller wins, in any instance, before any ticket
+    // is created. The lease keeps a second caller out until this one finishes or dies.
+    let current = await this.write(
+      resuming
+        ? { ...stored, approvalLeaseUntil: this.leaseUntil() }
+        : {
+            ...stored,
+            status: "approving",
+            decidedBy: actor,
+            decidedAt: at,
+            approvalLeaseUntil: this.leaseUntil(),
+          },
+      stored,
+    );
+    try {
+      const made = await this.createTickets(epic, current, resuming, (next) => {
+        current = next;
+      });
+      await linkSiblingBlockers(this.tracker, current.proposal.tickets, made, new Set(), actor);
+      const done = await this.write(
+        { ...current, status: "approved", approvalLeaseUntil: null },
+        current,
+      );
+      log("epic breakdown approved", {
+        projectId: epic.projectId,
+        epic: epic.key,
+        tickets: made.length,
+      });
+      return { breakdown: done, tickets: made };
+    } catch (err) {
+      // Free the lease so approving again resumes at once; best effort (it runs out anyway).
+      await this.write({ ...current, approvalLeaseUntil: null }, current).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  /**
+   * Creates the drafted tickets not yet recorded, recording each (and renewing the lease) as it
+   * lands. When resuming, a ticket an earlier attempt of this approval created but didn't record is found and
+   * recorded instead: a child of the epic created by the approver since the approval started,
+   * with the same title and body. A ticket the epic had before is never adopted.
+   */
+  private async createTickets(
+    epic: Ticket,
+    start: EpicBreakdown,
+    resuming: boolean,
+    recorded: (next: EpicBreakdown) => void,
+  ): Promise<Ticket[]> {
+    let current = start;
     const made: Ticket[] = [];
     for (const id of current.ticketIds) {
       const t = await this.tracker.getTicket(epic.projectId, id);
@@ -238,21 +294,22 @@ export class EpicBreakdownService {
       made.push(t);
     }
     const drafted = current.proposal.tickets;
-    // A ticket created by an earlier attempt that failed before recording it is found under the
-    // epic by its title and body and recorded instead of created again.
-    const existing =
-      made.length < drafted.length
-        ? (await this.tracker.listTickets(epic.projectId)).filter(
-            (t) => t.parentId === epic.id && !t.archived,
-          )
-        : [];
+    const orphans: Ticket[] = [];
+    if (resuming && made.length < drafted.length && current.decidedAt && current.decidedBy) {
+      const since = current.decidedAt;
+      const candidates = (await this.tracker.listTickets(epic.projectId)).filter(
+        (t) => t.parentId === epic.id && t.createdAt >= since && !current.ticketIds.includes(t.id),
+      );
+      for (const t of candidates) {
+        const [created] = await this.tracker.listEvents(epic.projectId, t.id);
+        if (created?.kind === "created" && created.actor === current.decidedBy) orphans.push(t);
+      }
+    }
     for (const [i, d] of drafted.entries()) {
       if (i < made.length) continue;
-      const found = existing.find(
-        (t) => t.title === d.title && t.body === d.body && !current.ticketIds.includes(t.id),
-      );
+      const at = orphans.findIndex((t) => t.title === d.title && t.body === d.body);
       const ticket =
-        found ??
+        (at >= 0 ? orphans.splice(at, 1)[0] : undefined) ??
         (await this.tickets.create(
           epic.projectId,
           {
@@ -265,22 +322,24 @@ export class EpicBreakdownService {
             sizeReason: d.sizeReason,
             touches: d.touches,
           },
-          actor,
+          current.decidedBy ?? "system",
         ));
       made.push(ticket);
       current = await this.write(
-        { ...current, ticketIds: [...current.ticketIds, ticket.id] },
+        {
+          ...current,
+          ticketIds: [...current.ticketIds, ticket.id],
+          approvalLeaseUntil: this.leaseUntil(),
+        },
         current,
       );
+      recorded(current);
     }
-    await linkSiblingBlockers(this.tracker, drafted, made, new Set(), actor);
-    const done = await this.write({ ...current, status: "approved" }, current);
-    log("epic breakdown approved", {
-      projectId: epic.projectId,
-      epic: epic.key,
-      tickets: made.length,
-    });
-    return { breakdown: done, tickets: made };
+    return made;
+  }
+
+  private leaseUntil(): string {
+    return new Date(this.now().getTime() + APPROVAL_LEASE_MS).toISOString();
   }
 
   /** Every breakdown waiting for Andy, across projects, for the Needs-you inbox. */
