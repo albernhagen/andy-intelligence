@@ -36,11 +36,10 @@ Ticket first (under its epic, with spec and criteria); the brief adds what it ca
 | Before "ready" | Merge the latest default branch and rerun everything.                                                      |
 | Tickets        | Move the ticket as work starts and when the PR opens; report a refused move, don't force it.               |
 | Background     | For a newcomer: the system, why this ticket exists, the owner's words.                                     |
-| Remote worker  | No note back: brief how to open and read its PR.                                                           |
 
 ## 3. While workers run
 
-- When a worker reports, read the PR yourself: checks, mergeability, each reviewer's verdict on the head. Use the coordinator tools.
+- When a worker reports (remote workers send no note), read the PR yourself: checks, mergeability, each reviewer's verdict on the head. Use the repo's coordinator tools.
 - Stalled sessions or timeouts: check the machine first.
 - Unanswered findings or a red check go back to its worker.
 - Questions only the owner can answer: §8.
@@ -48,7 +47,7 @@ Ticket first (under its epic, with spec and criteria); the brief adds what it ca
 
 ## 4. Merging
 
-- **Merge only through MCP `merge_pr`** (§7), never with your own code-host token or a merge button. **One PR at a time.** After each merge the rest merge the default branch and rerun. Two green PRs can break `main` together.
+- **Merge only through MCP `merge_pr`** (§7), never with your own code-host token or a merge button. **One PR at a time.** After each merge the remaining PRs merge the default branch and rerun before merging. Two green PRs can break `main` together.
 - After every merge check the default branch's own checks; red comes first.
 - State hand-applied changes (infrastructure, a deploy) and their expected result before the merge.
 
@@ -71,4 +70,4 @@ Never merge any other way (ADR-0124). MCP `merge_pr` (project, repo, PR number) 
 
 ## 8. Asking the owner
 
-Every question to the owner uses refine's format (`refine.md`): a plain question line ending in `?`, every ID with its title; two to four sentences of context; the options, each with what it does or costs; your recommendation. Digest decisions are questions, not labels.
+Every question to the owner uses refine's format (`refine.md`): a plain question line ending in `?`, every ID with its title; two to four sentences of context; the options, each with what it does or costs; your recommendation and why. Digest decisions are questions, not labels.
