@@ -40,7 +40,7 @@ async function setup(projectAccess: ProjectAccess = ownerOnlyAccess()) {
     });
     return { status: res.status, body: (await res.json()) as unknown };
   };
-  return { app, grants, call, rest };
+  return { app, grants, call, rest, tracker };
 }
 
 describe("project_setup (AI-287 parity with GET /api/projects/{id}/setup)", () => {
@@ -106,6 +106,19 @@ describe("project_setup (AI-287 parity with GET /api/projects/{id}/setup)", () =
     expect(viaMcp.isError).toBe(true);
     expect(viaMcp.text).toMatch(/not found/i);
     expect((await call("project_setup", { project: "OPS" })).isError).toBe(false);
+  });
+
+  it("GivenAProjectTheCallerCantRead_WhenMarkedOverMcp_ThenRefusedAndNothingStored", async () => {
+    const { call, tracker } = await setup({ canRead: async (_actor, id) => id !== "ai" });
+
+    const viaMcp = await call("project_setup", {
+      project: "AI",
+      mark: { step: "reviewer_token", done: true },
+    });
+
+    expect(viaMcp.isError).toBe(true);
+    expect(viaMcp.text).toMatch(/not found/i);
+    expect((await tracker.getProject("ai"))?.setupMarks).toEqual({});
   });
 
   it("GivenTheToolList_WhenListed_ThenProjectSetupIsThereAndSaysItNeverRunsAStep", async () => {

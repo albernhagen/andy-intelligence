@@ -2,7 +2,7 @@ import { InMemoryRunStore, InMemoryWorkTracker, type Onboarding } from "@andy/co
 import { BASELINE_FILES } from "@andy/domain";
 import { describe, expect, it } from "vitest";
 import { createdApp, githubApp, REPO } from "./github/test-app";
-import { provingRefine } from "./onboarding";
+import { provingRefine, REFINE_LOOKBACK_RUNS } from "./onboarding";
 
 /** AI-381: GET /api/projects/{p}/onboarding and POST …/onboarding/marks over the CodeHost fake. */
 
@@ -177,6 +177,77 @@ describe("provingRefine (AI-381)", () => {
       ticketKey: "WID-1",
       status: "succeeded",
       candidate: { key: "WID-1" },
+    });
+  });
+
+  const ROUTE = { harness: "claude-code", provider: "claude-sub", model: "sonnet" } as const;
+  async function endedRun(
+    runs: InMemoryRunStore,
+    ticketId: string,
+    step: "refine" | "build",
+    status: "succeeded" | "failed",
+    endedAt: string,
+  ) {
+    const run = await runs.create({
+      projectId: "wid",
+      ticketId,
+      step,
+      route: ROUTE,
+      tier: "fast",
+      deadline: null,
+      prompt: "x",
+      maxTurns: 1,
+    });
+    await runs.update(run.id, { status: "running" }, ["queued"]);
+    await runs.update(run.id, { status, endedAt }, ["running"]);
+    return run;
+  }
+
+  it("GivenASucceededRefineThenMoreOtherRunsThanTheCap_WhenRead_ThenStillSucceeded", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const runs = new InMemoryRunStore();
+    await tracker.createProject({ name: "Widgets", key: "WID" });
+    const ticket = await tracker.createTicket("wid", { title: "First story" }, "system");
+    await tracker.updateTicket(
+      "wid",
+      ticket.id,
+      { stage: { to: "ready", reason: null } },
+      "system",
+    );
+    const proving = await endedRun(
+      runs,
+      ticket.id,
+      "refine",
+      "succeeded",
+      "2026-11-20T00:00:00.000Z",
+    );
+    for (let i = 0; i <= REFINE_LOOKBACK_RUNS; i++) {
+      await endedRun(
+        runs,
+        ticket.id,
+        "build",
+        "failed",
+        `2026-11-21T00:00:${String(i % 60).padStart(2, "0")}.${String(i).padStart(3, "0")}Z`,
+      );
+    }
+
+    expect(await provingRefine(tracker, runs, "wid", NOW)).toMatchObject({
+      runId: proving.id,
+      status: "succeeded",
+    });
+  });
+
+  it("GivenASucceededRefineThenAFailedOne_WhenRead_ThenTheSucceededOneCounts", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const runs = new InMemoryRunStore();
+    await tracker.createProject({ name: "Widgets", key: "WID" });
+    const ticket = await tracker.createTicket("wid", { title: "First story" }, "system");
+    const ok = await endedRun(runs, ticket.id, "refine", "succeeded", "2026-11-20T00:00:00.000Z");
+    await endedRun(runs, ticket.id, "refine", "failed", "2026-11-22T00:00:00.000Z");
+
+    expect(await provingRefine(tracker, runs, "wid", NOW)).toMatchObject({
+      runId: ok.id,
+      status: "succeeded",
     });
   });
 

@@ -10,6 +10,7 @@ import {
   type ProvingRefine,
   type Run,
   type RunStore,
+  type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
 import {
@@ -47,6 +48,11 @@ export const ONBOARDING_REFRESH_MIN_MS = 10_000;
 /** Refine tasks looked at for the proving refine: the last 90 days, at most this many. */
 export const REFINE_LOOKBACK_RUNS = 50;
 const REFINE_LOOKBACK_MS = 90 * 24 * 60 * 60_000;
+/**
+ * When the window read was capped and held no refine, this many tickets that left Backlog are
+ * asked for their own runs (one read each): other steps' runs can't hide a refine then.
+ */
+export const REFINE_TICKET_PROBES = 5;
 /** Cap on a code-host error shown in a check's detail (ADR-0028). */
 const ERROR_MAX = 200;
 /** Cached projects at most; the oldest entry goes first. */
@@ -166,7 +172,13 @@ export async function provingRefine(
     tracker.listTickets(projectId),
   ]);
   const refine = (r: Run) => r.step === "refine";
-  const latest: Run | undefined = active.find(refine) ?? ended.runs.find(refine);
+  const succeeded = (r: Run) => refine(r) && r.status === "succeeded";
+  // One succeeded refine proves the step: a later failed or running one doesn't undo it.
+  const latest: Run | undefined =
+    ended.runs.find(succeeded) ??
+    active.find(refine) ??
+    ended.runs.find(refine) ??
+    (ended.complete ? undefined : await probeTickets(runs, projectId, tickets, succeeded));
   const keyOf = (id: string | null) => tickets.find((t) => t.id === id)?.key ?? null;
   const candidate = tickets.find(
     (t) => t.stage === "backlog" && !t.archived && t.upNextRank !== null && t.type !== "epic",
@@ -186,6 +198,27 @@ export async function provingRefine(
     error: latest?.error?.slice(0, ERROR_MAX) ?? null,
     candidate: candidate ? { id: candidate.id, key: candidate.key, title: candidate.title } : null,
   };
+}
+
+/**
+ * The window read hit its cap (other steps' runs, or other projects' in the store, fill it), so
+ * look at the newest refined tickets' own runs instead, at most REFINE_TICKET_PROBES reads.
+ */
+async function probeTickets(
+  runs: RunStore,
+  projectId: string,
+  tickets: Ticket[],
+  succeeded: (r: Run) => boolean,
+): Promise<Run | undefined> {
+  const refined = tickets
+    .filter((t) => t.stage !== "backlog" && t.type !== "epic")
+    .sort((a, b) => (b.upNextAt ?? "").localeCompare(a.upNextAt ?? ""))
+    .slice(0, REFINE_TICKET_PROBES);
+  for (const t of refined) {
+    const hit = (await runs.listForTicket(projectId, t.id)).find(succeeded);
+    if (hit) return hit;
+  }
+  return undefined;
 }
 
 interface Cached {
