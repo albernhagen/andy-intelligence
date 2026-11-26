@@ -40,7 +40,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Lint, typecheck, test, build | 0022 | `ci.yml` (`check`) → `platform/actions/ci-check` | A | carried (M1.16) |
 | Firestore adapter contract suites on the emulator (path-gated) | 0034, 0048 | `firestore-suite.yml` | — | control plane only (`github/source-only.json`) |
 | Workflow linter (actionlint) | 0027 | `ci.yml` → `platform/actions/actionlint` | A | carried (M1.16) |
-| Terraform fmt/validate | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` | A | carried (M1.16) |
+| Terraform fmt/validate; `terraform test` (mocked) in roots with `tests/` | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` | A | carried (M1.16; tests: next baseline tag) |
 | Public-safe Terraform plan summary | 0011 | `terraform-plan.yml` | — | not yet carried (M6: Dev → prod releases; needs per-project WIF) |
 | Secret scan (TruffleHog) | 0015 | `secret-scan.yml` → `platform/actions/secret-scan` | A | carried (M1.16) |
 | CodeQL, dependency review, Terraform misconfig scan | 0025, 0030 | `security-scans.yml` → `platform/actions/{codeql,dependency-review,terraform-misconfig}` | A | carried (M1.16) |
@@ -61,10 +61,10 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Night merges into `epic/<KEY>`: same gate (rules from the default branch), once per child ticket (claim before the merge call), ≤ 50 per launch; morning PR never auto-merges | 0049, 0107 | `night-merge.ts`, `gate-service.ts` | — | control plane |
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
 | Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | carried (M1.16: `docs/runbooks/onboard-a-repo.md`) |
-| GCP budget + alerts | 0028, 0029 | `infra/billing` | TF | not yet carried (M6: Dev → prod releases) |
+| GCP budget + alerts | 0028, 0029, 0114 | `infra/modules/project-budget` via `infra/billing` `managed_projects` | TF | carried (TF): Andy adds an entry and applies (billing runbook §8) |
 | Cloud Run caps, log exclusions, usage alerts, daily Firestore backup (7-day retention), Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | Alert: config change not in the change log (AI-136); test keeps filter and message in step | — | `infra/control-plane`, `config-changes.test.ts` | TF | not yet carried (M6: Dev → prod releases) |
-| Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf` + workflow YAML | TF | not yet carried (M6: Dev → prod releases) |
+| Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf`; `infra/modules/project-budget` (+ workflow YAML) | TF | carried (TF): per entry, off by default |
 | Safe deploy: no-traffic revision, smoke test, then traffic | 0076, 0114 | `platform/actions/cloud-run-safe-deploy` | A | control plane only until M6: Dev → prod releases, then `cloud-run` projects |
 | UI screenshot checks (Playwright): a diff fails, actual images uploaded; 10-minute cap; skips docs-only PRs | 0045, 0059 | `ui-screenshots.yml` → `platform/actions/ui-screenshots`; config and images in `apps/web/e2e/` | — | control plane only; a managed web UI can call the action (needs `playwright.config.ts`; input `base-ref`). Required here only (`github/source-only.json`, AI-350) |
 | Fonts served by the app: the web build fails if a built file names a font host or loads a font from another host | 0151 | `apps/web/scripts/check-fonts.ts` (run by `pnpm build`) | — | control plane only; a managed web UI can copy the script |

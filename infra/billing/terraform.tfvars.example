@@ -4,3 +4,16 @@ billing_account_id = "XXXXXX-XXXXXX-XXXXXX"
 
 # Cost kill switch (ADR-0028). Off by default; see docs/runbooks/billing.md §4 before turning on.
 # kill_switch_enabled = true
+
+# Managed projects' budgets (docs/runbooks/billing.md §8). One entry per GCP project; defaults
+# $10/month, kill switch off. Real project IDs only in terraform.tfvars.
+# managed_projects = {
+#   "example-dev" = { project_id = "example-dev-000000" }
+#   "example-prod" = {
+#     project_id             = "example-prod-000000"
+#     budget_amount_usd      = 10
+#     kill_switch_enabled    = true
+#     kill_switch_service    = "example"
+#     kill_switch_runtime_sa = "example-runtime@example-prod-000000.iam.gserviceaccount.com"
+#   }
+# }
