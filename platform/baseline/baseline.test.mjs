@@ -76,12 +76,17 @@ describe("deployKindFor", () => {
 });
 
 /**
- * AI-206: M6.17: deploy.yml and release.yml are written only for a `cloud-run` project (ADR-0114),
+ * AI-206: M6.17: deploy.yml and release.yml (and AI-207: M6.18: preview.yml) are written only for a
+ * `cloud-run` project (ADR-0114),
  * with every andy-intelligence action pinned by SHA.
  */
 describe("deploy caller in the baseline", () => {
   const SHA = "f".repeat(40);
-  const DEPLOY_FILES = [".github/workflows/deploy.yml", ".github/workflows/release.yml"];
+  const DEPLOY_FILES = [
+    ".github/workflows/deploy.yml",
+    ".github/workflows/release.yml",
+    ".github/workflows/preview.yml",
+  ];
   const render = (deployKind) =>
     renderFiles(manifest, read, { sha: SHA, ref: "v1.0.0", deployKind }).managed;
 
@@ -92,13 +97,23 @@ describe("deploy caller in the baseline", () => {
       const uses = [...f.content.matchAll(/uses:\s+(\S+)/g)].map((m) => m[1]);
       expect(uses.length, f.path).toBeGreaterThan(0);
       for (const u of uses) expect(u, f.path).toMatch(/@[0-9a-f]{40}$/);
-      expect(f.content).toContain(
-        `${manifest.source}/platform/actions/cloud-run-safe-deploy@${SHA}`,
-      );
+      if (!f.path.endsWith("preview.yml")) {
+        expect(f.content).toContain(
+          `${manifest.source}/platform/actions/cloud-run-safe-deploy@${SHA}`,
+        );
+      }
       expect(f.content).toContain(
         `${manifest.source}/platform/actions/cloud-run-caller-config@${SHA}`,
       );
     }
+  });
+
+  it("GivenACloudRunProject_WhenRendered_ThenPreviewUsesThePinnedPreviewAction", () => {
+    const preview = render("cloud-run").find((f) => f.path === ".github/workflows/preview.yml");
+    expect(preview.content).toContain(
+      `${manifest.source}/platform/actions/cloud-run-preview@${SHA}`,
+    );
+    expect(preview.content).not.toContain("uses: ./");
   });
 
   it("GivenADeployKindNoneProject_WhenRendered_ThenNeitherDeployNorRelease", () => {
@@ -111,6 +126,7 @@ describe("deploy caller in the baseline", () => {
     expect(kinded.map((m) => [m.path, m.deployKind, m.pin])).toEqual([
       [".github/workflows/deploy.yml", "cloud-run", true],
       [".github/workflows/release.yml", "cloud-run", true],
+      [".github/workflows/preview.yml", "cloud-run", true],
     ]);
   });
 });
