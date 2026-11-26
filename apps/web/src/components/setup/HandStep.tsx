@@ -100,6 +100,36 @@ function CheckRow({ check }: { check: OnboardingCheck }) {
   );
 }
 
+/** "Marked by hand" with who, when and Clear mark. */
+export function MarkedLine({
+  mark,
+  pending,
+  onClear,
+}: {
+  mark: NonNullable<OnboardingStep["marked"]>;
+  pending: boolean;
+  onClear: () => void;
+}) {
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-sm">
+      <Badge variant="success">Marked by hand</Badge>
+      <span className="text-muted-foreground">
+        {mark.by}, {dateTime(mark.at)}
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-11 sm:h-8"
+        disabled={pending}
+        onClick={onClear}
+      >
+        Clear mark
+      </Button>
+    </p>
+  );
+}
+
 export function HandStep({
   projectId,
   step,
@@ -186,22 +216,7 @@ export function HandStep({
         </p>
       )}
       {step.marked && (
-        <p className="flex flex-wrap items-center gap-2 text-sm">
-          <Badge variant="success">Marked by hand</Badge>
-          <span className="text-muted-foreground">
-            {step.marked.by}, {dateTime(step.marked.at)}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-11 sm:h-8"
-            disabled={mark.isPending}
-            onClick={() => setMark(false)}
-          >
-            Clear mark
-          </Button>
-        </p>
+        <MarkedLine mark={step.marked} pending={mark.isPending} onClear={() => setMark(false)} />
       )}
       {mark.error && <QueryError error={mark.error} />}
       {again.error && <QueryError error={again.error} />}

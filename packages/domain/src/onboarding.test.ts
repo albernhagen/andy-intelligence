@@ -215,6 +215,24 @@ describe("onboarding", () => {
       "the last refine failed: no credential",
     );
   });
+
+  it("GivenARefineReadThatCantSeeFarEnough_WhenDecided_ThenCantTellUntilMarked", () => {
+    const unseen = { ...noRefine, status: "unknown" as const };
+
+    expect(step(onboarding(facts({ refine: unseen })), "proving_refine").status).toBe("unknown");
+    const marked = onboarding(
+      facts({ refine: unseen, marks: { proving_refine: { by: "andy@example.com", at: AT } } }),
+    );
+    expect(step(marked, "proving_refine").status).toBe("done");
+  });
+
+  it("GivenNoRefineAndAMark_WhenDecided_ThenTheMarkDoesNotOverrideIt", () => {
+    const o = onboarding(
+      facts({ refine: noRefine, marks: { proving_refine: { by: "andy@example.com", at: AT } } }),
+    );
+
+    expect(step(o, "proving_refine").status).toBe("not_yet");
+  });
 });
 
 describe("repoLimits", () => {

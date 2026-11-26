@@ -173,23 +173,28 @@ export async function provingRefine(
   ]);
   const refine = (r: Run) => r.step === "refine";
   const succeeded = (r: Run) => refine(r) && r.status === "succeeded";
-  // One succeeded refine proves the step: a later failed or running one doesn't undo it.
-  const latest: Run | undefined =
+  // One succeeded refine proves the step: a later failed or running one doesn't undo it. A capped
+  // window may have cut it off, so the ticket probe runs before an older failure is reported.
+  const proved =
     ended.runs.find(succeeded) ??
-    active.find(refine) ??
-    ended.runs.find(refine) ??
     (ended.complete ? undefined : await probeTickets(runs, projectId, tickets, succeeded));
+  const latest: Run | undefined = proved ?? active.find(refine) ?? ended.runs.find(refine);
+  // Capped and no success found: say so rather than "none" or "failed", since a refine may have
+  // passed out of sight; the newest one seen still gives its link and error.
+  const unseen = !proved && !ended.complete && !active.some(refine);
   const keyOf = (id: string | null) => tickets.find((t) => t.id === id)?.key ?? null;
   const candidate = tickets.find(
     (t) => t.stage === "backlog" && !t.archived && t.upNextRank !== null && t.type !== "epic",
   );
-  const status: ProvingRefine["status"] = !latest
-    ? "none"
-    : latest.status === "succeeded"
-      ? "succeeded"
-      : latest.status === "queued" || latest.status === "running"
-        ? "running"
-        : "failed";
+  const status: ProvingRefine["status"] = unseen
+    ? "unknown"
+    : !latest
+      ? "none"
+      : latest.status === "succeeded"
+        ? "succeeded"
+        : latest.status === "queued" || latest.status === "running"
+          ? "running"
+          : "failed";
   return {
     runId: latest?.id ?? null,
     ticketKey: latest ? keyOf(latest.ticketId) : null,

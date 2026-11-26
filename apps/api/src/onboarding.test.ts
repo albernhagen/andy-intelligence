@@ -203,6 +203,13 @@ describe("provingRefine (AI-381)", () => {
     return run;
   }
 
+  async function fillWindow(runs: InMemoryRunStore, ticketId: string) {
+    for (let i = 0; i <= REFINE_LOOKBACK_RUNS; i++) {
+      const ms = String(i).padStart(3, "0");
+      await endedRun(runs, ticketId, "build", "failed", `2026-11-21T00:00:00.${ms}Z`);
+    }
+  }
+
   it("GivenASucceededRefineThenMoreOtherRunsThanTheCap_WhenRead_ThenStillSucceeded", async () => {
     const tracker = new InMemoryWorkTracker();
     const runs = new InMemoryRunStore();
@@ -235,6 +242,39 @@ describe("provingRefine (AI-381)", () => {
       runId: proving.id,
       status: "succeeded",
     });
+  });
+
+  it("GivenACappedWindowWithAFailedRefineAndAnOlderSuccess_WhenRead_ThenTheProbeFindsTheSuccess", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const runs = new InMemoryRunStore();
+    await tracker.createProject({ name: "Widgets", key: "WID" });
+    const ticket = await tracker.createTicket("wid", { title: "First story" }, "system");
+    await tracker.updateTicket(
+      "wid",
+      ticket.id,
+      { stage: { to: "ready", reason: null } },
+      "system",
+    );
+    const ok = await endedRun(runs, ticket.id, "refine", "succeeded", "2026-11-01T00:00:00.000Z");
+    await fillWindow(runs, ticket.id);
+    await endedRun(runs, ticket.id, "refine", "failed", "2026-11-24T00:00:00.000Z");
+
+    expect(await provingRefine(tracker, runs, "wid", NOW)).toMatchObject({
+      runId: ok.id,
+      status: "succeeded",
+    });
+  });
+
+  it("GivenACappedWindowAndASuccessOutOfTheProbe_WhenRead_ThenUnknownNotNone", async () => {
+    const tracker = new InMemoryWorkTracker();
+    const runs = new InMemoryRunStore();
+    await tracker.createProject({ name: "Widgets", key: "WID" });
+    // The succeeded refine's ticket is still in Backlog, so the probe never asks it.
+    const ticket = await tracker.createTicket("wid", { title: "First story" }, "system");
+    await endedRun(runs, ticket.id, "refine", "succeeded", "2026-11-01T00:00:00.000Z");
+    await fillWindow(runs, ticket.id);
+
+    expect(await provingRefine(tracker, runs, "wid", NOW)).toMatchObject({ status: "unknown" });
   });
 
   it("GivenASucceededRefineThenAFailedOne_WhenRead_ThenTheSucceededOneCounts", async () => {

@@ -84,6 +84,7 @@ const MARKABLE: ReadonlySet<OnboardingStepKey> = new Set<MarkableStepKey>([
   "reusable_workflows",
   "reviewer_token",
   "agent_environment",
+  "proving_refine",
 ]);
 
 export function isMarkable(key: OnboardingStepKey): key is MarkableStepKey {
@@ -253,16 +254,22 @@ function specs(f: OnboardingFacts): Record<OnboardingStepKey, StepSpec> {
   const refineCheck: OnboardingCheck =
     refine.status === "succeeded"
       ? done(`Refine succeeded${refine.ticketKey ? ` on ${refine.ticketKey}` : ""}`)
-      : {
-          label: "A refine task succeeded",
-          status: "not_yet",
-          detail:
-            refine.status === "running"
-              ? "a refine task is running"
-              : refine.status === "failed"
-                ? `the last refine failed${refine.error ? `: ${refine.error}` : ""}`
-                : "no refine has run in this project yet",
-        };
+      : refine.status === "unknown"
+        ? {
+            label: "A refine task succeeded",
+            status: "unknown",
+            detail: `more tasks ended than the app reads${refine.error ? ` (the newest refine seen failed: ${refine.error})` : ""}: mark this done if a refine passed`,
+          }
+        : {
+            label: "A refine task succeeded",
+            status: "not_yet",
+            detail:
+              refine.status === "running"
+                ? "a refine task is running"
+                : refine.status === "failed"
+                  ? `the last refine failed${refine.error ? `: ${refine.error}` : ""}`
+                  : "no refine has run in this project yet",
+          };
 
   return {
     repo_app: {

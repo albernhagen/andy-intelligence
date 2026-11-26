@@ -7,11 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/Status";
 import { BriefStep } from "@/components/setup/BriefStep";
 import { ApproveStep, PlanStep } from "@/components/setup/PlanSteps";
-import { ExternalButton, HandStep } from "@/components/setup/HandStep";
+import { ExternalButton, HandStep, MarkedLine, canMark } from "@/components/setup/HandStep";
 import { RepoLimits } from "@/components/setup/RepoLimits";
 import { MainButton, StepCard } from "@/components/setup/StepCard";
 import { clearDraft } from "@/lib/brief-draft";
-import { useSetupFacts, useStartRefine } from "@/lib/setup-queries";
+import { useMarkStep, useSetupFacts, useStartRefine } from "@/lib/setup-queries";
 import {
   STEP_COUNT,
   canOpen,
@@ -251,7 +251,7 @@ function StepBody({
 
 /** The proving refine's result (runbook step 8): what the newest refine task did. */
 function RefineResult({ refine }: { refine: ProvingRefine }) {
-  if (refine.status === "none") return null;
+  if (refine.status === "none" || refine.status === "unknown") return null;
   const text = {
     running: "A refine task is running",
     succeeded: "The refine succeeded",
@@ -299,7 +299,9 @@ function RefineStep({
   onBoard: () => void;
 }) {
   const start = useStartRefine(projectId);
+  const mark = useMarkStep(projectId);
   const step = onboardingStep(facts, "proving_refine");
+  const setMark = (done: boolean) => mark.mutate({ step: "proving_refine", done });
   const refine = facts.onboarding.refine;
   const candidate = refine.candidate;
   const done = step.status === "done";
@@ -323,6 +325,17 @@ function RefineStep({
       actions={
         <>
           {refine.url && <ExternalButton label="Open the refine's run" url={refine.url} />}
+          {canMark(step) && !step.marked && (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 sm:h-9"
+              disabled={mark.isPending}
+              onClick={() => setMark(true)}
+            >
+              Mark done
+            </Button>
+          )}
           {main}
         </>
       }
@@ -336,7 +349,14 @@ function RefineStep({
         </p>
       )}
       <RefineResult refine={refine} />
+      {refine.status === "unknown" && (
+        <p className="text-sm text-muted-foreground">{step.checks[0]?.detail}</p>
+      )}
+      {step.marked && (
+        <MarkedLine mark={step.marked} pending={mark.isPending} onClear={() => setMark(false)} />
+      )}
       {start.error && <QueryError error={start.error} />}
+      {mark.error && <QueryError error={mark.error} />}
     </StepCard>
   );
 }

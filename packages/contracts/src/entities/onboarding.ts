@@ -23,7 +23,8 @@ export type OnboardingStepKey = z.infer<typeof OnboardingStepKey>;
 /**
  * Steps Andy may mark done by hand: those done in GitHub or the terminal. A mark counts for a
  * step the app can't read (`hand`), after the live part of a `both` step, and for a live step
- * only while its read fails (`unknown`). The last two steps read the app's own data: no mark.
+ * only while its read fails (`unknown`). The proving refine is read from the app's own tasks; a
+ * mark counts there only when that read can't see far enough back. Builds on: never marked.
  */
 export const MarkableStepKey = z.enum([
   "repo_app",
@@ -32,6 +33,7 @@ export const MarkableStepKey = z.enum([
   "reusable_workflows",
   "reviewer_token",
   "agent_environment",
+  "proving_refine",
 ]);
 export type MarkableStepKey = z.infer<typeof MarkableStepKey>;
 
@@ -110,7 +112,8 @@ export const ProvingRefine = z.object({
   /** The task, or null when none has run yet. */
   runId: Id.nullable(),
   ticketKey: z.string().nullable(),
-  status: z.enum(["none", "running", "succeeded", "failed"]),
+  /** `unknown`: more tasks ended than the app reads, and none it read was a succeeded refine. */
+  status: z.enum(["none", "running", "succeeded", "failed", "unknown"]),
   /** The executor's run page, where the agent job's environment shows. */
   url: z.url().nullable(),
   error: z.string().nullable(),
