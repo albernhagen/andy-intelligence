@@ -119,6 +119,8 @@ jobs:
           image: ${{ steps.config.outputs.source-image }}@${{ steps.check.outputs.image-digest }}
           smoke-checks: ${{ vars.DEPLOY_SMOKE_CHECKS }}
           smoke-checks-other-hosts: ${{ vars.DEPLOY_SMOKE_CHECKS_OTHER_HOSTS }}
+          # Prod's image gets a release- tag so registry cleanup keeps it (AI-389: M6.23).
+          keep-tag-prefix: ${{ steps.config.outputs.environment == 'prod' && 'release-' || '' }}
 
       # Rollback: pin all traffic to the revision, then check /health.
       - id: rollback

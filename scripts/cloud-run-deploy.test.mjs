@@ -8,6 +8,7 @@ import {
   assertPromoted,
   candidateChecks,
   deployVerdict,
+  keepTag,
   parseSmokeChecks,
   publicChecks,
   readCandidate,
@@ -252,6 +253,44 @@ describe("runChecks", () => {
   });
 });
 
+describe("keepTag (AI-389: M6.23)", () => {
+  const HEX = "a".repeat(64);
+  const REPO = "us-central1-docker.pkg.dev/app-dev/app/app";
+
+  it("GivenAnImageByDigest_WhenKeepTag_ThenTagsThatDigestWithPrefixAndHex", () => {
+    expect(keepTag({ image: `${REPO}@sha256:${HEX}`, prefix: "release-" })).toEqual({
+      source: `${REPO}@sha256:${HEX}`,
+      target: `${REPO}:release-${HEX}`,
+    });
+  });
+
+  it("GivenTheSameDigestTwice_WhenKeepTag_ThenTheTagIsTheSame", () => {
+    const image = `${REPO}@sha256:${HEX}`;
+    expect(keepTag({ image, prefix: "release-" })).toEqual(keepTag({ image, prefix: "release-" }));
+  });
+
+  it("GivenARegistryWithAPort_WhenKeepTag_ThenKeepsThePortInTheName", () => {
+    const { target } = keepTag({ image: `localhost:5000/app@sha256:${HEX}`, prefix: "release-" });
+    expect(target).toBe(`localhost:5000/app:release-${HEX}`);
+  });
+
+  it.each([
+    [`${REPO}:abc123`, "by digest"],
+    [`${REPO}:abc123@sha256:${HEX}`, "both a tag and a digest"],
+    [`${REPO}@sha256:short`, "by digest"],
+    ["", "by digest"],
+  ])("GivenImage %s_WhenKeepTag_ThenThrows", (image, message) => {
+    expect(() => keepTag({ image, prefix: "release-" })).toThrow(message);
+  });
+
+  it.each(["", "Release-", "release prod", "-release"])(
+    "GivenPrefix '%s'_WhenKeepTag_ThenThrows",
+    (prefix) => {
+      expect(() => keepTag({ image: `${REPO}@sha256:${HEX}`, prefix })).toThrow("keep-tag-prefix");
+    },
+  );
+});
+
 describe("job summary", () => {
   const args = { service: "svc", region: "us-central1", before: "old=100", candidate: "new" };
 
@@ -270,6 +309,29 @@ describe("job summary", () => {
     expect(text).toContain("**Traffic did not move**");
     expect(text).toContain("| Candidate | `new` |");
     expect(text).toContain("--to-revisions=old=100");
+  });
+
+  it("GivenTheKeepTagFails_WhenRendered_ThenSaysTrafficDidNotMove", () => {
+    const outcomes = { ...OK, keepTag: "failure", promote: "skipped", verify: "skipped" };
+    const text = renderSummary({ ...args, after: "old=100", outcomes });
+    expect(text).toContain("Could not tag the image");
+    expect(text).toContain("**Traffic did not move.**");
+  });
+
+  it("GivenTheKeepTagSucceeds_WhenRendered_ThenNamesTheTag", () => {
+    const keep = "repo/app:release-abc";
+    const text = renderSummary({
+      ...args,
+      after: "new=100",
+      keepTag: keep,
+      outcomes: { ...OK, keepTag: "success" },
+    });
+    expect(text).toContain(`tagged \`${keep}\``);
+  });
+
+  it("GivenNoKeepTag_WhenRendered_ThenSaysNothingAboutCleanup", () => {
+    const text = renderSummary({ ...args, after: "new=100", outcomes: OK });
+    expect(text).not.toContain("Registry cleanup");
   });
 
   it("GivenSplitTrafficBefore_WhenRollbackCommand_ThenRestoresTheSplit", () => {
@@ -298,7 +360,8 @@ describe("job summary", () => {
   });
 
   it.each([
-    ["inputs", "smoke checks are missing or malformed"],
+    ["inputs", "are missing or malformed"],
+    ["keepTag", "Could not tag the image"],
     ["deploy", "Traffic did not move"],
     ["candidate", "Traffic did not move"],
     ["smoke", "Traffic did not move"],
@@ -385,10 +448,17 @@ describe("cloud-run-safe-deploy action", () => {
       "id: before",
       'no_traffic: "true"',
       "smoke-candidate",
+      "gcloud artifacts docker tags add",
       "update-traffic",
       "smoke-public",
     ].map((text) => action.indexOf(text));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it("GivenNoKeepTagPrefix_WhenRead_ThenTheTagStepIsSkipped", () => {
+    const step = action.slice(action.indexOf("id: keep-tag"), action.indexOf("Move traffic"));
+    expect(step).toContain("if: inputs.keep-tag-prefix != ''");
+    expect(action).toContain("OUTCOME_KEEP_TAG: ${{ steps.keep-tag.outcome }}");
   });
 });

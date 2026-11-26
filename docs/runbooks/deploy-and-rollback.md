@@ -17,6 +17,7 @@ Runs on push to `main` (not docs-only or `infra/`-only pushes, not bot merges) o
 | Record the serving revision                                                                                                                | Nothing deployed.                                                           |
 | Deploy the candidate with no traffic                                                                                                       | Traffic stays.                                                              |
 | Smoke test the candidate: `/health` 200, `/api/me` 404 (host rule)                                                                         | Traffic stays; job fails.                                                   |
+| Tag the image `release-<digest hex>` so registry cleanup keeps it (AI-389: M6.23)                                                          | Traffic stays; job fails.                                                   |
 | Move traffic to the candidate                                                                                                              | Check the summary: traffic may have moved.                                  |
 | Check it serves 100 percent; smoke test the public URL: `/health` 200, `/api/me` 401, and on the run.app host `/health` 200, `/api/me` 404 | **The candidate is serving: roll back (§3).** Nothing rolls back by itself. |
 
@@ -101,4 +102,5 @@ Expect 100 percent on the revision you chose, then `200`, then `401`. Open the b
 - **Normally (traffic on latest) a Terraform apply that changes the service goes live at once**, without a smoke test, as it always has.
 - **After every deploy, a plan of `infra/control-plane` shows `template.revision = "<that deploy's revision>" -> null`** (1 to change). This is expected: applying it makes a new revision with the same image and settings. Terraform must not ignore the name: Cloud Run refuses a known name with a changed template (409, AI-314).
 - **Widened values:** a revision older than a new stored value can't read records holding it (reads are validated). Since AI-19, history stores `user:<uid>` actors: roll back only to a revision that has AI-19, or fix forward.
+- **Registry cleanup keeps only `release-*` images past the newest 10 and 30 days** (AI-389: M6.23). Deploys and promotes since then tag what prod runs; a revision deployed before is kept only by that window, so roll back to it soon or not at all.
 - **Schema changes:** a rollback doesn't undo data. Before deploying one, take the export in [`ticket-core.md`, "Before a risky deploy: manual export"](ticket-core.md#before-a-risky-deploy-manual-export).

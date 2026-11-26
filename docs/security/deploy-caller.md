@@ -14,7 +14,7 @@ AI-206: M6.17 and AI-207: M6.18. A `cloud-run` project's `deploy.yml`, `release.
 
 ## Credentials
 
-No new credential. GitHub OIDC → the environment's Workload Identity provider → `<service>-deploy` (push to `<service>` registry repo, `run.developer` on `<service>`, actAs `<service>-run`; on prod in `dev-and-prod`, also read on the dev `<service>` repo so promote can check the digest, AI-390: Promote in dev-and-prod: prod deployer reads the dev registry). The same job token, audience the control plane, signs the deployment reports. `preview.yml`: OIDC → `<service>-pr-deploy` (push to the `<service>-preview` registry repo, `run.developer` on `<service>-preview`, actAs `<service>-pr-run`, which has logs and traces only), plus the job's `GITHUB_TOKEN` with `pull-requests: write` for the one comment.
+No new credential. GitHub OIDC → the environment's Workload Identity provider → `<service>-deploy` (push to `<service>` registry repo, `run.developer` on `<service>`, actAs `<service>-run`; on prod in `dev-and-prod`, also write on the dev `<service>` repo so promote can check the digest, AI-390: Promote in dev-and-prod: prod deployer reads the dev registry, and tag it `release-<hex>`, AI-389: M6.23: Deploys and promotes tag the image prod runs, R-AI-389). The same job token, audience the control plane, signs the deployment reports. `preview.yml`: OIDC → `<service>-pr-deploy` (push to the `<service>-preview` registry repo, `run.developer` on `<service>-preview`, actAs `<service>-pr-run`, which has logs and traces only), plus the job's `GITHUB_TOKEN` with `pull-requests: write` for the one comment.
 
 ## Residual risks (R-AI-206, R-AI-207)
 

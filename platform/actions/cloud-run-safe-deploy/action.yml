@@ -28,11 +28,23 @@ inputs:
       same as `smoke-checks`.
     required: false
     default: ""
+  keep-tag-prefix:
+    description: >-
+      When set (e.g. `release-`), the image, which must be by digest, gets the tag
+      `<prefix><digest hex>` after the candidate passes its smoke checks and before traffic moves,
+      so registry cleanup keeps what prod runs (AI-389; project-env `image_keep_tag_prefixes`). A
+      failed tag stops the deploy with traffic unmoved. Needs tag write on the image's repo. Empty:
+      no tag (a dev deploy).
+    required: false
+    default: ""
 
 outputs:
   candidate:
     description: The candidate revision this deploy made; empty if none was made.
     value: ${{ steps.candidate.outputs.revision }}
+  keep-tag:
+    description: The registry tag this deploy added (`<repo>/<name>:<prefix><hex>`); empty if none.
+    value: ${{ steps.keep-tag.outcome == 'success' && steps.inputs.outputs.target || '' }}
   promoted:
     description: "`true` once traffic was moved to the candidate, even if a later check failed."
     value: ${{ steps.promote.outcome == 'success' }}
@@ -40,14 +52,21 @@ outputs:
 runs:
   using: composite
   steps:
-    # Before any cloud call: a bad or missing check list fails here, not after the candidate exists.
-    - name: Check the smoke checks
+    # Before any cloud call: a bad or missing check list, a bad keep tag prefix or an image not by
+    # digest fails here, not after the candidate exists.
+    - name: Check the inputs
       id: inputs
       shell: bash
       env:
         SMOKE_CHECKS: ${{ inputs.smoke-checks }}
         SMOKE_CHECKS_OTHER_HOSTS: ${{ inputs.smoke-checks-other-hosts }}
-      run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" check-smoke-inputs
+        IMAGE: ${{ inputs.image }}
+        KEEP_TAG_PREFIX: ${{ inputs.keep-tag-prefix }}
+      run: |
+        node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" check-smoke-inputs
+        if [ -n "$KEEP_TAG_PREFIX" ]; then
+          node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" keep-tag
+        fi
 
     - name: Record the serving revision
       id: before
@@ -88,6 +107,17 @@ runs:
         SMOKE_CHECKS: ${{ inputs.smoke-checks }}
         SMOKE_CHECKS_OTHER_HOSTS: ${{ inputs.smoke-checks-other-hosts }}
       run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" smoke-candidate
+
+    # Before traffic moves: once it serves, cleanup must not delete it. A tag on a candidate that
+    # later fails is harmless; an untagged image serving prod is not.
+    - name: Tag the image so registry cleanup keeps it
+      id: keep-tag
+      if: inputs.keep-tag-prefix != ''
+      shell: bash
+      env:
+        SOURCE: ${{ steps.inputs.outputs.source }}
+        TARGET: ${{ steps.inputs.outputs.target }}
+      run: gcloud artifacts docker tags add "$SOURCE" "$TARGET" --quiet
 
     # --to-latest, not --to-revisions: traffic stays on LATEST, so a later Terraform apply that
     # changes the template still goes live, as it always has (ADR-0076).
@@ -156,11 +186,13 @@ runs:
         BEFORE: ${{ steps.before.outputs.serving }}
         CANDIDATE: ${{ steps.candidate.outputs.revision }}
         AFTER: ${{ steps.after.outputs.serving }}
+        KEEP_TAG: ${{ steps.inputs.outputs.target }}
         OUTCOME_INPUTS: ${{ steps.inputs.outcome }}
         OUTCOME_BEFORE: ${{ steps.before.outcome }}
         OUTCOME_DEPLOY: ${{ steps.deploy.outcome }}
         OUTCOME_CANDIDATE: ${{ steps.candidate.outcome }}
         OUTCOME_SMOKE: ${{ steps.smoke.outcome }}
+        OUTCOME_KEEP_TAG: ${{ steps.keep-tag.outcome }}
         OUTCOME_PROMOTE: ${{ steps.promote.outcome }}
         OUTCOME_VERIFY: ${{ steps.verify.outcome }}
         OUTCOME_PUBLIC_SMOKE: ${{ steps.public-smoke.outcome }}
