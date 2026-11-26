@@ -29,7 +29,18 @@ terraform apply env.tfplan
 
 ## After
 
-- Put outputs `workload_identity_provider`, `deployer_email` and `preview_deployer_email` in the repo's workflow inputs (not secrets: they are names, not credentials).
+- Set the managed repo's variables for the baseline's `deploy.yml` and `release.yml` (AI-206: M6.17; names, not credentials). Prefix `GCP_` for prod, `GCP_DEV_` for dev; setting the dev ones makes dev the first environment:
+
+  | Variable (after the prefix) | From                                  |
+  | --------------------------- | ------------------------------------- |
+  | `PROJECT_ID`, `REGION`      | the inputs `project_id`, `region`     |
+  | `SERVICE`, `SERVICE_URL`    | outputs `service_name`, `service_url` |
+  | `WIF_PROVIDER`              | output `workload_identity_provider`   |
+  | `DEPLOYER_SA`               | output `deployer_email`               |
+  | `IMAGE_REPO`                | output `image_repository`             |
+
+  Plus `DEPLOY_SMOKE_CHECKS` once per repo (one check per line, `<path> <status>`, e.g. `/health 200`). Each with `gh variable set <NAME> --repo <owner>/<name> --body <value>`. Then run the baseline with `--deploy-kind cloud-run` (`onboard-a-repo.md` §5a). `preview_deployer_email` is for the preview workflow (AI-207: M6.18).
+
 - Check: the alert email channel shows in Monitoring → Alerting → Notification channels (Google sends no confirmation for email).
 - A deleted pool keeps its ID for 30 days: re-creating within that window fails; undelete it (`gcloud iam workload-identity-pools undelete`) or set another `wif_pool_id`.
 - The main service is public (Cloud Run IAM off) unless you set `allow_unauthenticated = false`; then deploys' smoke tests get 403.

@@ -103,8 +103,11 @@ describe("setupChecklist", () => {
   it("GivenTheBaselineManifest_WhenComparedWithBaselineFiles_ThenTheyListTheSameManagedFiles", () => {
     const manifest = JSON.parse(
       readFileSync(new URL("../../../platform/baseline/manifest.json", import.meta.url), "utf8"),
-    ) as { managed: { path: string }[] };
+    ) as { managed: { path: string; deployKind?: string }[] };
 
-    expect([...BASELINE_FILES]).toEqual(manifest.managed.map((f) => f.path));
+    // Files for one deploy kind only (AI-206: M6.17) aren't in every repo, so they don't count.
+    expect([...BASELINE_FILES]).toEqual(
+      manifest.managed.filter((f) => !f.deployKind).map((f) => f.path),
+    );
   });
 });

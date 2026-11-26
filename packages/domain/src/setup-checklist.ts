@@ -37,7 +37,8 @@ export interface SetupChecklist {
 /**
  * The managed files of `platform/baseline/manifest.json` (ADR-0031, ADR-0038): all present on
  * the default branch means the baseline PR merged. A domain test keeps this list equal to the
- * manifest, so a new managed file fails CI until it is added here.
+ * manifest, so a new managed file fails CI until it is added here. Files the manifest gives only
+ * one deploy kind (`deployKind`, e.g. `deploy.yml`) aren't in every repo, so they aren't listed.
  */
 export const BASELINE_FILES = [
   ".github/workflows/ci.yml",

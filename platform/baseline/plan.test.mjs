@@ -115,6 +115,33 @@ describe("HELD_BY_APP", () => {
   );
 });
 
+describe("planBaselinePr with a recorded deploy kind", () => {
+  const record = (deployKind) =>
+    JSON.stringify({ version: SHA, ...(deployKind ? { deployKind } : {}) });
+  const planFor = (recorded, deployKind) =>
+    planBaselinePr(rendered, new Map([[RECORD_PATH, record(recorded)]]), { ...opts, deployKind });
+
+  it("GivenARecordedNoneAndACloudRunProject_WhenPlanned_ThenTheRecordIsReportedWithTheCommand", () => {
+    const p = planFor("none", "cloud-run");
+    expect(p.differs).toContainEqual({
+      path: RECORD_PATH,
+      note: "records deploy kind `none`, but the project's is `cloud-run`: run `files <repo> --ref <ref> --deploy-kind cloud-run`",
+    });
+  });
+
+  it("GivenARecordFromBeforeTheFieldAndACloudRunProject_WhenPlanned_ThenItReadsAsNone", () => {
+    expect(
+      planFor(undefined, "cloud-run")
+        .differs.map((d) => d.note)
+        .join(),
+    ).toContain("records deploy kind `none`");
+  });
+
+  it("GivenTheSameKind_WhenPlanned_ThenTheRecordIsNotReported", () => {
+    expect(planFor("cloud-run", "cloud-run").differs.map((d) => d.path)).not.toContain(RECORD_PATH);
+  });
+});
+
 describe("renderReport", () => {
   const p = plan({ "package.json": "{}", "lefthook.yml": "mine\n" });
   const base = {
@@ -133,6 +160,16 @@ describe("renderReport", () => {
     );
     expect(md).toContain("- `lefthook.yml`: differs from the baseline; left unchanged");
     expect(md).toContain("### Applied (");
+  });
+
+  it("GivenACloudRunProject_WhenRendered_ThenTheFinishCommandCarriesTheKind", () => {
+    const md = renderReport({ ...base, settings: { results: [] }, deployKind: "cloud-run" });
+    expect(md).toContain("--branch baseline/aaaaaaa --deploy-kind cloud-run\n");
+  });
+
+  it("GivenANoneProject_WhenRendered_ThenTheFinishCommandHasNoKind", () => {
+    const md = renderReport({ ...base, settings: { results: [] }, deployKind: "none" });
+    expect(md).not.toContain("--deploy-kind");
   });
 
   it("GivenSettingsResults_WhenRendered_ThenEachSectionAndItsDifferencesAreListedWithApply", () => {

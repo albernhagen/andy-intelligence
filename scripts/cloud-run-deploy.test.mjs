@@ -8,15 +8,18 @@ import {
   assertPromoted,
   candidateChecks,
   deployVerdict,
+  parseSmokeChecks,
   publicChecks,
   readCandidate,
   renderSummary,
   rollbackCommand,
   runChecks,
   servingRevisions,
+  smokeChecks,
 } from "./cloud-run-deploy.mjs";
 
 const OK = {
+  inputs: "success",
   before: "success",
   deploy: "success",
   candidate: "success",
@@ -118,31 +121,96 @@ describe("assertions before and after promotion", () => {
   });
 });
 
-describe("smoke check lists", () => {
-  it("GivenPublicUrlSet_WhenCandidateChecks_ThenApiMeIsRefusedByHostGuard", () => {
-    expect(candidateChecks({ taggedUrl: "https://t", publicUrl: "https://ai" })).toEqual([
-      { url: "https://t/health", status: 200 },
-      { url: "https://t/api/me", status: 404 },
+/** The `key: |` block literal under the step that uses `action`, as the action receives it. */
+function blockInput(workflow, action, key) {
+  const step = workflow.slice(workflow.indexOf(`uses: ${action}`));
+  const match = new RegExp(`\\n(\\s+)${key}: \\|\\n((?:\\1  .*\\n)+)`).exec(step);
+  if (!match) throw new Error(`no ${key} block`);
+  return match[2].replace(new RegExp(`^${match[1]}  `, "gm"), "");
+}
+
+describe("smoke check inputs", () => {
+  it.each([
+    ["/health 200", [{ path: "/health", status: 200 }]],
+    ["/ 200,301", [{ path: "/", status: [200, 301] }]],
+    ["# comment\n\n  /a 204  # trailing\n", [{ path: "/a", status: 204 }]],
+  ])("GivenInput_%j_WhenParsed_ThenChecks", (text, expected) => {
+    expect(parseSmokeChecks(text, "smoke-checks")).toEqual(expected);
+  });
+
+  it.each(["health 200", "/health", "/health ok", "/health 200,", "/health 999", "/a b 200"])(
+    "GivenMalformedLine_%j_WhenParsed_ThenThrowsNamingTheInput",
+    (text) => {
+      expect(() => parseSmokeChecks(text, "smoke-checks")).toThrow("smoke-checks:");
+    },
+  );
+
+  it("GivenNoPublicHostChecks_WhenSmokeChecks_ThenThrows", () => {
+    expect(() => smokeChecks({ publicHost: "# none\n", otherHosts: "/ 200" })).toThrow(
+      "at least one",
+    );
+  });
+
+  it("GivenNoOtherHostChecks_WhenSmokeChecks_ThenOtherHostsMatchPublic", () => {
+    const checks = smokeChecks({ publicHost: "/ 200", otherHosts: "" });
+    expect(checks.otherHosts).toEqual(checks.publicHost);
+  });
+
+  it("GivenAppWithoutHostGuard_WhenCustomDomain_ThenEveryHostGetsTheSameChecks", () => {
+    const checks = smokeChecks({ publicHost: "/ 200", otherHosts: "" });
+    expect(candidateChecks({ taggedUrl: "https://t", publicUrl: "https://d" }, checks)).toEqual([
+      { url: "https://t/", status: 200 },
     ]);
-  });
-
-  it("GivenNoPublicUrl_WhenCandidateChecks_ThenApiMeReachesAuth", () => {
-    expect(candidateChecks({ taggedUrl: "https://t", publicUrl: "" })[1].status).toBe(401);
-  });
-
-  it("GivenCustomDomain_WhenPublicChecks_ThenChecksBothHosts", () => {
-    expect(publicChecks({ publicUrl: "https://ai", runUrl: "https://r" })).toEqual([
-      { url: "https://ai/health", status: 200 },
-      { url: "https://ai/api/me", status: 401 },
-      { url: "https://r/health", status: 200 },
-      { url: "https://r/api/me", status: 404 },
+    expect(publicChecks({ publicUrl: "https://d", runUrl: "https://r" }, checks)).toEqual([
+      { url: "https://d/", status: 200 },
+      { url: "https://r/", status: 200 },
     ]);
-  });
-
-  it("GivenNoCustomDomain_WhenPublicChecks_ThenChecksRunUrlOnce", () => {
-    expect(publicChecks({ publicUrl: "", runUrl: "https://r" })).toHaveLength(2);
   });
 });
+
+// AI-206: M6.17 moved these checks out of the script into the control plane's workflows. The lists
+// below are what the script hard-coded before; the workflows' inputs must still produce them.
+describe.each([".github/workflows/deploy.yml", ".github/workflows/release.yml"])(
+  "the control plane's smoke checks in %s",
+  (file) => {
+    const workflow = readFileSync(file, "utf8");
+    const action = "./platform/actions/cloud-run-safe-deploy";
+    const checks = smokeChecks({
+      publicHost: blockInput(workflow, action, "smoke-checks"),
+      otherHosts: blockInput(workflow, action, "smoke-checks-other-hosts"),
+    });
+
+    it("GivenPublicUrlSet_WhenCandidateChecks_ThenApiMeIsRefusedByHostGuard", () => {
+      expect(candidateChecks({ taggedUrl: "https://t", publicUrl: "https://ai" }, checks)).toEqual([
+        { url: "https://t/health", status: 200 },
+        { url: "https://t/api/me", status: 404 },
+      ]);
+    });
+
+    it("GivenNoPublicUrl_WhenCandidateChecks_ThenApiMeReachesAuth", () => {
+      expect(candidateChecks({ taggedUrl: "https://t", publicUrl: "" }, checks)).toEqual([
+        { url: "https://t/health", status: 200 },
+        { url: "https://t/api/me", status: 401 },
+      ]);
+    });
+
+    it("GivenCustomDomain_WhenPublicChecks_ThenChecksBothHosts", () => {
+      expect(publicChecks({ publicUrl: "https://ai", runUrl: "https://r" }, checks)).toEqual([
+        { url: "https://ai/health", status: 200 },
+        { url: "https://ai/api/me", status: 401 },
+        { url: "https://r/health", status: 200 },
+        { url: "https://r/api/me", status: 404 },
+      ]);
+    });
+
+    it("GivenNoCustomDomain_WhenPublicChecks_ThenChecksRunUrlOnce", () => {
+      expect(publicChecks({ publicUrl: "", runUrl: "https://r" }, checks)).toEqual([
+        { url: "https://r/health", status: 200 },
+        { url: "https://r/api/me", status: 401 },
+      ]);
+    });
+  },
+);
 
 describe("runChecks", () => {
   const quiet = { delayMs: 0, log: () => {} };
@@ -163,6 +231,12 @@ describe("runChecks", () => {
       return { status: 200 };
     };
     await expect(runChecks(checks, { ...quiet, fetchImpl, attempts: 2 })).resolves.toBeUndefined();
+  });
+
+  it("GivenAcceptedStatusList_WhenOneMatches_ThenPasses", async () => {
+    const fetchImpl = async () => ({ status: 301 });
+    const list = [{ url: "https://t/", status: [200, 301] }];
+    await expect(runChecks(list, { ...quiet, fetchImpl, attempts: 1 })).resolves.toBeUndefined();
   });
 
   it("GivenWrongStatusEveryTime_WhenRun_ThenStopsAtTheCapAndThrows", async () => {
@@ -224,6 +298,7 @@ describe("job summary", () => {
   });
 
   it.each([
+    ["inputs", "smoke checks are missing or malformed"],
     ["deploy", "Traffic did not move"],
     ["candidate", "Traffic did not move"],
     ["smoke", "Traffic did not move"],
@@ -306,6 +381,7 @@ describe("cloud-run-safe-deploy action", () => {
 
   it("GivenTheAction_WhenRead_ThenNoTrafficDeployPrecedesSmokeTestPrecedesPromotion", () => {
     const order = [
+      "check-smoke-inputs",
       "id: before",
       'no_traffic: "true"',
       "smoke-candidate",

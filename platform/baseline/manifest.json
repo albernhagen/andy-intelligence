@@ -1,5 +1,5 @@
 {
-  "$comment": "Project baseline files (ADR-0031, ADR-0038). from = path in this repo at the pinned commit. pin = rewrite local ./platform/actions/ uses to the pinned remote action.",
+  "$comment": "Project baseline files (ADR-0031, ADR-0038). from = path in this repo at the pinned commit. pin = rewrite local ./platform/actions/ uses to the pinned remote action. deployKind = written only for a project of that deploy kind (ADR-0114).",
   "source": "albernhagen/andy-intelligence",
   "managed": [
     { "path": ".github/workflows/ci.yml", "from": ".github/workflows/ci.yml", "pin": true },
@@ -31,6 +31,18 @@
     {
       "path": ".github/workflows/agent-run.yml",
       "from": "template/.github/workflows/agent-run.yml"
+    },
+    {
+      "path": ".github/workflows/deploy.yml",
+      "from": "template/.github/workflows/deploy.yml",
+      "pin": true,
+      "deployKind": "cloud-run"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "from": "template/.github/workflows/release.yml",
+      "pin": true,
+      "deployKind": "cloud-run"
     },
     { "path": ".github/dependabot.yml", "from": "template/.github/dependabot.yml" },
     {

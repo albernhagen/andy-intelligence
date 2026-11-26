@@ -5,6 +5,7 @@ import {
   mergeLines,
   normalizePins,
   pinActions,
+  recordedDeployKind,
   renderFiles,
   seedsToWrite,
 } from "./files.mjs";
@@ -100,8 +101,57 @@ describe("baselineRecord", () => {
       version: SHA,
       ref: "v1.0.0",
       updated: "2026-11-02",
+      deployKind: "none",
     });
     expect(text.endsWith("}\n")).toBe(true);
+  });
+
+  it("GivenACloudRunProject_WhenRecorded_ThenTheKindIsKept", () => {
+    const text = baselineRecord({
+      source: SOURCE,
+      sha: SHA,
+      ref: "v1.0.0",
+      date: "2026-11-02",
+      deployKind: "cloud-run",
+    });
+    expect(recordedDeployKind(JSON.parse(text))).toBe("cloud-run");
+  });
+
+  it("GivenARecordFromBeforeTheField_WhenRead_ThenNone", () => {
+    expect(recordedDeployKind({ source: SOURCE, version: SHA })).toBe("none");
+  });
+
+  it("GivenAnUnknownRecordedKind_WhenRead_ThenThrows", () => {
+    expect(() => recordedDeployKind({ deployKind: "static" })).toThrow("deploy kind");
+  });
+});
+
+describe("renderFiles with deploy kinds", () => {
+  const kinded = {
+    ...manifest,
+    managed: [
+      ...manifest.managed,
+      { path: ".github/workflows/deploy.yml", from: "wf", pin: true, deployKind: "cloud-run" },
+    ],
+  };
+  const paths = (deployKind) =>
+    renderFiles(kinded, read, { sha: SHA, ref: "v1.0.0", deployKind }).managed.map((f) => f.path);
+
+  it("GivenDeployKindNone_WhenRendered_ThenNoCloudRunFile", () => {
+    expect(paths("none")).not.toContain(".github/workflows/deploy.yml");
+    expect(paths(undefined)).not.toContain(".github/workflows/deploy.yml");
+  });
+
+  it("GivenDeployKindCloudRun_WhenRendered_ThenTheCloudRunFileAndEveryOther", () => {
+    expect(paths("cloud-run")).toEqual([
+      ".github/workflows/ci.yml",
+      "lefthook.yml",
+      ".github/workflows/deploy.yml",
+    ]);
+  });
+
+  it("GivenAnUnknownDeployKind_WhenRendered_ThenThrows", () => {
+    expect(() => paths("static")).toThrow("deploy kind must be one of none, cloud-run");
   });
 });
 

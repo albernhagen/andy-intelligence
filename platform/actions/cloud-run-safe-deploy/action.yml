@@ -1,7 +1,7 @@
 name: Baseline — Cloud Run safe deploy
 description: >-
-  Deploys an already-pushed image as a no-traffic revision tagged `candidate`, smoke tests it, then
-  moves all traffic to it and checks the public URL. A failure before promotion leaves traffic
+  Deploys an already-pushed image as a no-traffic revision tagged `candidate`, smoke tests it with
+  the caller's checks, then moves all traffic to it and checks the public URL. A failure before promotion leaves traffic
   alone; the job summary names the revisions and the rollback command (ADR-0076). The caller
   authenticates to GCP first and holds credentials only on push to main or workflow_dispatch.
 
@@ -15,6 +15,19 @@ inputs:
   image:
     description: Full image reference to deploy.
     required: true
+  smoke-checks:
+    description: >-
+      Checks on the public host (the service's PUBLIC_URL env, else its run.app URL), one per line:
+      `<path> <status>[,<status>…]`, e.g. `/health 200`. Also run on the candidate's tagged URL when
+      the service has no PUBLIC_URL. At least one; the deploy fails before it starts without one.
+    required: true
+  smoke-checks-other-hosts:
+    description: >-
+      Checks on every other host (the candidate's tagged URL, the run.app URL) while PUBLIC_URL is
+      set, same format: for an app with a host guard that answers differently there. Empty: the
+      same as `smoke-checks`.
+    required: false
+    default: ""
 
 outputs:
   candidate:
@@ -27,6 +40,15 @@ outputs:
 runs:
   using: composite
   steps:
+    # Before any cloud call: a bad or missing check list fails here, not after the candidate exists.
+    - name: Check the smoke checks
+      id: inputs
+      shell: bash
+      env:
+        SMOKE_CHECKS: ${{ inputs.smoke-checks }}
+        SMOKE_CHECKS_OTHER_HOSTS: ${{ inputs.smoke-checks-other-hosts }}
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" check-smoke-inputs
+
     - name: Record the serving revision
       id: before
       shell: bash
@@ -63,6 +85,8 @@ runs:
       env:
         TAGGED_URL: ${{ steps.candidate.outputs.tagged_url }}
         PUBLIC_URL: ${{ steps.candidate.outputs.public_url }}
+        SMOKE_CHECKS: ${{ inputs.smoke-checks }}
+        SMOKE_CHECKS_OTHER_HOSTS: ${{ inputs.smoke-checks-other-hosts }}
       run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" smoke-candidate
 
     # --to-latest, not --to-revisions: traffic stays on LATEST, so a later Terraform apply that
@@ -96,6 +120,8 @@ runs:
       env:
         PUBLIC_URL: ${{ steps.candidate.outputs.public_url }}
         RUN_URL: ${{ steps.candidate.outputs.run_url }}
+        SMOKE_CHECKS: ${{ inputs.smoke-checks }}
+        SMOKE_CHECKS_OTHER_HOSTS: ${{ inputs.smoke-checks-other-hosts }}
       run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-deploy.mjs" smoke-public
 
     # A failed candidate must not stay reachable on its tagged URL (ADR-0076).
@@ -130,6 +156,7 @@ runs:
         BEFORE: ${{ steps.before.outputs.serving }}
         CANDIDATE: ${{ steps.candidate.outputs.revision }}
         AFTER: ${{ steps.after.outputs.serving }}
+        OUTCOME_INPUTS: ${{ steps.inputs.outcome }}
         OUTCOME_BEFORE: ${{ steps.before.outcome }}
         OUTCOME_DEPLOY: ${{ steps.deploy.outcome }}
         OUTCOME_CANDIDATE: ${{ steps.candidate.outcome }}
