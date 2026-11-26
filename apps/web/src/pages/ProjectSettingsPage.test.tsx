@@ -77,7 +77,7 @@ describe("project settings page", () => {
     expect(within(menu).getByRole("menuitem", { name: "Models" })).toBeTruthy();
   });
 
-  it("GivenAProject_WhenItsSettingsOpen_ThenSixSectionLinksInOrderAndOneSectionShows", async () => {
+  it("GivenAProject_WhenItsSettingsOpen_ThenSevenSectionLinksInOrderAndOneSectionShows", async () => {
     await withProjects("/p/ai/settings");
     const nav = await screen.findByRole("navigation", { name: "Settings sections" });
 
@@ -86,6 +86,7 @@ describe("project settings page", () => {
       .map((l) => l.textContent?.replace(/\d+ left$/, "").trim());
     expect(names).toEqual([
       "Setup",
+      "Logo",
       "Automation",
       "Limits",
       "Defaults",

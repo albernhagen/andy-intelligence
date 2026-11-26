@@ -79,6 +79,7 @@ import { PullRequestMerger } from "./merge";
 import { SetupChecklistReader } from "./setup";
 import { OnboardingReader } from "./onboarding";
 import { SpendSettingsService } from "./spend";
+import { ProjectLogoService } from "./project-logos";
 
 /**
  * The domain services every route module and MCP tool share, built once per app (one
@@ -153,6 +154,7 @@ export const METERED_READS = {
   routing: ["getGlobal", "getProject"],
   spendLedger: ["get", "totals", "totalsByProvider"],
   spendCapsStore: ["getGlobal"],
+  projectLogos: ["get"],
   spendNotices: ["get"],
   projectVersions: ["get"],
   mergeQueues: ["get"],
@@ -643,6 +645,8 @@ export function createServices(raw: AppDeps): Services {
     roadmap: new RoadmapReader(deps.tracker, board, deps.milestones ?? null),
     whatsNew,
     releases,
+    // AI-393: project logos; absent without a logo store (routes and tools both).
+    logos: deps.projectLogos ? new ProjectLogoService(deps.tracker, deps.projectLogos, now) : null,
     releaseRequests,
     // AI-218: PRs the merge mode leaves for Andy; release notes read from the connected host.
     waitingMerges: new WaitingMergesReader(

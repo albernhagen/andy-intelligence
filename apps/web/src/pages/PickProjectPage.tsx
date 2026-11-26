@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Loading, QueryError } from "@/components/Status";
 import { useProjects } from "@/lib/queries";
+import { ProjectMark } from "@/components/ProjectMark";
 import { showsError } from "@/lib/live";
 
 /** The board under All projects: a board shows one project, so ask which (ADR-0059). */
@@ -35,7 +36,7 @@ export function PickProjectPage() {
                 params={{ projectId: p.id }}
                 className="flex h-8 items-center gap-2 px-3 hover:bg-muted"
               >
-                <span className="font-mono text-xs text-muted-foreground">{p.key}</span> {p.name}
+                <ProjectMark project={p} /> {p.name}
               </Link>
             </li>
           ))}

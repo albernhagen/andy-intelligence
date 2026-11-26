@@ -13,6 +13,7 @@ import {
   InMemoryMilestoneStore,
   InMemoryRoutingConfigStore,
   InMemorySpendCapsStore,
+  InMemoryProjectLogoStore,
   InMemoryNightLaunchStore,
   InMemoryReleaseNoteStore,
   InMemoryDigestSummaryStore,
@@ -60,6 +61,7 @@ export function renderApp(
   const releaseRequests = new InMemoryReleaseRequestStore();
   const routing = new InMemoryRoutingConfigStore();
   const spendCapsStore = new InMemorySpendCapsStore();
+  const projectLogos = new InMemoryProjectLogoStore();
   const releaseNotes = new InMemoryReleaseNoteStore();
   const digestSummaries = new InMemoryDigestSummaryStore();
   const reviewFindings = new InMemoryReviewFindingSource();
@@ -99,6 +101,7 @@ export function renderApp(
     reviewFindings,
     routing,
     spendCapsStore,
+    projectLogos,
     email: opts.email,
     github: {
       publicUrl: "http://localhost",
@@ -153,6 +156,7 @@ export function renderApp(
     epicBreakdowns,
     runners,
     spendCapsStore,
+    projectLogos,
     releaseNotes,
     digestSummaries,
     reviewFindings,

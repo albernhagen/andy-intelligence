@@ -10,6 +10,7 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - Each project has a default worker (agent, Andy or ask) and executor (GitHub Actions or a local runner); a ticket can override both; only an agent's tickets build.
 - Settings → Local runners mints secrets for `apps/local-runner` (refine and plan on Andy's Mac, ADR-0089); MCP lists runners and revokes one (owner only, ADR-0143), never mints.
 - Project settings (`/p/<project>/settings`): switches, setup checklist, changes with Revert.
+- Project logos (AI-393): each project shows its uploaded logo (SVG sanitized, or PNG) or its key on a tile wherever it is named; Settings → Logo or MCP `set_project_logo`.
 - Pages poll: 5 s in use, 60 s idle, none hidden (ADR-0091).
 - Keyboard: `?` lists the shortcuts (AI-338); Cmd+K (Ctrl+K) opens a command palette that finds a ticket by key or title and runs shortcut commands (AI-370).
 - Look: design direction A tokens (indigo accent, surfaces, Inter and Geist Mono served by the app); theme switch (system, light, dark) in the Settings menu (ADR-0151).
