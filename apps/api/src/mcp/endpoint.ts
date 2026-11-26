@@ -37,6 +37,14 @@ export function requireMcpToken(deps: McpEndpointDeps): MiddlewareHandler<AuthEn
     const match = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "");
     const token = match?.[1] && isTokenShaped(match[1]) ? match[1] : null;
     if (token && !deps.lookups.tryTake()) {
+      console.log(
+        JSON.stringify({
+          severity: "WARNING",
+          message: "mcp request rate limited",
+          component: "mcp-oauth",
+          path: c.req.path,
+        }),
+      );
       c.header("retry-after", "60");
       return c.json({ error: "rate_limited" }, 429);
     }

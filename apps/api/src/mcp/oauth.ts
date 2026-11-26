@@ -15,10 +15,22 @@ import { hashToken, isTokenShaped, newToken, verifyPkceS256 } from "./tokens";
 export const MCP_SCOPE = "mcp";
 export const CODE_TTL_S = 60;
 export const ACCESS_TTL_S = 60 * 60;
+/** A refresh token's fixed limit from issue; using it never extends or shortens it. */
 export const REFRESH_TTL_S = 30 * 24 * 60 * 60;
-/** How long a used refresh token keeps working (ADR-0105: Refresh-token grace window). */
-export const REFRESH_GRACE_S = 60;
+/**
+ * A refresh returns a new refresh token only when the presented one has less than this left
+ * (ADR-0158: Rotate MCP refresh tokens only near expiry); otherwise it returns the same one.
+ */
+export const ROTATE_WITHIN_S = 7 * 24 * 60 * 60;
 const OAUTH_BODY_BYTES = 16 * 1024;
+
+/** Why a refresh was refused; logged with the token's age, never its value. */
+export type RefreshRefusal =
+  | "malformed"
+  | "unknown_or_expired"
+  | "not_a_refresh_token"
+  | "client_mismatch"
+  | "user_not_allowed";
 
 export interface McpAuthDeps {
   /** Public origin of this service, e.g. https://control-plane-….run.app (no trailing slash). */
@@ -101,8 +113,31 @@ export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps & Look
     return hashToken(token);
   }
 
+  /** Seconds since a refresh grant was issued: its expiry is always issue + REFRESH_TTL_S. */
+  function refreshAgeS(grant: OAuthGrant): number {
+    const issuedMs = Date.parse(grant.expiresAt) - REFRESH_TTL_S * 1000;
+    return Math.max(0, Math.round((now().getTime() - issuedMs) / 1000));
+  }
+
+  /** Logs why a refresh was refused (reason and token age, no token value) and refuses it. */
+  function refuseRefresh(
+    reason: RefreshRefusal,
+    clientId: string,
+    grant: OAuthGrant | null = null,
+  ): never {
+    log("WARNING", "oauth refresh refused", {
+      reason,
+      clientId,
+      uid: grant?.uid ?? null,
+      // null when the store has no live grant: unknown, revoked or past its limit.
+      tokenAgeS: grant ? refreshAgeS(grant) : null,
+    });
+    throw new OAuthError("invalid_grant", "refresh token is invalid, expired or revoked");
+  }
+
   function oauthError(c: Context, err: unknown) {
     if (err instanceof RateLimited) {
+      log("WARNING", "oauth request rate limited", { path: c.req.path });
       c.header("retry-after", "60");
       return c.json({ error: "rate_limited" }, 429);
     }
@@ -116,9 +151,13 @@ export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps & Look
     return c.json(err.toJSON(), err.code === "invalid_client" ? 401 : 400);
   }
 
-  async function issueTokens(base: OAuthGrant, identity: Pick<VerifiedIdentity, "email" | "uid">) {
+  /** A new access token, plus a new refresh token unless `keepRefresh` is passed back. */
+  async function issueTokens(
+    base: OAuthGrant,
+    identity: Pick<VerifiedIdentity, "email" | "uid">,
+    keepRefresh?: string,
+  ) {
     const access = newToken();
-    const refresh = newToken();
     const common = {
       clientId: base.clientId,
       email: identity.email,
@@ -133,11 +172,14 @@ export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps & Look
       kind: "access",
       expiresAt: expiresIn(ACCESS_TTL_S),
     });
-    await deps.grants.put(hashToken(refresh), {
-      ...common,
-      kind: "refresh",
-      expiresAt: expiresIn(REFRESH_TTL_S),
-    });
+    const refresh = keepRefresh ?? newToken();
+    if (!keepRefresh) {
+      await deps.grants.put(hashToken(refresh), {
+        ...common,
+        kind: "refresh",
+        expiresAt: expiresIn(REFRESH_TTL_S),
+      });
+    }
     return {
       access_token: access,
       token_type: "Bearer",
@@ -255,28 +297,27 @@ export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps & Look
       } else if (grantType === "refresh_token") {
         const refresh = field("refresh_token");
         if (!refresh) throw new OAuthError("invalid_request", "refresh_token is required");
-        const key = lookupKey(refresh);
-        grant = await deps.grants.get(key);
-        if (!grant || grant.kind !== "refresh" || grant.clientId !== clientId) {
-          throw new OAuthError(
-            "invalid_grant",
-            "refresh token is invalid, expired or already used",
-          );
-        }
-        // Rotation with a grace window (ADR-0105): a new pair comes back below, and the old
-        // refresh token expires in REFRESH_GRACE_S instead of at once. Sessions that share
-        // one stored token and refresh together, or a client whose response was lost, can
-        // then retry instead of forcing a new sign-in. A token already inside the window
-        // was used before; its expiry is left alone, so reuse can't extend it.
-        const graceEnd = expiresIn(REFRESH_GRACE_S);
-        if (Date.parse(grant.expiresAt) > Date.parse(graceEnd)) {
-          await deps.grants.put(key, { ...grant, expiresAt: graceEnd });
-        } else {
-          log("INFO", "oauth refresh: token reused inside the grace window", {
-            clientId,
-            uid: grant.uid,
-          });
-        }
+        if (!isTokenShaped(refresh)) refuseRefresh("malformed", clientId);
+        grant = await deps.grants.get(lookupKey(refresh));
+        if (!grant) refuseRefresh("unknown_or_expired", clientId);
+        if (grant.kind !== "refresh") refuseRefresh("not_a_refresh_token", clientId, grant);
+        if (grant.clientId !== clientId) refuseRefresh("client_mismatch", clientId, grant);
+        if (!allowed(grant.email)) refuseRefresh("user_not_allowed", clientId, grant);
+        // Rotate only near expiry (ADR-0158): sessions that share one stored token, or hold
+        // an older one, keep working until that token's own fixed limit. Nothing is written
+        // to the presented grant, so concurrent refreshes can't race each other.
+        const remainingS = (Date.parse(grant.expiresAt) - now().getTime()) / 1000;
+        const rotated = remainingS <= ROTATE_WITHIN_S;
+        const body = await issueTokens(grant, grant, rotated ? undefined : refresh);
+        log("INFO", "oauth token issued", {
+          grantType,
+          clientId,
+          uid: grant.uid,
+          rotated,
+          tokenAgeS: refreshAgeS(grant),
+        });
+        c.header("cache-control", "no-store");
+        return c.json(body);
       } else {
         throw new OAuthError("unsupported_grant_type", "use authorization_code or refresh_token");
       }

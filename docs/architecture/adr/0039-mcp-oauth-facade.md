@@ -1,6 +1,6 @@
 ---
 title: "MCP OAuth facade: own authorization server, Firebase Google sign-in, CIMD clients"
-status: accepted, amended by 0105 (refresh-token grace window)
+status: accepted, amended by 0105 (refresh-token grace window), then 0158 (rotate refresh tokens only near expiry)
 date: 2026-11-02
 amends: 0010
 ---
