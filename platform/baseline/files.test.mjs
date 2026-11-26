@@ -5,6 +5,7 @@ import {
   mergeLines,
   normalizePins,
   pinActions,
+  pinModules,
   recordedDeployKind,
   renderFiles,
   seedsToWrite,
@@ -215,5 +216,71 @@ describe("seedsToWrite", () => {
   it("GivenAnExistingDesignFile_WhenSeeded_ThenItIsNeverOverwritten", () => {
     const out = seedsToWrite(seed, (p) => p === "design.md");
     expect(out.map((f) => f.path)).toEqual(["AGENTS.md"]);
+  });
+});
+
+describe("pinModules", () => {
+  const tf = [
+    'module "prod" {',
+    '  source = "../../../../infra/modules/project-env"',
+    "}",
+    'module "other" {',
+    '  source = "terraform-google-modules/network/google"',
+    "}",
+    "",
+  ].join("\n");
+
+  it("GivenALocalModuleSource_WhenPinned_ThenTheRemoteModuleAtTheSha", () => {
+    const out = pinModules(tf, { source: SOURCE, sha: SHA, ref: "v1.0.0" });
+    expect(out).toContain(
+      `  source = "git::https://github.com/${SOURCE}.git//infra/modules/project-env?ref=${SHA}" # v1.0.0\n`,
+    );
+    expect(out).not.toContain("../");
+  });
+
+  it("GivenARegistryModuleSource_WhenPinned_ThenUnchanged", () => {
+    const out = pinModules(tf, { source: SOURCE, sha: SHA, ref: "v1.0.0" });
+    expect(out).toContain('  source = "terraform-google-modules/network/google"\n');
+  });
+});
+
+describe("renderFiles with environments", () => {
+  const seeded = {
+    ...manifest,
+    seed: [
+      { path: "AGENTS.md", from: "agents" },
+      {
+        path: "infra/main.tf",
+        from: "one",
+        pin: true,
+        deployKind: "cloud-run",
+        environments: "prod-only",
+      },
+      { path: "infra/main.tf", from: "two", deployKind: "cloud-run", environments: "dev-and-prod" },
+    ],
+  };
+  const texts = { ...Object.fromEntries([["agents", "rules"]]), one: "one", two: "two" };
+  const seedFor = (deployKind, environments) =>
+    renderFiles(seeded, (from) => texts[from] ?? read(from), {
+      sha: SHA,
+      ref: "v1.0.0",
+      deployKind,
+      environments,
+    }).seed.map((f) => `${f.path}=${f.content}`);
+
+  it("GivenDeployKindNone_WhenRendered_ThenNoEnvironmentSeed", () => {
+    expect(seedFor("none", "dev-and-prod")).toEqual(["AGENTS.md=rules"]);
+  });
+
+  it("GivenCloudRunProdOnly_WhenRendered_ThenTheProdOnlySeed", () => {
+    expect(seedFor("cloud-run", undefined)).toEqual(["AGENTS.md=rules", "infra/main.tf=one"]);
+  });
+
+  it("GivenCloudRunDevAndProd_WhenRendered_ThenTheDevAndProdSeed", () => {
+    expect(seedFor("cloud-run", "dev-and-prod")).toEqual(["AGENTS.md=rules", "infra/main.tf=two"]);
+  });
+
+  it("GivenAnUnknownPolicy_WhenRendered_ThenThrows", () => {
+    expect(() => seedFor("cloud-run", "staging")).toThrow("environments must be one of");
   });
 });

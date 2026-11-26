@@ -1,5 +1,5 @@
 {
-  "$comment": "Project baseline files (ADR-0031, ADR-0038). from = path in this repo at the pinned commit. pin = rewrite local ./platform/actions/ uses to the pinned remote action. deployKind = written only for a project of that deploy kind (ADR-0114).",
+  "$comment": "Project baseline files (ADR-0031, ADR-0038). from = path in this repo at the pinned commit. pin = rewrite local ./platform/actions/ uses and ../infra/modules/ sources to the pinned remote ones. deployKind = written only for a project of that deploy kind (ADR-0114); environments = only for that environment policy (AI-109). A new deploy kind adds its own entries; no code changes.",
   "source": "albernhagen/andy-intelligence",
   "managed": [
     { "path": ".github/workflows/ci.yml", "from": ".github/workflows/ci.yml", "pin": true },
@@ -65,7 +65,70 @@
     { "path": "AGENTS.md", "from": "template/AGENTS.md.template" },
     { "path": ".github/CODEOWNERS", "from": "template/.github/CODEOWNERS" },
     { "path": "docs/security/threat-model.md", "from": "template/docs/security/threat-model.md" },
-    { "path": "design.md", "from": "template/design.md" }
+    { "path": "design.md", "from": "template/design.md" },
+    { "path": ".terraform-version", "from": ".terraform-version", "deployKind": "cloud-run" },
+    {
+      "path": "infra/main.tf",
+      "from": "template/infra/cloud-run/prod-only/main.tf",
+      "pin": true,
+      "deployKind": "cloud-run",
+      "environments": "prod-only"
+    },
+    {
+      "path": "infra/variables.tf",
+      "from": "template/infra/cloud-run/prod-only/variables.tf",
+      "deployKind": "cloud-run",
+      "environments": "prod-only"
+    },
+    {
+      "path": "infra/outputs.tf",
+      "from": "template/infra/cloud-run/prod-only/outputs.tf",
+      "deployKind": "cloud-run",
+      "environments": "prod-only"
+    },
+    {
+      "path": "infra/terraform.tfvars.example",
+      "from": "template/infra/cloud-run/prod-only/terraform.tfvars.example",
+      "deployKind": "cloud-run",
+      "environments": "prod-only"
+    },
+    {
+      "path": "infra/tests/plan.tftest.hcl",
+      "from": "template/infra/cloud-run/prod-only/tests/plan.tftest.hcl",
+      "deployKind": "cloud-run",
+      "environments": "prod-only"
+    },
+    {
+      "path": "infra/main.tf",
+      "from": "template/infra/cloud-run/dev-and-prod/main.tf",
+      "pin": true,
+      "deployKind": "cloud-run",
+      "environments": "dev-and-prod"
+    },
+    {
+      "path": "infra/variables.tf",
+      "from": "template/infra/cloud-run/dev-and-prod/variables.tf",
+      "deployKind": "cloud-run",
+      "environments": "dev-and-prod"
+    },
+    {
+      "path": "infra/outputs.tf",
+      "from": "template/infra/cloud-run/dev-and-prod/outputs.tf",
+      "deployKind": "cloud-run",
+      "environments": "dev-and-prod"
+    },
+    {
+      "path": "infra/terraform.tfvars.example",
+      "from": "template/infra/cloud-run/dev-and-prod/terraform.tfvars.example",
+      "deployKind": "cloud-run",
+      "environments": "dev-and-prod"
+    },
+    {
+      "path": "infra/tests/plan.tftest.hcl",
+      "from": "template/infra/cloud-run/dev-and-prod/tests/plan.tftest.hcl",
+      "deployKind": "cloud-run",
+      "environments": "dev-and-prod"
+    }
   ],
   "starter": [
     { "path": "package.json", "from": "template/starter/package.json.template" },

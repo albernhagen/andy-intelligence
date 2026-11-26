@@ -2,7 +2,7 @@
 // write into a registered repo and the report of what was applied, what differs and what was
 // skipped. The App never overwrites a file, never writes workflows or agent settings, and never
 // changes GitHub settings; the report says what Andy runs for those.
-import { baselineRecord, mergeLines, normalizePins } from "./files.mjs";
+import { baselineRecord, deployFlags, mergeLines, normalizePins } from "./files.mjs";
 
 /**
  * Paths the App never writes: workflows (it has no `workflows` permission, and Andy won't grant
@@ -23,7 +23,11 @@ const sameManaged = (want, have, source) =>
  * asks about to the repo's text or null (missing). Returns { files, applied, differs, skipped,
  * held }: files to commit ({ path, content }), and report entries ({ path, note }).
  */
-export function planBaselinePr(rendered, target, { source, sha, ref, date, deployKind = "none" }) {
+export function planBaselinePr(
+  rendered,
+  target,
+  { source, sha, ref, date, deployKind = "none", environments = "prod-only" },
+) {
   const read = (p) => target.get(p) ?? null;
   const files = [];
   const applied = [];
@@ -98,7 +102,7 @@ export function planBaselinePr(rendered, target, { source, sha, ref, date, deplo
     if (parsed && recordedKind !== deployKind) {
       differs.push({
         path: RECORD_PATH,
-        note: `records deploy kind \`${String(recordedKind)}\`, but the project's is \`${deployKind}\`: run \`files <repo> --ref <ref> --deploy-kind ${deployKind}\``,
+        note: `records deploy kind \`${String(recordedKind)}\`, but the project's is \`${deployKind}\`: run \`files <repo> --ref <ref>${deployFlags({ deployKind, environments }) || " --deploy-kind none"}\``,
       });
     }
   }

@@ -2,12 +2,22 @@
 export type DeployKind = "none" | "cloud-run";
 export const DEPLOY_KINDS: DeployKind[];
 export function checkDeployKind(kind: unknown): DeployKind;
+export type Environments = "prod-only" | "dev-and-prod";
+export const ENVIRONMENTS: Environments[];
+export function checkEnvironments(value: unknown): Environments;
+interface ManifestEntry {
+  path: string;
+  from: string;
+  pin?: boolean;
+  deployKind?: DeployKind;
+  environments?: Environments;
+}
 export interface Manifest {
   source: string;
-  managed: { path: string; from: string; pin?: boolean; deployKind?: DeployKind }[];
-  lines: { path: string; from: string; deployKind?: DeployKind }[];
-  seed: { path: string; from: string; deployKind?: DeployKind }[];
-  starter: { path: string; from: string; deployKind?: DeployKind }[];
+  managed: ManifestEntry[];
+  lines: ManifestEntry[];
+  seed: ManifestEntry[];
+  starter: ManifestEntry[];
 }
 export interface RenderedFile {
   path: string;
@@ -22,7 +32,7 @@ export interface Rendered {
 export function renderFiles(
   manifest: Manifest,
   read: (from: string) => string,
-  pin: { sha: string; ref: string; deployKind?: DeployKind },
+  pin: { sha: string; ref: string; deployKind?: DeployKind; environments?: Environments },
 ): Rendered;
 export function mergeLines(existing: string | null | undefined, required: string[]): string;
 export function baselineRecord(r: {
@@ -32,3 +42,4 @@ export function baselineRecord(r: {
   date: string;
   deployKind?: DeployKind;
 }): string;
+export function deployFlags(p: { deployKind?: DeployKind; environments?: Environments }): string;

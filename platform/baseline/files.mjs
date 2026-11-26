@@ -11,6 +11,26 @@ export function pinActions(text, { source, sha, ref }) {
   );
 }
 
+// A seed Terraform root's module source as it reads in this repo (template/infra/<kind>/<env>/).
+const LOCAL_MODULE = /^(\s*source\s*=\s*)"(?:\.\.\/)+infra\/modules\/([\w-]+)"[ \t]*$/gm;
+
+/**
+ * Rewrites local `source = "../../infra/modules/X"` lines to the pinned remote module,
+ * `git::https://github.com/<source>.git//infra/modules/X?ref=<sha>` (ADR-0038 Terraform carrier).
+ */
+export function pinModules(text, { source, sha, ref }) {
+  return text.replace(
+    LOCAL_MODULE,
+    (_, prefix, name) =>
+      `${prefix}"git::https://github.com/${source}.git//infra/modules/${name}?ref=${sha}" # ${ref}`,
+  );
+}
+
+/** Pins local actions and Terraform modules to the baseline commit. */
+export function pinSources(text, pin) {
+  return pinModules(pinActions(text, pin), pin);
+}
+
 /** Replaces pinned baseline action SHAs (and their comment) with a placeholder; returns the SHAs. */
 export function normalizePins(text, source) {
   const escaped = source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -52,27 +72,59 @@ export function checkDeployKind(kind) {
   return kind;
 }
 
+/** The project setting `environments` (AI-160, ADR-0114) values; read only for `cloud-run`. */
+export const ENVIRONMENTS = ["prod-only", "dev-and-prod"];
+
+/** Throws unless `value` is a known environment policy; returns it. */
+export function checkEnvironments(value) {
+  if (!ENVIRONMENTS.includes(value)) {
+    throw new Error(`environments must be one of ${ENVIRONMENTS.join(", ")}, got ${String(value)}`);
+  }
+  return value;
+}
+
+/**
+ * The CLI flags that render a project's deploy files: none for `none`; the kind and, for
+ * `cloud-run`, its environment policy. Starts with a space when not empty.
+ */
+export function deployFlags({ deployKind = "none", environments = "prod-only" }) {
+  if (checkDeployKind(deployKind) === "none") return "";
+  const env =
+    deployKind === "cloud-run" ? ` --environments ${checkEnvironments(environments)}` : "";
+  return ` --deploy-kind ${deployKind}${env}`;
+}
+
 /**
  * Renders the manifest. `read(from)` returns a source file's text at the pinned commit. An entry
  * with `deployKind` is rendered only for a project of that kind (ADR-0114: a `none` project gets
- * no deploy or release workflow); `deployKind` defaults to `none`.
+ * no deploy files), one with `environments` only for a project with that policy (AI-109: the
+ * `cloud-run` template root has one environment or two). A new kind adds its own entries here,
+ * never code. Defaults: `none`, `prod-only`.
  * Returns { managed, lines, seed, starter }, each a list of { path, content } (lines: { path, lines }).
  */
-export function renderFiles(manifest, read, { sha, ref, deployKind = "none" }) {
+export function renderFiles(
+  manifest,
+  read,
+  { sha, ref, deployKind = "none", environments = "prod-only" },
+) {
   const source = manifest.source;
   checkDeployKind(deployKind);
-  const forKind = (entries) => entries.filter((f) => !f.deployKind || f.deployKind === deployKind);
+  checkEnvironments(environments);
+  const pick = (entries) =>
+    entries.filter(
+      (f) =>
+        (!f.deployKind || f.deployKind === deployKind) &&
+        (!f.environments || f.environments === environments),
+    );
+  const content = (f) => (f.pin ? pinSources(read(f.from), { source, sha, ref }) : read(f.from));
   return {
-    managed: forKind(manifest.managed).map((f) => ({
-      path: f.path,
-      content: f.pin ? pinActions(read(f.from), { source, sha, ref }) : read(f.from),
-    })),
-    lines: forKind(manifest.lines).map((f) => ({
+    managed: pick(manifest.managed).map((f) => ({ path: f.path, content: content(f) })),
+    lines: pick(manifest.lines).map((f) => ({
       path: f.path,
       lines: requiredLines(read(f.from)),
     })),
-    seed: forKind(manifest.seed).map((f) => ({ path: f.path, content: read(f.from) })),
-    starter: forKind(manifest.starter).map((f) => ({ path: f.path, content: read(f.from) })),
+    seed: pick(manifest.seed).map((f) => ({ path: f.path, content: content(f) })),
+    starter: pick(manifest.starter).map((f) => ({ path: f.path, content: content(f) })),
   };
 }
 
