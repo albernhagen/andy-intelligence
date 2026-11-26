@@ -16,6 +16,14 @@ inputs:
     description: Full image reference to deploy.
     required: true
 
+outputs:
+  candidate:
+    description: The candidate revision this deploy made; empty if none was made.
+    value: ${{ steps.candidate.outputs.revision }}
+  promoted:
+    description: "`true` once traffic was moved to the candidate, even if a later check failed."
+    value: ${{ steps.promote.outcome == 'success' }}
+
 runs:
   using: composite
   steps:

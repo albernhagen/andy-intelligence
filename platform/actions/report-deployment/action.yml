@@ -43,7 +43,7 @@ inputs:
     required: false
     default: ""
   revision:
-    description: "`finish`: the serving revision, when the caller knows it (a rollback); wins over `service`."
+    description: "`finish`: the revision the caller moved traffic to, sent with either status; wins over `service`."
     required: false
     default: ""
   service:
@@ -59,6 +59,11 @@ outputs:
   deployment-id:
     description: The recorded deployment's id (`start`); empty when it was not recorded.
     value: ${{ steps.report.outputs.deployment_id }}
+  refused:
+    description: >-
+      `start`: `true` when the control plane refused the report (HTTP 422: the kind, or no succeeded
+      deployment of that digest); empty otherwise, including when it was unreachable.
+    value: ${{ steps.report.outputs.refused }}
 
 runs:
   using: composite

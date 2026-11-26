@@ -36,12 +36,12 @@ case "$PHASE" in
   finish)
     [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9-]{1,80}$ ]] || not_recorded "the start report returned no deployment id"
     [[ "$STATUS" =~ ^(succeeded|failed)$ ]] || not_recorded "status must be succeeded or failed"
-    # Only a succeeded deploy is serving its candidate; after a failure the latest ready revision
-    # may be the previous good one, so a failed report names no revision.
-    # A rollback knows the revision it pinned; the latest ready revision is then a newer one.
+    # A revision the caller names (the one it moved traffic to) is sent with either status: traffic
+    # may have moved before a later check failed. Without one, only a succeeded deploy is serving
+    # its candidate; after a failure the latest ready revision may be the previous good one, so a
+    # failed report names no revision. A malformed name is dropped; the status still lands.
     revision=""
-    # A malformed one is dropped, not fatal: the status still lands.
-    if [ "$STATUS" = succeeded ] && [ -n "$REVISION" ]; then
+    if [ -n "$REVISION" ]; then
       [[ "$REVISION" =~ ^[a-z][a-z0-9-]{0,99}$ ]] && revision="$REVISION"
     elif [ "$STATUS" = succeeded ] && [ -n "$SERVICE" ] && [ -n "$REGION" ]; then
       revision=$(gcloud run services describe "$SERVICE" --region "$REGION" \
@@ -70,6 +70,11 @@ code=$(curl -sS --max-time 15 --retry "$retry" -o "$response" -w '%{http_code}' 
 case "$code" in
   2??) ;;
   409) [ "$PHASE" = finish ] || not_recorded "the control plane answered HTTP 409" ;;
+  # The control plane understood the start and refused it (wrong kind, or no succeeded deployment
+  # of that digest). A caller may stop on this output; the step itself still exits 0.
+  422)
+    [ "$PHASE" = start ] && echo "refused=true" >> "$GITHUB_OUTPUT"
+    not_recorded "the control plane refused it (HTTP 422)" ;;
   *) not_recorded "the control plane answered HTTP $code" ;;
 esac
 

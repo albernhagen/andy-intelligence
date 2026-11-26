@@ -56,6 +56,8 @@ From the UI or MCP once AI-199: M6.12 ships (it dispatches this workflow); until
 | Traffic did not move / could not be pinned     | The pin failed                                                | Compare _Serving after_; §3b if needed.   |
 | Traffic moved, but the check failed            | The revision serves but `/health` or the traffic check failed | §4 now; the summary has the command back. |
 
+- A promote stops before traffic moves if the control plane refuses it (no succeeded dev deployment of that digest).
+- If traffic moved but a check failed, the Deployment is `failed` but names the revision now serving.
 - A run waits while a deploy or another release to prod runs (one queue per environment). A third waiting run replaces the second.
 - `promote` doesn't apply to the control plane (prod-only, no dev).
 - It records a `rollback` Deployment. Rolling back to a revision from before AI-190: M6.11 loses the finish report (that revision refuses `release.yml`), so the record stays `started`; the rollback itself is unaffected.

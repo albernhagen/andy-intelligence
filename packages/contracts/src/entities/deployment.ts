@@ -13,7 +13,8 @@ export const DEPLOYMENT_LIMITS = {
   maxPage: 100,
   actor: 200,
   revision: 100,
-  url: 2048,
+  // Fits the callback's 1 KB report body with every other field.
+  url: 512,
   request: 80,
 } as const;
 

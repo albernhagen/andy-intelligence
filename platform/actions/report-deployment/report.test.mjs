@@ -251,4 +251,39 @@ describe("report-deployment", () => {
     expect(r.code).toBe(0);
     expect(cp.requests[0].body).toBe(JSON.stringify({ status: "succeeded" }));
   });
+
+  it("GivenARefusedStart_WhenTheControlPlaneAnswers422_ThenRefusedIsAnOutputAndExit0", async () => {
+    const cp = await stub(() => ({ status: 422, text: "{}" }));
+    const r = await report({ ...withOidc(cp.origin), PHASE: "start", IMAGE_DIGEST: DIGEST });
+    expect(r.code).toBe(0);
+    expect(r.output).toBe("refused=true\n");
+    expect(r.summary).toContain("refused it (HTTP 422)");
+  });
+
+  it("GivenAnUnreachableControlPlane_WhenStarted_ThenItIsNotMarkedRefused", async () => {
+    const r = await report({
+      ACTIONS_ID_TOKEN_REQUEST_URL: "http://127.0.0.1:9/oidc?x=1",
+      ACTIONS_ID_TOKEN_REQUEST_TOKEN: "t",
+      CONTROL_PLANE_URL: "http://127.0.0.1:9",
+      PHASE: "start",
+      IMAGE_DIGEST: DIGEST,
+    });
+    expect(r.code).toBe(0);
+    expect(r.output).toBe("");
+  });
+
+  it("GivenTrafficMovedButACheckFailed_WhenFinishedAsFailedWithARevision_ThenTheRevisionIsSent", async () => {
+    const cp = await stub(() => ({ status: 200, text: "{}" }));
+    const r = await report({
+      ...withOidc(cp.origin),
+      PHASE: "finish",
+      DEPLOYMENT_ID: "r-1",
+      STATUS: "failed",
+      REVISION: "control-plane-00041-old",
+    });
+    expect(r.code).toBe(0);
+    expect(cp.requests[0].body).toBe(
+      JSON.stringify({ status: "failed", revision: "control-plane-00041-old" }),
+    );
+  });
 });

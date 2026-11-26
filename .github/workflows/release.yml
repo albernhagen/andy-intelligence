@@ -33,9 +33,10 @@ on:
         default: ""
 
 # One release or deploy at a time per environment: deploy.yml uses `deploy-prod` too. GitHub keeps
-# one waiting run per group; a third replaces the waiting one.
+# one waiting run per group; a third replaces the waiting one. A dispatch off main gets a group of
+# its own, so it can't push a waiting release or deploy out of the queue.
 concurrency:
-  group: deploy-${{ inputs.environment }}
+  group: ${{ github.ref == 'refs/heads/main' && format('deploy-{0}', inputs.environment) || format('off-main-{0}', github.run_id) }}
   cancel-in-progress: false
 
 permissions: {}
@@ -102,6 +103,16 @@ jobs:
           url: ${{ steps.check.outputs.url }}
           request: ${{ steps.inputs.outputs.request }}
 
+      # A promote ships only a digest the control plane knows dev deployed successfully: its 422
+      # stops the run here. An unreachable control plane doesn't (a lost report never fails a
+      # release); a rollback isn't gated, so an emergency rollback never waits on the API.
+      - id: gate
+        name: Stop a promote the control plane refused
+        if: steps.inputs.outputs.action == 'promote' && steps.report-start.outputs.refused == 'true'
+        run: |
+          echo "::error::The control plane refused this promote: no succeeded dev deployment of that digest."
+          exit 1
+
       # Promote: the same image by digest, no-traffic revision, smoke test, then traffic (ADR-0076).
       - id: promote
         if: steps.inputs.outputs.action == 'promote'
@@ -128,6 +139,7 @@ jobs:
           phase: finish
           deployment-id: ${{ steps.report-start.outputs.deployment-id }}
           status: ${{ (steps.promote.outcome == 'success' || steps.rollback.outcome == 'success') && 'succeeded' || 'failed' }}
-          revision: ${{ steps.rollback.outcome == 'success' && steps.inputs.outputs.revision || '' }}
+          # Whatever traffic moved to, even if a later check failed, so the record says what serves.
+          revision: ${{ steps.rollback.outputs.pinned == 'true' && steps.inputs.outputs.revision || steps.promote.outputs.promoted == 'true' && steps.promote.outputs.candidate || '' }}
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}

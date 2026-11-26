@@ -198,8 +198,8 @@ describe("release.yml as written", () => {
   });
 
   it("GivenADeployAndAReleaseToProd_WhenBothRun_ThenTheyShareOneQueueAndNeitherIsCancelled", () => {
-    expect(RELEASE).toMatch(
-      /concurrency:\n {2}group: deploy-\$\{\{ inputs\.environment \}\}\n {2}cancel-in-progress: false/,
+    expect(RELEASE).toContain(
+      "group: ${{ github.ref == 'refs/heads/main' && format('deploy-{0}', inputs.environment) || format('off-main-{0}', github.run_id) }}\n  cancel-in-progress: false",
     );
     expect(DEPLOY).toMatch(
       /concurrency:\n {2}group: deploy-prod\b[^\n]*\n {2}cancel-in-progress: false/,
@@ -207,7 +207,7 @@ describe("release.yml as written", () => {
   });
 
   it("GivenTheSteps_WhenOrdered_ThenInputsAndExistenceAreCheckedBeforeTrafficOrARecordChanges", () => {
-    const order = ["inputs", "auth", "check", "report-start", "promote", "rollback"].map(
+    const order = ["inputs", "auth", "check", "report-start", "gate", "promote", "rollback"].map(
       (id) => step(RELEASE, id).at,
     );
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -239,5 +239,25 @@ describe("release.yml as written", () => {
     for (const [, ref] of RELEASE.matchAll(/uses: ([^\s.][^\s]*)/g)) {
       expect(ref).toMatch(/@[0-9a-f]{40}$/);
     }
+  });
+
+  it("GivenAPromoteTheControlPlaneRefused_WhenTheGateRuns_ThenTheRunStopsBeforeTraffic", () => {
+    const gate = step(RELEASE, "gate").text;
+    expect(gate).toContain(
+      "if: steps.inputs.outputs.action == 'promote' && steps.report-start.outputs.refused == 'true'",
+    );
+    expect(gate).toContain("exit 1");
+  });
+
+  it("GivenTrafficMovedButACheckFailed_WhenFinished_ThenTheReportNamesWhatServes", () => {
+    expect(RELEASE).toContain(
+      "revision: ${{ steps.rollback.outputs.pinned == 'true' && steps.inputs.outputs.revision || steps.promote.outputs.promoted == 'true' && steps.promote.outputs.candidate || '' }}",
+    );
+    expect(read("platform/actions/cloud-run-rollback/action.yml")).toContain(
+      "value: ${{ steps.pin.outcome == 'success' }}",
+    );
+    expect(read("platform/actions/cloud-run-safe-deploy/action.yml")).toContain(
+      "value: ${{ steps.promote.outcome == 'success' }}",
+    );
   });
 });

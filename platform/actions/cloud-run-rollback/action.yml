@@ -20,6 +20,11 @@ inputs:
     description: Where the service answers, for the `/health` check.
     required: true
 
+outputs:
+  pinned:
+    description: "`true` once traffic was pinned to the revision, even if a later check failed."
+    value: ${{ steps.pin.outcome == 'success' }}
+
 runs:
   using: composite
   steps:
