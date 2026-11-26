@@ -104,3 +104,28 @@ export function requireOwnAgentTask(
 export function actorLabel(actor: EventActor): string {
   return isOwner(actor) ? OWNER_LABEL : actor;
 }
+
+/**
+ * The agent path's rule for epic breakdowns (AI-383): a plan-epic agent task records a breakdown
+ * only for the epic it ran on, as `agent:<runId>`. Returns the actor to record the result as.
+ */
+export function requireOwnEpicTask(
+  run: Pick<Run, "id" | "step" | "ticketId">,
+  epicId: string,
+): EventActor {
+  if (run.step === "plan-epic" && run.ticketId === epicId) return `agent:${run.id}`;
+  console.log(
+    JSON.stringify({
+      severity: "WARNING",
+      message: "agent task result refused",
+      component: "permissions",
+      runId: run.id,
+      step: run.step,
+      wanted: "plan-epic",
+    }),
+  );
+  throw new DomainError(
+    "forbidden",
+    "only a plan-epic agent task on this epic can record its breakdown",
+  );
+}

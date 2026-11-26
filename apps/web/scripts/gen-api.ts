@@ -6,6 +6,7 @@ import {
   InMemoryConfigChangeStore,
   InMemoryDigestSummaryStore,
   InMemoryMilestoneStore,
+  InMemoryEpicBreakdownStore,
   InMemoryNightLaunchStore,
   InMemoryRoutingConfigStore,
   InMemoryReleaseNoteStore,
@@ -39,6 +40,7 @@ export async function apiDocument(): Promise<OpenAPI3> {
     routing: new InMemoryRoutingConfigStore(),
     releaseNotes: new InMemoryReleaseNoteStore(),
     milestones: new InMemoryMilestoneStore(),
+    epicBreakdowns: new InMemoryEpicBreakdownStore(),
     digestSummaries: new InMemoryDigestSummaryStore(),
     // Fakes only, so the GitHub setup routes are in the document.
     github: {

@@ -35,6 +35,8 @@ export const CROSS_PROJECT_ROUTES: Readonly<Record<string, string>> = {
   "GET /api/needs-you": "Every project's inbox: keep readable projects.",
   "GET /api/notify/email": "Needs-you email setting: owner only.",
   "GET /api/project-plans/waiting": "Every project's waiting plan: keep readable projects.",
+  "GET /api/epic-breakdowns/waiting":
+    "Every project's waiting epic breakdown: keep readable projects.",
   "GET /api/projects": "Every project: keep readable projects.",
   "GET /api/roadmap": "Every project's roadmap: readable projects only (canRead, enforced).",
   "GET /api/routing":

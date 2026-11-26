@@ -52,6 +52,7 @@ export type HarnessKey = z.infer<typeof HarnessKey>;
  * Agent-task steps. `plan-project` and `ideate` (AI-134) are project-level: their runs have no
  * ticket. The executor runs only the read-only steps it lists, build and sync, and refuses others.
  * `summarize` (AI-323, ADR-0137) writes the digest summary; its runs have no ticket either.
+ * `plan-epic` (AI-383, ADR-0155) drafts an epic's child tickets; its runs are on the epic.
  */
 export const RunStep = z.enum([
   "refine",
@@ -63,6 +64,7 @@ export const RunStep = z.enum([
   "sync",
   "plan-project",
   "ideate",
+  "plan-epic",
   "summarize",
 ]);
 export type RunStep = z.infer<typeof RunStep>;

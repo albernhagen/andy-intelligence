@@ -1,0 +1,82 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "Markdown, at most 200 words: how the tickets cover the epic Done-when, the order to build them in, Open (gaps and the default you used), and anything you left out and why (procedure plan-epic.md)."
+    },
+    "tickets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "description": "The child tickets of the epic, in build order. Each becomes a ticket in Ideas only after Andy approves.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "What changes for the user or the system, in plain words."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["feature", "chore", "bug", "spike"],
+            "description": "feature: a user-visible change; chore: internal work; bug: a fix; spike: a time-boxed question. Never an epic."
+          },
+          "size": {
+            "type": "string",
+            "enum": ["S", "M", "L"],
+            "description": "S: under a day; M: one to two days; L: up to a week. Prefer S and M."
+          },
+          "sizeReason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "One line: why this size."
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Markdown: why, what, and how it is verified."
+          },
+          "acceptanceCriteria": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "Checks for done. Features in EARS form (\"When …, the system shall …\").",
+            "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+          },
+          "touches": {
+            "type": "array",
+            "maxItems": 20,
+            "description": "Path globs or areas it expects to edit, from the repo as it is.",
+            "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+          },
+          "blockedBy": {
+            "type": "array",
+            "maxItems": 11,
+            "description": "0-based indexes of other tickets in this list it cannot start before. No self, no cycle.",
+            "items": { "type": "integer", "minimum": 0, "maximum": 11 }
+          }
+        },
+        "required": [
+          "title",
+          "type",
+          "size",
+          "sizeReason",
+          "body",
+          "acceptanceCriteria",
+          "touches",
+          "blockedBy"
+        ]
+      }
+    }
+  },
+  "required": ["summary", "tickets"]
+}
