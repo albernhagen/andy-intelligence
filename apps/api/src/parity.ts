@@ -168,6 +168,11 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["dashboard"],
   },
   {
+    action: "Upload, read or remove a project's logo (AI-393)",
+    routes: [`GET ${P}/logo`, `PUT ${P}/logo`, `DELETE ${P}/logo`],
+    tools: ["get_project_logo", "set_project_logo", "remove_project_logo"],
+  },
+  {
     action: "Project list and settings",
     routes: ["GET /api/projects", `GET ${P}`, `PATCH ${P}`],
     tools: [
@@ -299,6 +304,15 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Releases: deployments with their tickets and release notes (AI-183: M6.9)",
     routes: [`GET ${P}/releases`],
     tools: ["list_releases"],
+  },
+  {
+    action: "Promote and rollback, and their requests (AI-199: M6.12)",
+    routes: [
+      `POST ${P}/releases/promote`,
+      `POST ${P}/releases/rollback`,
+      `GET ${P}/releases/requests`,
+    ],
+    tools: ["promote", "rollback", "list_release_requests"],
   },
   {
     action: "Ideate",

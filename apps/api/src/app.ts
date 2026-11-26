@@ -13,6 +13,7 @@ import {
   type WorkTracker,
   type QuotaStore,
   type DeploymentStore,
+  type ReleaseRequestStore,
   type MilestoneStore,
   type EpicBreakdownStore,
   type DigestSummaryStore,
@@ -21,6 +22,7 @@ import {
   type ProjectVersions,
   type SpendLedger,
   type ReleaseNoteStore,
+  type ProjectLogoStore,
   type SpendCapsStore,
   type SpendNoticeLedger,
 } from "@andy/contracts";
@@ -105,6 +107,8 @@ export interface AppDeps {
    * unset) and read by the DORA panel (AI-200, empty when unset).
    */
   deployments?: DeploymentStore;
+  /** Promote and rollback requests (AI-199: M6.12); routes and tools absent when unset. */
+  releaseRequests?: ReleaseRequestStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
   /**
@@ -114,6 +118,8 @@ export interface AppDeps {
   spendLedger?: SpendLedger;
   /** The global spend caps (AI-276); without it the code defaults, read-only. */
   spendCapsStore?: SpendCapsStore;
+  /** Project logos (AI-393); absent: no logo routes or tools, every project shows its default mark. */
+  projectLogos?: ProjectLogoStore;
   /**
    * What the spend notices have sent (AI-257: M10.9): their dedupe and daily cap. Absent: the
    * gate sends no spend notices.
@@ -242,6 +248,7 @@ const DOMAIN_STATUS = {
   code_host_unavailable: 503,
   rate_limited: 429,
   not_revertible: 409,
+  not_releasable: 409,
 } as const;
 
 export function createApp(input: AppDeps) {

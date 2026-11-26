@@ -207,3 +207,11 @@ test("project settings defaults", async ({ page }) => {
   await expect(page.getByRole("radiogroup", { name: "Environments" })).toBeVisible();
   await expect(page).toHaveScreenshot("project-settings-defaults.png", { fullPage: true });
 });
+
+/** AI-393: Settings → Logo with AI's uploaded mark, Replace and Remove. */
+test("project settings logo", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai/settings#logo", "AI: Andy Intelligence settings");
+  await expect(page.getByRole("img", { name: "Andy Intelligence logo" })).toBeVisible();
+  await expect(page).toHaveScreenshot("project-settings-logo.png", { fullPage: true });
+});

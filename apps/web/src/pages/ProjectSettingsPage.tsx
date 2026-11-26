@@ -3,6 +3,8 @@ import { Link, useParams, useRouterState } from "@tanstack/react-router";
 import { MergeMode, type Project } from "@andy/contracts";
 import { suggestedMergeMode } from "@andy/domain";
 import { LayerOrderHint } from "@/components/RouteLayers";
+import { LogoSettings } from "@/components/LogoSettings";
+import { ProjectMark } from "@/components/ProjectMark";
 import { ClearQuotaIdle } from "@/components/ClearQuotaIdle";
 import { ConfigHistory } from "@/components/ConfigHistory";
 import { DispatchControls } from "@/components/DispatchControls";
@@ -47,6 +49,7 @@ import {
 
 const SECTIONS = [
   { id: "setup", title: "Setup", what: "Where this project's plan and setup stand." },
+  { id: "logo", title: "Logo", what: "The mark shown wherever this project is named." },
   { id: "automation", title: "Automation", what: "What runs on its own, and what waits for you." },
   { id: "limits", title: "Limits", what: "How much this project may do at once, ask and spend." },
   { id: "defaults", title: "Defaults", what: "What a ticket gets when it has no pick of its own." },
@@ -105,8 +108,11 @@ function SectionNav({ project, current }: { project: Project; current: SectionId
   const left = setup && !setup.complete ? setup.items.filter((i) => i.status !== "done").length : 0;
   return (
     <div className="min-w-0 space-y-2 md:border-r md:border-border md:py-4 md:pr-2">
-      <h2 className="px-2 text-xs text-muted-foreground">
-        {project.key}: {project.name} settings
+      <h2 className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
+        <ProjectMark project={project} />
+        <span>
+          {project.key}: {project.name} settings
+        </span>
       </h2>
       <nav aria-label="Settings sections" className="relative overflow-x-auto">
         <ul className="flex gap-0.5 md:flex-col">
@@ -151,6 +157,8 @@ function Section({ id, project }: { id: SectionId; project: Project }) {
           <SetupChecklist projectId={project.id} />
         </section>
       );
+    case "logo":
+      return <LogoSettings project={project} />;
     case "automation":
       return (
         <Rows label="Automation">

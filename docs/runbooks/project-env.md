@@ -1,53 +1,76 @@
 # Runbook: apply a project environment (Andy)
 
-For a managed project whose `deployKind` is `cloud-run`: one apply per environment of `infra/modules/project-env` (AI-201: M6.16), from the template root in the managed repo (AI-109: M6.22 adds that root; until then, copy `infra/modules/project-env/examples/basic`). Nothing in CI applies it.
+For a managed project whose `deployKind` is `cloud-run`: one apply of the template root in the managed repo's `infra/` (AI-109: M6.22; the baseline PR seeds it, see [`deploy-scaffold.md`](../features/deploy-scaffold.md)). It calls `infra/modules/project-env` (AI-201: M6.16) and `infra/modules/project-budget` once per environment: once for `prod-only`, twice for `dev-and-prod`. Nothing in CI applies it. Run every command from a clone of the managed repo. The setup path's step "Deploy environments" lists the same commands.
 
 ## Before
 
-- The GCP project exists, is on the billing account, and has its budget (`billing.md` §8).
-- Real values go in a gitignored `terraform.tfvars` or `TF_VAR_*`, never the repo: project ID, `alert_email`, `github_repository_id` (`gh api repos/<owner>/<name> --jq .id`).
-- Your login can create service accounts, IAM bindings and a Workload Identity pool in that project.
+- Each GCP project (`<app>-prod`, and `<app>-dev` for `dev-and-prod`) exists and is on the billing account. Its budget comes from this root: don't also add it to `infra/billing` `managed_projects` (`billing.md` §8), or it gets two.
+- `cp infra/terraform.tfvars.example infra/terraform.tfvars` (gitignored) and fill in the real values: project IDs, `alert_email`, `billing_account_id`, `github_repository_id` (`gh api repos/<owner>/<name> --jq .id`). Never commit it.
+- Your login can create service accounts, IAM bindings, a Workload Identity pool and budgets in those projects and on the billing account.
+- The state bucket, once, in the prod project: no public access, versioned, keeping the last 10 old versions (state holds the alert email and IDs; R-AI-109):
+
+```bash
+gcloud storage buckets create gs://<prod project>-tfstate --project <prod project> --location us-central1 --uniform-bucket-level-access --public-access-prevention
+```
+
+```bash
+gcloud storage buckets update gs://<prod project>-tfstate --versioning --lifecycle-file=<(echo '{"rule":[{"action":{"type":"Delete"},"condition":{"isLive":false,"numNewerVersions":10}}]}')
+```
 
 ## Apply
 
 ```bash
-terraform init && terraform plan -out=env.tfplan
+terraform -chdir=infra init -backend-config="bucket=<prod project>-tfstate"
+```
+
+```bash
+terraform -chdir=infra plan -out=deploy.tfplan
 ```
 
 Expected **adds, 0 to change, 0 to destroy**, where N = entries in `runtime_project_roles`:
 
-| Environment                                                     | Adds   |
-| --------------------------------------------------------------- | ------ |
-| First environment, with previews (`prod-only`, or dev)          | 38 + N |
-| Prod in `dev-and-prod` (`preview_enabled = false`, promote set) | 30 + N |
+| Root           | Adds    | Made of                                                                     |
+| -------------- | ------- | --------------------------------------------------------------------------- |
+| `prod-only`    | 40 + N  | prod with previews (38 + N), Budget API + budget (2)                        |
+| `dev-and-prod` | 72 + 2N | dev with previews (38 + N), prod (30 + N), Budget API + budget for each (4) |
 
-38 = 7 APIs, 2 registry repos, pool + provider, 4 service accounts, 4 runtime role grants, main deployer 5 grants (2 federation, push, run, actAs), preview deployer 4 grants, 2 services, 1 log exclusion, 1 email channel, 6 alerts. Prod in `dev-and-prod` drops the 10 preview resources and adds 2 reads on the dev repo (Cloud Run service agent, main deployer). Anything else (a change or destroy) is drift: stop and check.
+An environment with previews: 7 APIs, 2 registry repos, pool + provider, 4 service accounts, 4 runtime role grants, main deployer 5 grants (2 federation, push, run, actAs), preview deployer 4 grants, 2 services, 1 log exclusion, 1 email channel, 6 alerts = 38. Prod in `dev-and-prod` drops the 10 preview resources and adds 2 reads on the dev repo (Cloud Run service agent, main deployer). `kill_switch_enabled = true` adds 15 per environment (billing runbook §8). Anything else (a change or destroy) is drift: stop and check.
 
 ```bash
-terraform apply env.tfplan
+terraform -chdir=infra apply deploy.tfplan
 ```
 
 ## After
 
-- Set the managed repo's variables for the baseline's `deploy.yml` and `release.yml` (AI-206: M6.17; names, not credentials). Prefix `GCP_` for prod, `GCP_DEV_` for dev; setting the dev ones makes dev the first environment:
+- Set the managed repo's variables from the root's output `repo_variables`: every variable the baseline's `deploy.yml`, `release.yml` and `preview.yml` read (names, not credentials), with `DEPLOY_SMOKE_CHECKS` from `smoke_checks` (default `/health 200`; one check per line, kept intact by `--body`):
 
-  | Variable (after the prefix) | From                                  |
-  | --------------------------- | ------------------------------------- |
-  | `PROJECT_ID`, `REGION`      | the inputs `project_id`, `region`     |
-  | `SERVICE`, `SERVICE_URL`    | outputs `service_name`, `service_url` |
-  | `WIF_PROVIDER`              | output `workload_identity_provider`   |
-  | `DEPLOYER_SA`               | output `deployer_email`               |
-  | `IMAGE_REPO`                | output `image_repository`             |
+```bash
+terraform -chdir=infra output -json repo_variables > repo-vars.json
+```
 
-  Plus `DEPLOY_SMOKE_CHECKS` once per repo (one check per line, `<path> <status>`, e.g. `/health 200`). Each with `gh variable set <NAME> --repo <owner>/<name> --body <value>`. Then run the baseline with `--deploy-kind cloud-run` (`onboard-a-repo.md` §5a). For PR previews (`preview.yml`, AI-207: M6.18; first environment only, with `preview_enabled = true`), also set, with the same prefix:
+```bash
+jq -r 'keys[]' repo-vars.json | while read -r name; do gh variable set "$name" --repo <owner>/<name> --body "$(jq -r --arg n "$name" '.[$n]' repo-vars.json)"; done && rm repo-vars.json
+```
 
-  | Variable (after the prefix) | From                              |
-  | --------------------------- | --------------------------------- |
-  | `PREVIEW_SERVICE`           | output `preview_service_name`     |
-  | `PREVIEW_DEPLOYER_SA`       | output `preview_deployer_email`   |
-  | `PREVIEW_IMAGE_REPO`        | output `preview_image_repository` |
+Check: `gh variable list --repo <owner>/<name>`. Then mark "Deploy environments" done on the setup path. What each variable is (AI-206: M6.17). Prefix `GCP_` for prod, `GCP_DEV_` for dev; setting the dev ones makes dev the first environment:
 
-  Without `PREVIEW_SERVICE` the `Preview` jobs skip; with only some set, the run fails at its first step naming the missing ones. Check: open a PR that changes code; its `Preview` run comments a `pr-<n>` URL; close it and the comment says the preview was removed.
+| Variable (after the prefix) | From                                  |
+| --------------------------- | ------------------------------------- |
+| `PROJECT_ID`, `REGION`      | the inputs `project_id`, `region`     |
+| `SERVICE`, `SERVICE_URL`    | outputs `service_name`, `service_url` |
+| `WIF_PROVIDER`              | output `workload_identity_provider`   |
+| `DEPLOYER_SA`               | output `deployer_email`               |
+| `IMAGE_REPO`                | output `image_repository`             |
+
+Plus `DEPLOY_SMOKE_CHECKS` (one check per line, `<path> <status>`, e.g. `/health 200`). A repo onboarded before AI-109: M6.22 has no `infra/`: run the baseline first with `--deploy-kind cloud-run --environments <policy>` (`onboard-a-repo.md` §5a), merge, then this runbook from the top. For PR previews (`preview.yml`, AI-207: M6.18; first environment only, with `preview_enabled = true`), also set, with the same prefix:
+
+| Variable (after the prefix) | From                              |
+| --------------------------- | --------------------------------- |
+| `PREVIEW_SERVICE`           | output `preview_service_name`     |
+| `PREVIEW_DEPLOYER_SA`       | output `preview_deployer_email`   |
+| `PREVIEW_IMAGE_REPO`        | output `preview_image_repository` |
+
+Without `PREVIEW_SERVICE` the `Preview` jobs skip; with only some set, the run fails at its first step naming the missing ones. Check: open a PR that changes code; its `Preview` run comments a `pr-<n>` URL; close it and the comment says the preview was removed.
 
 - Check: the alert email channel shows in Monitoring → Alerting → Notification channels (Google sends no confirmation for email).
 - A deleted pool keeps its ID for 30 days: re-creating within that window fails; undelete it (`gcloud iam workload-identity-pools undelete`) or set another `wif_pool_id`.

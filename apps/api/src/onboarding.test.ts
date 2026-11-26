@@ -1,4 +1,9 @@
-import { InMemoryRunStore, InMemoryWorkTracker, type Onboarding } from "@andy/contracts";
+import {
+  InMemoryDeploymentStore,
+  InMemoryRunStore,
+  InMemoryWorkTracker,
+  type Onboarding,
+} from "@andy/contracts";
 import { BASELINE_FILES } from "@andy/domain";
 import { describe, expect, it } from "vitest";
 import { createdApp, githubApp, REPO } from "./github/test-app";
@@ -8,8 +13,8 @@ import { provingRefine, REFINE_LOOKBACK_RUNS } from "./onboarding";
 
 const KEY = REPO.toLowerCase();
 
-async function setup(opts: { connected?: boolean } = {}) {
-  const t = githubApp();
+async function setup(opts: { connected?: boolean; deployments?: InMemoryDeploymentStore } = {}) {
+  const t = githubApp({}, opts.deployments ? { deployments: opts.deployments } : {});
   if (opts.connected !== false) {
     await t.connections.save({ ...createdApp, connectedAt: "2026-11-03T00:00:00.000Z" });
   }
@@ -46,6 +51,31 @@ async function setup(opts: { connected?: boolean } = {}) {
   };
   return { ...t, read, mark, status, fullyOnboard };
 }
+
+describe("onboarding API: deploy environments (AI-109: M6.22)", () => {
+  it("GivenACloudRunProjectWithASucceededDeployment_WhenRead_ThenTheDeployStepIsDoneWithNothingToRun", async () => {
+    const deployments = new InMemoryDeploymentStore();
+    const t = await setup({ deployments });
+    const project = (await t.tracker.listProjects()).find((p) => p.key === "WID")!;
+    await t.tracker.updateProject(project.id, { deployKind: "cloud-run" });
+    expect(t.status((await t.read()).body, "deploy_env")).toBe("not_yet");
+
+    await deployments.record({
+      projectId: project.id,
+      environment: "prod",
+      imageDigest: `sha256:${"a".repeat(64)}`,
+      gitSha: "b".repeat(40),
+      kind: "deploy",
+      status: "succeeded",
+      startedAt: "2026-11-20T00:00:00.000Z",
+      finishedAt: "2026-11-20T00:01:00.000Z",
+      actor: "system",
+    });
+    const step = (await t.read("?refresh=true")).body.steps.find((s) => s.key === "deploy_env")!;
+    expect(step.status).toBe("done");
+    expect(step.commands).toEqual([]);
+  });
+});
 
 describe("onboarding API (AI-381)", () => {
   it("GivenAFullyOnboardedRepo_WhenRead_ThenLiveStepsAreDoneAndHandStepsWaitForAMark", async () => {

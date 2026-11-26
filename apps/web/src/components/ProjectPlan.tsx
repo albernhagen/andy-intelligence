@@ -197,21 +197,30 @@ function WaitingPlan({ projectId, plan }: { projectId: string; plan: Plan }) {
   );
 }
 
-/** A rejection needs a reason; only before approval starts. */
-function RejectControls({
+/**
+ * A rejection needs a reason; only before approval starts. The epic breakdown (AI-383) reuses it
+ * as "Send back" with its own labels.
+ */
+export function RejectControls({
   decide,
   pending,
+  action = "Reject",
+  inputLabel = "Reason to reject",
+  placeholder = "Why reject? (required)",
 }: {
   decide: (reason: string) => void;
   pending: boolean;
+  action?: string;
+  inputLabel?: string;
+  placeholder?: string;
 }) {
   const [reason, setReason] = useState("");
   return (
     <>
       <input
-        aria-label="Reason to reject"
+        aria-label={inputLabel}
         className="h-11 min-w-48 flex-1 rounded-md border border-border px-2 py-1 text-base sm:h-auto sm:text-sm"
-        placeholder="Why reject? (required)"
+        placeholder={placeholder}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
       />
@@ -222,7 +231,7 @@ function RejectControls({
         disabled={pending || reason.trim() === ""}
         onClick={() => decide(reason.trim())}
       >
-        Reject
+        {action}
       </Button>
     </>
   );

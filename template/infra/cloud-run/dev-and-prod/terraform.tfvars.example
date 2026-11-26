@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars (gitignored) and fill in real values. Never commit terraform.tfvars.
+dev_project_id       = "example-dev-000000"
+prod_project_id      = "example-prod-000000"
+service_name         = "example"
+github_repository    = "example-owner/example-app"
+github_repository_id = "123456789"
+alert_email          = "alerts@example.com"
+billing_account_id   = "000000-000000-000000"
+# dev_budget_usd        = 10
+# prod_budget_usd       = 10
+# kill_switch_enabled   = false
+# runtime_project_roles = ["roles/datastore.user"]
+# smoke_checks          = "/health 200"

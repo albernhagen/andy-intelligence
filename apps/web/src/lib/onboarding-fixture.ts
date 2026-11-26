@@ -53,6 +53,14 @@ const BASE: Record<OnboardingStepKey, Base> = {
     link: { label: "Open the repo's rulesets", url: gh("/settings/rules") },
     how: "live",
   },
+  deploy_env: {
+    key: "deploy_env",
+    label: "Deploy environments",
+    instruction: "Nothing to apply: this project doesn't deploy (deploy kind none).",
+    commands: [],
+    link: null,
+    how: "live",
+  },
   reusable_workflows: {
     key: "reusable_workflows",
     label: "Allow reusable workflows",
@@ -109,6 +117,7 @@ const CHECKS: Partial<Record<OnboardingStepKey, string[]>> = {
   repo_app: ["Project has a repo", "GitHub App installed on the repo"],
   baseline_pr: ["agent-run.yml on main", "Every baseline file on main"],
   repo_settings: ["Ruleset protect-main active"],
+  deploy_env: ["Deploy kind none"],
   agent_environment: ["Environment agent exists", "Deployment branches: main only"],
   proving_refine: ["A refine task succeeded"],
   builds_on: ["Builds on"],

@@ -8,9 +8,12 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
   InMemoryDeploymentStore,
+  InMemoryReleaseRequestStore,
+  InMemoryEpicBreakdownStore,
   InMemoryMilestoneStore,
   InMemoryRoutingConfigStore,
   InMemorySpendCapsStore,
+  InMemoryProjectLogoStore,
   InMemoryNightLaunchStore,
   InMemoryReleaseNoteStore,
   InMemoryDigestSummaryStore,
@@ -42,18 +45,23 @@ export function renderApp(
     email?: Parameters<typeof createApp>[0]["email"];
     /** A tracker to use instead of a fresh one (e.g. one that reports epics' milestones). */
     tracker?: InMemoryWorkTracker;
+    /** A component to render alone, against the same API, instead of the router. */
+    ui?: React.ReactElement;
   } = {},
 ) {
   const tracker = opts.tracker ?? new InMemoryWorkTracker();
   const milestones = new InMemoryMilestoneStore();
+  const epicBreakdowns = new InMemoryEpicBreakdownStore();
   const runs = new InMemoryRunStore();
   const quota = new InMemoryQuotaStore();
   const runners = new InMemoryRunnerStore();
   const configChanges = new InMemoryConfigChangeStore();
   const nightLaunches = new InMemoryNightLaunchStore();
   const deployments = new InMemoryDeploymentStore();
+  const releaseRequests = new InMemoryReleaseRequestStore();
   const routing = new InMemoryRoutingConfigStore();
   const spendCapsStore = new InMemorySpendCapsStore();
+  const projectLogos = new InMemoryProjectLogoStore();
   const releaseNotes = new InMemoryReleaseNoteStore();
   const digestSummaries = new InMemoryDigestSummaryStore();
   const reviewFindings = new InMemoryReviewFindingSource();
@@ -85,12 +93,15 @@ export function renderApp(
     configChanges,
     nightLaunches,
     deployments,
+    releaseRequests,
     milestones,
+    epicBreakdowns,
     releaseNotes,
     digestSummaries,
     reviewFindings,
     routing,
     spendCapsStore,
+    projectLogos,
     email: opts.email,
     github: {
       publicUrl: "http://localhost",
@@ -136,14 +147,16 @@ export function renderApp(
   render(
     <QueryClientProvider client={queryClient}>
       <ApiContext.Provider value={api}>
-        <RouterProvider router={router} />
+        {opts.ui ?? <RouterProvider router={router} />}
       </ApiContext.Provider>
     </QueryClientProvider>,
   );
   return {
     milestones,
+    epicBreakdowns,
     runners,
     spendCapsStore,
+    projectLogos,
     releaseNotes,
     digestSummaries,
     reviewFindings,
@@ -158,6 +171,7 @@ export function renderApp(
     connections,
     nightLaunches,
     deployments,
+    releaseRequests,
     routing,
     service: new TicketService(tracker),
   };

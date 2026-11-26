@@ -1,6 +1,11 @@
-import { InMemoryDeploymentStore, type Deployment, type Project } from "@andy/contracts";
+import {
+  InMemoryDeploymentStore,
+  InMemoryReleaseRequestStore,
+  type Deployment,
+  type Project,
+} from "@andy/contracts";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AuthEnv } from "./auth";
 import {
   DEPLOYMENTS_PATH,
@@ -30,6 +35,7 @@ const claims = (overrides: Partial<ActionsClaims> = {}): ActionsClaims => ({
 function setup(
   projects: Record<string, Project> = { [REPO]: project },
   tickMs = 60_000,
+  releaseRequests?: InMemoryReleaseRequestStore,
   onFinished?: (deployment: Deployment, project: Project) => Promise<unknown>,
 ) {
   const app = new Hono<AuthEnv>();
@@ -43,6 +49,7 @@ function setup(
       return JSON.parse(jwt) as ActionsClaims;
     },
     registeredProject: async (repo) => projects[repo] ?? null,
+    ...(releaseRequests ? { releaseRequests } : {}),
     now: () => new Date((clock += tickMs)),
     ...(onFinished ? { onFinished } : {}),
   });
@@ -180,7 +187,9 @@ describe("deployment reports (AI-180: M6.4)", () => {
 describe("verification hook (AI-188: M6.7)", () => {
   it("GivenAFinishedDeploy_WhenRecorded_ThenTheHookGetsTheFinishedDeploymentAndItsProjectOnce", async () => {
     const seen: [Deployment, Project][] = [];
-    const { start, finish } = setup(undefined, undefined, async (d, p) => seen.push([d, p]));
+    const { start, finish } = setup(undefined, undefined, undefined, async (d, p) =>
+      seen.push([d, p]),
+    );
     const id = await idOf(await start());
 
     expect((await finish(id, { status: "succeeded" })).status).toBe(200);
@@ -192,7 +201,7 @@ describe("verification hook (AI-188: M6.7)", () => {
   });
 
   it("GivenAHookThatThrows_WhenTheDeployFinishes_ThenTheFinishIsStillRecordedAnd200", async () => {
-    const { deployments, start, finish } = setup(undefined, undefined, async () => {
+    const { deployments, start, finish } = setup(undefined, undefined, undefined, async () => {
       throw new Error("boom");
     });
     const id = await idOf(await start());
@@ -203,7 +212,7 @@ describe("verification hook (AI-188: M6.7)", () => {
 
   it("GivenARefusedFinish_WhenReported_ThenTheHookIsNotCalled", async () => {
     let calls = 0;
-    const { start, finish } = setup(undefined, undefined, async () => calls++);
+    const { start, finish } = setup(undefined, undefined, undefined, async () => calls++);
     const id = await idOf(await start());
 
     expect(
@@ -324,5 +333,141 @@ describe("release reports (AI-190: M6.11)", () => {
     expect((await finish(rollback, { status: "succeeded" })).status).toBe(404);
     expect((await deployments.get(deploy))?.status).toBe("started");
     expect((await deployments.get(rollback))?.status).toBe("started");
+  });
+});
+
+describe("release requests matched to reports (AI-199: M6.12)", () => {
+  const PROMOTED = `sha256:${"c".repeat(64)}`;
+  const at = "2026-11-21T09:00:00.000Z";
+  const asked = async (
+    requests: InMemoryReleaseRequestStore,
+    overrides: { action?: "promote" | "rollback"; digest?: string } = {},
+  ) => {
+    const made = await requests.create(
+      {
+        projectId: "ai",
+        action: overrides.action ?? "promote",
+        environment: "prod",
+        digest: overrides.digest ?? PROMOTED,
+        revision: overrides.action === "rollback" ? "control-plane-00041-old" : null,
+        sourceDeploymentId: "src",
+        actor: "user:andy",
+        createdAt: at,
+        status: "dispatched",
+        updatedAt: at,
+      },
+      0,
+    );
+    if (!("created" in made)) throw new Error("not created");
+    return made.created;
+  };
+  const devBuild = async (s: ReturnType<typeof setup>) => {
+    const dev = await idOf(await s.start(undefined, { imageDigest: PROMOTED, environment: "dev" }));
+    await s.finish(dev, { status: "succeeded", revision: "control-plane-dev-1" });
+  };
+
+  it("GivenTheOwnersPromoteRequest_WhenReleaseYmlReportsStartAndEnd_ThenTheRequestFollowsTheDeployment", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+
+    const started = await s.start(release(), {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    });
+    expect(started.status).toBe(201);
+    const id = await idOf(started);
+    expect(await requests.get(request.id)).toMatchObject({ status: "started", deploymentId: id });
+
+    await s.finish(id, { status: "succeeded", revision: "control-plane-00050" }, release());
+    expect((await requests.get(request.id))?.status).toBe("succeeded");
+  });
+
+  it("GivenAReportNamingAnUnknownOrDifferentRequest_WhenItStarts_Then422AndNothingRecorded", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const rollback = await asked(requests, { action: "rollback" });
+    const before = await s.deployments.list("ai", "prod");
+    for (const request of ["nope", rollback.id]) {
+      const res = await s.start(release(), {
+        imageDigest: PROMOTED,
+        environment: "prod",
+        kind: "promote",
+        request,
+      });
+      expect(res.status).toBe(422);
+    }
+    expect(await s.deployments.list("ai", "prod")).toEqual(before);
+    expect((await requests.get(rollback.id))?.status).toBe("dispatched");
+  });
+
+  it("GivenARequestAlreadyMatched_WhenAReportReplaysIt_Then422", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+    const body = {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    };
+    expect((await s.start(release(), body)).status).toBe(201);
+    expect((await s.start(release(), body)).status).toBe(422);
+  });
+
+  it("GivenTwoStartReportsForOneRequestAtOnce_WhenBothArrive_ThenOnlyOneDeploymentIsRecorded", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+    const body = {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    };
+    const statuses = (await Promise.all([s.start(release(), body), s.start(release(), body)])).map(
+      (r) => r.status,
+    );
+    expect(statuses.sort()).toEqual([201, 422]);
+    expect(
+      (await s.deployments.list("ai", "prod")).filter((d) => d.kind === "promote"),
+    ).toHaveLength(1);
+  });
+
+  it("GivenTheRecordFailsAfterTheClaim_WhenTheWorkflowRetries_ThenTheRequestMatchesAgain", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const request = await asked(requests);
+    const body = {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+      request: request.id,
+    };
+    vi.spyOn(s.deployments, "record").mockRejectedValueOnce(new Error("store down"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await s.start(release(), body)).status).toBe(500);
+    expect((await requests.get(request.id))?.status).toBe("dispatched");
+    expect((await s.start(release(), body)).status).toBe(201);
+    expect((await requests.get(request.id))?.status).toBe("started");
+  });
+
+  it("GivenAReleaseRunByHand_WhenItReportsWithoutARequest_ThenItIsRecordedAsBefore", async () => {
+    const requests = new InMemoryReleaseRequestStore();
+    const s = setup(undefined, undefined, requests);
+    await devBuild(s);
+    const res = await s.start(release(), {
+      imageDigest: PROMOTED,
+      environment: "prod",
+      kind: "promote",
+    });
+    expect(res.status).toBe(201);
   });
 });
