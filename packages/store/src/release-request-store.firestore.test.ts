@@ -1,4 +1,5 @@
 import { releaseRequestStoreContract } from "@andy/contracts/testing";
+import { describe, it } from "vitest";
 import {
   FirestoreReleaseRequestStore,
   RELEASE_REQUESTS_COLLECTION,
@@ -22,4 +23,8 @@ if (process.env.FIRESTORE_EMULATOR_HOST) {
     // The cap case writes 51 documents one by one.
     { timeoutMs: 30_000 },
   );
+} else {
+  describe("ReleaseRequestStore contract: firestore", () => {
+    it.skip("needs the emulator: pnpm test:firestore", () => {});
+  });
 }

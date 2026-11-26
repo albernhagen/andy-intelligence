@@ -21,7 +21,7 @@ export function releaseRequestStoreContract(
       digest: `sha256:${"a".repeat(64)}`,
       revision: null,
       sourceDeploymentId: "dep-1",
-      actor: "user:owner",
+      actor: "system",
       createdAt: at(0),
       status: "requested",
       updatedAt: at(0),
