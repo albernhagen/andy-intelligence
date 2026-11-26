@@ -1,4 +1,5 @@
 import type {
+  DeployKind,
   MarkableStepKey,
   Onboarding,
   OnboardingCheck,
@@ -62,6 +63,8 @@ export interface OnboardingFacts {
   appInstallUrl: string | null;
   refine: ProvingRefine;
   buildEnabled: boolean;
+  /** The project's deploy kind (ADR-0114): `none` has no deploy environments to apply. */
+  deployKind: DeployKind;
   marks: OnboardingMarks;
   readAt: string;
 }
@@ -70,6 +73,7 @@ export const ONBOARDING_LABELS: Record<OnboardingStepKey, string> = {
   repo_app: "Repo and GitHub App",
   baseline_pr: "Finish the baseline PR",
   repo_settings: "Apply the repo settings",
+  deploy_env: "Apply the deploy environments",
   reusable_workflows: "Allow reusable workflows",
   reviewer_token: "Reviewer token",
   agent_environment: "Agent environment",
@@ -81,6 +85,7 @@ const MARKABLE: ReadonlySet<OnboardingStepKey> = new Set<MarkableStepKey>([
   "repo_app",
   "baseline_pr",
   "repo_settings",
+  "deploy_env",
   "reusable_workflows",
   "reviewer_token",
   "agent_environment",
@@ -310,6 +315,11 @@ function specs(f: OnboardingFacts): Record<OnboardingStepKey, StepSpec> {
       how: "live",
       checks: [rulesetCheck],
     },
+    deploy_env: deployEnvStep(
+      f.deployKind,
+      repo,
+      link("Open Actions variables", gh("/settings/variables/actions")),
+    ),
     reusable_workflows: {
       key: "reusable_workflows",
       instruction:
@@ -360,6 +370,65 @@ function specs(f: OnboardingFacts): Record<OnboardingStepKey, StepSpec> {
       how: "live",
       checks: [check("Builds on", f.buildEnabled, "turn Builds on in project settings")],
     },
+  };
+}
+
+/** The state bucket the template Terraform root's `gcs` backend uses (runbook project-env.md). */
+const STATE_BUCKET = "gs://<prod project>-tfstate";
+
+/**
+ * Applying the template Terraform root the baseline PR seeds in `infra/` (AI-109: M6.22), then
+ * setting the repo variables from its output. Commands run in a clone of the project's repo. A
+ * project that doesn't deploy has nothing to apply, so the step reads done. Any kind but `none`
+ * seeds a root with a `repo_variables` output (ADR-0114: the release contract), so the commands
+ * hold for a later kind too.
+ */
+function deployEnvStep(
+  deployKind: DeployKind,
+  repo: string,
+  link: OnboardingStep["link"],
+): StepSpec {
+  if (deployKind === "none") {
+    return {
+      key: "deploy_env",
+      instruction: "Nothing to apply: this project doesn't deploy (deploy kind none).",
+      commands: [],
+      link: null,
+      how: "live",
+      checks: [done("Deploy kind none")],
+    };
+  }
+  return {
+    key: "deploy_env",
+    instruction:
+      "After the baseline PR merges, in a clone of the repo: copy infra/terraform.tfvars.example to infra/terraform.tfvars with real values, create the state bucket, plan (expected counts: runbook project-env.md), apply, then set the repo variables from the output.",
+    commands: [
+      {
+        label: "Create the state bucket",
+        text: `gcloud storage buckets create ${STATE_BUCKET} --project <prod project> --location us-central1 --uniform-bucket-level-access`,
+      },
+      {
+        label: "Keep old state versions",
+        text: `gcloud storage buckets update ${STATE_BUCKET} --versioning`,
+      },
+      {
+        label: "Init",
+        text: 'terraform -chdir=infra init -backend-config="bucket=<prod project>-tfstate"',
+      },
+      { label: "Plan", text: "terraform -chdir=infra plan -out=deploy.tfplan" },
+      { label: "Apply", text: "terraform -chdir=infra apply deploy.tfplan" },
+      {
+        label: "Write the repo variables",
+        text: `terraform -chdir=infra output -json repo_variables | jq -r 'to_entries[] | "\\(.key)=\\(.value)"' > repo-vars.env`,
+      },
+      {
+        label: "Set them",
+        text: `gh variable set --repo ${repo} -f repo-vars.env && rm repo-vars.env`,
+      },
+    ],
+    link,
+    how: "hand",
+    checks: [],
   };
 }
 

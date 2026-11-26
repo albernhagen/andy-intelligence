@@ -174,6 +174,7 @@ function StepBody({
     case "repo_app":
     case "baseline_pr":
     case "repo_settings":
+    case "deploy_env":
     case "reusable_workflows":
     case "reviewer_token":
     case "agent_environment":

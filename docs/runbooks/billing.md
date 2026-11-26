@@ -149,7 +149,7 @@ A project-settings change succeeds even when its change-log entry fails to write
 
 ## 8. Managed project budgets (AI-162: M6.14: Project budget module)
 
-Each managed project environment (one GCP project) gets a budget from `infra/modules/project-budget`, called by `infra/billing` once per entry in `managed_projects` (ADR-0114). Same thresholds as the control plane: 50%, 90%, 100%, 150% actual and 100% forecast, to the same default recipients. Defaults: $10/month, kill switch off.
+Each managed project environment (one GCP project) gets a budget from `infra/modules/project-budget`. A `cloud-run` project's own template root (`infra/` in its repo, AI-109: M6.22; runbook `project-env.md`) calls it once per environment: don't add those projects here too, or they get two budgets. For any other project, `infra/billing` calls it once per entry in `managed_projects` (ADR-0114). Same thresholds as the control plane: 50%, 90%, 100%, 150% actual and 100% forecast, to the same default recipients. Defaults: $10/month, kill switch off.
 
 **Add a project:**
 

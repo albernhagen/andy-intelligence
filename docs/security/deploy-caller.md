@@ -2,6 +2,8 @@
 
 AI-206: M6.17 and AI-207: M6.18. A `cloud-run` project's `deploy.yml`, `release.yml` and `preview.yml` (from `template/.github/workflows/`, written by the baseline) use the main deployer identity `project-env` creates in that project's GCP projects. Identities and their bindings: `infrastructure.md` (R-AI-201 to R-AI-201-4); the deployment callback: `deployments.md`.
 
+The template Terraform root the baseline seeds in a `cloud-run` repo's `infra/` (AI-109: M6.22) adds no entry point or credential: it only calls `project-env` and `project-budget`, applied by Andy with his own login. Its real values (project IDs, billing account, alert email) live in the gitignored `infra/terraform.tfvars`; its state, which holds them too, in a versioned `gs://<prod project>-tfstate` bucket in the prod project, readable by that project's members. The repo copy has fake example values only (a test checks).
+
 ## Trust boundaries and entry points
 
 | Entry point                                                           | Who can reach it                                                                                       | Authn/authz                                                                                                                                                                                                                   | Notes                                                                                                                                                                                                                     |

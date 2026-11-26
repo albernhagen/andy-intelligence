@@ -260,6 +260,7 @@ export class OnboardingReader {
       appInstallUrl,
       refine,
       buildEnabled: project.buildEnabled,
+      deployKind: project.deployKind,
       marks: project.setupMarks,
       readAt: new Date(repo.at).toISOString(),
     });
