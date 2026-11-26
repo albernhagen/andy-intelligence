@@ -942,6 +942,24 @@ export function useRevertSettingsChange(projectId: string) {
 }
 
 /**
+ * One environment's deployments, newest first, each with its release notes (AI-189: M6.10, over
+ * AI-183: M6.9's listing). Polled slowly, so a deploy that finishes shows up.
+ */
+export function useReleases(projectId: string, env: "prod" | "dev") {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["releases", projectId, env],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/releases", {
+          params: { path: { projectId }, query: { env } },
+        }),
+      ),
+  });
+}
+
+/**
  * What promote and rollback would ship by default (AI-199: M6.12): the newest prod and dev
  * deployments from the releases listing, which the component reads with the domain's rules.
  */
