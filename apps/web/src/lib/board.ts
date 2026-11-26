@@ -78,7 +78,9 @@ export interface UpNextPlan {
 
 /**
  * A drop on Backlog's parts: into or within Up next, or back out to Ideas. Null when Up next isn't
- * involved (reordering Ideas, or a drop elsewhere): the ordinary lane rules apply.
+ * involved (reordering Ideas, or a drop elsewhere): the ordinary lane rules apply. A card moved
+ * back from a later stage lands in Ideas wherever it is dropped (AI-395): entering Up next starts
+ * refine (ADR-0075), so that stays a deliberate second step.
  */
 export function planUpNextDrop(
   backlog: readonly Ticket[],
@@ -92,6 +94,7 @@ export function planUpNextDrop(
     return wasUpNext ? { upNext: false, rank: null } : null;
   }
   if (overId !== UP_NEXT_ZONE && !overUpNext) return null;
+  if (ticket.stage !== "backlog") return { upNext: false, rank: null };
   if (overUpNext?.id === ticket.id) return null;
 
   const order = upNext.filter((t) => t.id !== ticket.id);

@@ -38,6 +38,22 @@ describe("Backlog parts", () => {
     expect(planUpNextDrop(backlog, idea, IDEAS_ZONE)).toBeNull();
   });
 
+  it("GivenACardFromALaterStage_WhenDroppedOnTheUpNextHeader_ThenItLandsInIdeas", () => {
+    const back = ticket("w", null, "in_progress");
+    expect(planUpNextDrop(backlog, back, UP_NEXT_ZONE)).toEqual({ upNext: false, rank: null });
+  });
+
+  it("GivenACardFromALaterStage_WhenDroppedOnAnUpNextCard_ThenItLandsInIdeas", () => {
+    const back = ticket("w", null, "ready");
+    expect(planUpNextDrop(backlog, back, "b")).toEqual({ upNext: false, rank: null });
+  });
+
+  it("GivenACardFromALaterStage_WhenDroppedOnIdeas_ThenUpNextIsNotInvolved", () => {
+    const back = ticket("w", null, "in_progress");
+    expect(planUpNextDrop(backlog, back, IDEAS_ZONE)).toBeNull();
+    expect(planUpNextDrop(backlog, back, "i")).toBeNull();
+  });
+
   it("GivenACardOnItself_WhenDropped_ThenNothing", () => {
     expect(planUpNextDrop(backlog, a, "a")).toBeNull();
   });

@@ -49,7 +49,8 @@ async function drag(
   const card = document.querySelector<HTMLElement>(`[data-ticket="${key}"]`)!;
   card.focus();
   await user.keyboard(" ");
-  if (columns) await user.keyboard("{ArrowRight}".repeat((columns * COLUMN_WIDTH) / 25));
+  const across = columns < 0 ? "{ArrowLeft}" : "{ArrowRight}";
+  if (columns) await user.keyboard(across.repeat((Math.abs(columns) * COLUMN_WIDTH) / 25));
   const vertical = rows < 0 ? "{ArrowUp}" : "{ArrowDown}";
   if (rows) await user.keyboard(vertical.repeat(Math.round((Math.abs(rows) * CARD_STEP) / 25)));
   await user.keyboard(" ");
@@ -319,6 +320,29 @@ describe("board v2", () => {
       );
       expect(stored.map((t) => t.key)).toEqual(["AI-3", "AI-1", "AI-2"]);
     });
+  });
+
+  it("GivenAnInProgressCard_WhenDroppedOnUpNext_ThenItLandsInIdeasWithNoUpNextRank", async () => {
+    const harness = await project();
+    await harness.service.create("ai", { title: "Queued" }, "andy", { upNext: true });
+    const stale = await harness.service.create("ai", { title: "Stale" }, "andy");
+    await harness.tracker.updateTicket(
+      "ai",
+      stale.id,
+      { stage: { to: "in_progress", reason: null } },
+      "andy",
+    );
+    await openBoard(harness, "AI-2");
+
+    // In progress is two columns right of Backlog; row 0 lands on Up next's first card.
+    await drag(harness.user, "AI-2", -2);
+
+    await waitFor(async () =>
+      expect(await harness.tracker.getTicket("ai", stale.id)).toMatchObject({
+        stage: "backlog",
+        upNextRank: null,
+      }),
+    );
   });
 
   it("GivenAnIdea_WhenMovedToUpNext_ThenTheBoardSplitsAndItEntersUpNext", async () => {

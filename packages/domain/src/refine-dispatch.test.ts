@@ -133,6 +133,57 @@ describe("RefineDispatcher", () => {
     expect(host.workflowRuns.size).toBe(1);
   });
 
+  describe("a ticket moved back to Backlog (AI-395)", () => {
+    async function inProgress(tickets: TicketService) {
+      const t = await tickets.create(projectId, { type: "feature", title: "Stale" }, "andy");
+      await tracker.updateTicket(
+        projectId,
+        t.id,
+        { stage: { to: "in_progress", reason: null } },
+        "andy",
+      );
+      return t;
+    }
+
+    it("GivenAnInProgressTicket_WhenMovedBackToBacklog_ThenItLandsInIdeasWithNoUpNextRank", async () => {
+      const { tickets } = wire();
+      const t = await inProgress(tickets);
+      const moved = await tickets.move(projectId, t.id, "backlog", "andy", { force: true });
+      expect(moved).toMatchObject({ stage: "backlog", upNextRank: null, upNextAt: null });
+    });
+
+    it("GivenAutoRefineOn_WhenAnInProgressTicketIsMovedBackToBacklog_ThenNoRefineStarts", async () => {
+      const { tickets, dispatcher } = wire();
+      const t = await inProgress(tickets);
+      await tickets.move(projectId, t.id, "backlog", "andy", { force: true });
+      await dispatcher.next(projectId);
+      expect(await refines(t.id)).toEqual([]);
+      expect(host.workflowRuns.size).toBe(0);
+    });
+
+    it("GivenAnUpNextTicketThatReachedReady_WhenMovedBackToBacklog_ThenItLandsInIdeas", async () => {
+      await tracker.updateProject(projectId, { paused: true });
+      const { tickets } = wire();
+      const t = await tickets.create(
+        projectId,
+        { ...clear, type: "feature", size: "S", sizeReason: "one screen" },
+        "andy",
+        { upNext: true },
+      );
+      await tickets.move(projectId, t.id, "ready", "andy");
+      const back = await tickets.move(projectId, t.id, "backlog", "andy");
+      expect(back).toMatchObject({ stage: "backlog", upNextRank: null });
+    });
+
+    it("GivenATicketMovedBackToIdeas_WhenAndyPutsItInUpNext_ThenRefineStarts", async () => {
+      const { tickets } = wire();
+      const t = await inProgress(tickets);
+      await tickets.move(projectId, t.id, "backlog", "andy", { force: true });
+      await tickets.setUpNext(projectId, t.id, { upNext: true }, "andy");
+      expect(await refines(t.id)).toHaveLength(1);
+    });
+  });
+
   it("GivenARefineInFlight_WhenMoreTicketsEnterUpNext_ThenTheyWaitAndStartOldestFirstAsRunsEnd", async () => {
     const { tickets, runs } = wire();
     const first = await tickets.create(projectId, { type: "feature", title: "One" }, "andy", {
