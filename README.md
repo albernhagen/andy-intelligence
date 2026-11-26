@@ -124,7 +124,7 @@ pnpm --filter @andy/web icons                # rebuild favicon and app icons fro
 | `infra/control-plane` | Control-plane GCP resources                                              |
 | `infra/billing`       | Budgets (control plane + managed projects), opt-in kill switches         |
 | `infra/dns`           | Cloudflare records for `ai.andybernhagen.com` (local plans only)         |
-| `infra/modules`       | Terraform modules for managed projects (`project-budget`, `project-env`) |
+| `infra/modules`       | Terraform modules, managed projects: `project-env`, `-budget`, `-alerts` |
 | `scripts`             | Repo tooling: format hook, review gate, coordinator tools                |
 | `platform/actions`    | Composite actions behind every required check (baseline)                 |
 | `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`                    |

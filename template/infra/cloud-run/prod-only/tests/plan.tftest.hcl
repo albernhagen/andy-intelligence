@@ -40,6 +40,10 @@ run "given_example_values_when_planned_then_one_environment_with_previews_and_a_
     error_message = "prod is the first environment, so it gets PR previews."
   }
   assert {
+    condition     = length(module.prod.alert_policy_names) == 2
+    error_message = "prod gets the uptime and 5xx alerts (AI-209: M6.19)."
+  }
+  assert {
     condition     = google_project_service.prod_billingbudgets.project == "example-prod-000000"
     error_message = "prod's budget needs the Budget API on in prod."
   }

@@ -42,3 +42,8 @@ output "preview_image_repository" {
   description = "Where the preview workflow pushes; null without previews."
   value       = var.preview_enabled ? "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.images[local.preview_name].repository_id}" : null
 }
+
+output "alert_policy_names" {
+  description = "Prod uptime and 5xx alert policies (AI-209: M6.19); empty when prod_alerts_enabled is off."
+  value       = var.prod_alerts_enabled ? module.prod_alerts[0].alert_policy_names : []
+}

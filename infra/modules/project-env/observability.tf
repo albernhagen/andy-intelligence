@@ -1,6 +1,6 @@
 # Log exclusions and the M1.15 usage alerts (ADR-0028), the same design as infra/control-plane.
 # Budgets lag by hours and nothing in GCP caps egress, Firestore ops or log volume, so these fire
-# within minutes of a spike. Uptime and error alerts are AI-208's (M6.19), budgets project-budget's.
+# within minutes of a spike. Uptime and error alerts: module prod_alerts below; budgets project-budget.
 
 locals {
   services_filter = join(" OR ", [for s in local.services : "resource.labels.service_name = \"${s}\""])
@@ -123,6 +123,23 @@ resource "google_monitoring_alert_policy" "usage" {
     mime_type = "text/markdown"
     content   = "Unexpected usage in ${var.project_id} (${var.service_name}). Check Cloud Run, Firestore and Logs for a loop or abuse. Emergency stop: the project's cost kill switch or scale the service to zero (andy-intelligence docs/runbooks/billing.md)."
   }
+
+  depends_on = [google_project_service.apis]
+}
+
+# Prod uptime and 5xx alerts (AI-209: M6.19), to the same email channel. The uptime check sends no
+# identity token, so a service behind Cloud Run IAM gets the 5xx alert only.
+module "prod_alerts" {
+  source = "../project-alerts"
+  count  = var.prod_alerts_enabled ? 1 : 0
+
+  project_id               = var.project_id
+  service_name             = google_cloud_run_v2_service.main.name
+  service_host             = trimprefix(google_cloud_run_v2_service.main.uri, "https://")
+  health_path              = var.health_path
+  uptime_check_enabled     = var.allow_unauthenticated
+  notification_channel_ids = [google_monitoring_notification_channel.alert_email.id]
+  error_threshold_per_5m   = var.prod_error_threshold_per_5m
 
   depends_on = [google_project_service.apis]
 }

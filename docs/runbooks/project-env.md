@@ -31,10 +31,10 @@ Expected **adds, 0 to change, 0 to destroy**, where N = entries in `runtime_proj
 
 | Root           | Adds    | Made of                                                                     |
 | -------------- | ------- | --------------------------------------------------------------------------- |
-| `prod-only`    | 40 + N  | prod with previews (38 + N), Budget API + budget (2)                        |
-| `dev-and-prod` | 72 + 2N | dev with previews (38 + N), prod (30 + N), Budget API + budget for each (4) |
+| `prod-only`    | 43 + N  | prod with previews (41 + N), Budget API + budget (2)                        |
+| `dev-and-prod` | 75 + 2N | dev with previews (38 + N), prod (33 + N), Budget API + budget for each (4) |
 
-An environment with previews: 7 APIs, 2 registry repos, pool + provider, 4 service accounts, 4 runtime role grants, main deployer 5 grants (2 federation, push, run, actAs), preview deployer 4 grants, 2 services, 1 log exclusion, 1 email channel, 6 alerts = 38. Prod in `dev-and-prod` drops the 10 preview resources and adds 2 reads on the dev repo (Cloud Run service agent, main deployer). `kill_switch_enabled = true` adds 15 per environment (billing runbook §8). Anything else (a change or destroy) is drift: stop and check.
+An environment with previews: 7 APIs, 2 registry repos, pool + provider, 4 service accounts, 4 runtime role grants, main deployer 5 grants (2 federation, push, run, actAs), preview deployer 4 grants, 2 services, 1 log exclusion, 1 email channel, 6 usage alerts = 38; prod also gets the uptime check and 2 prod alerts (3, AI-209: M6.19), so 41. Dev in `dev-and-prod` has `prod_alerts_enabled = false`; prod there drops the 10 preview resources and adds 2 reads on the dev repo (Cloud Run service agent, main deployer). A root applied before AI-209 plans exactly those 3 adds for prod. `kill_switch_enabled = true` adds 15 per environment (billing runbook §8). Anything else (a change or destroy) is drift: stop and check.
 
 ```bash
 terraform -chdir=infra apply deploy.tfplan
@@ -77,3 +77,16 @@ Without `PREVIEW_SERVICE` the `Preview` jobs skip; with only some set, the run f
 - The main service is public (Cloud Run IAM off) unless you set `allow_unauthenticated = false`; then deploys' smoke tests get 403.
 - Images are deleted after 30 days unless among the newest 10 or tagged `release-*`. The baseline `deploy.yml` (prod-only) and `release.yml` (promote) tag what prod runs `release-<digest hex>` before traffic moves (AI-389: M6.23); tags are never removed, so every image prod ever served is kept (a few hundred MB each). An image prod served before that tag landed is not: tag it once by hand, `gcloud artifacts docker tags add <image_repository>/<service>@<digest> <image_repository>/<service>:release-<digest hex>` (the digest from the Releases page or `gcloud run revisions describe`).
 - The main service has `deletion_protection`: set it false and apply before a destroy.
+
+## Prod alerts
+
+Module `infra/modules/project-alerts` (AI-209: M6.19), called by `project-env` while `prod_alerts_enabled` (default on). Both alerts email `alert_email` and auto-close after 24h. About $0.20/month per prod service (2 alert conditions at $0.10); the uptime check (~26k runs a month) is inside the 1M free per project.
+
+| Alert                          | Fires when                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| `Prod down: <service> /health` | `/health` (`health_path`) fails from 2 of 3 US regions for 5 minutes           |
+| `Prod errors: <service> 5xx`   | More than 5 5xx responses in 5 minutes (`prod_error_threshold_per_5m`, ≤ 1000) |
+
+- Check after apply: Monitoring → Uptime checks shows `<service> /health` passing. The app must answer `/health` with 2xx.
+- When one fires: open the service's logs; if a release caused it, roll back from the Releases page or MCP (`deploy-and-rollback.md`).
+- With `allow_unauthenticated = false` there is no uptime check (it can't send a token); the 5xx alert stays.
