@@ -27,7 +27,8 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - Needs-you lists "Waiting for your merge": clean PRs the merge mode leaves for Andy, with why and the release note (AI-218), and a Merge button (also on the ticket panel in Ready for review): Andy's click goes through the merge queue and waives only what the mode keeps for him, pinned to the PR's diff (AI-388, ADR-0157).
 - PR sync (project setting, AI-388): `queue` (default) syncs only the PR next in the merge queue; `all` keeps the Re-sync open PRs workflow merging `main` into every open PR.
 - Dashboards chart delivery and cost per week (AI-117), and a project's DORA metrics over 30 or 90 days from its production deployment records (AI-200; lead time not measured until commit times are recorded).
-- Verifying stage (AI-181): between Ready for review and Done for projects that deploy; a merge goes there unless it changed only docs or `infra/`; over 2 hours → Needs-you. Off until the verify task (AI-188) turns it on.
+- Verifying stage (AI-181): between Ready for review and Done for projects that deploy; a merge goes there unless it changed only docs or `infra/`; over 2 hours → Needs-you.
+- Verification run (AI-188, ADR-0159): a deploy to the first environment starts one read-only `verify` agent task for the Verifying tickets it contains (WebFetch of the deployed host only); pass → Done, fail → In progress + Needs-you with the evidence; a failed deploy sends them back.
 - Needs-you email (AI-77): each ticket that needs Andy, batched per 10 minutes, 20 a day; off until configured (runbook `email-notifications.md`).
 - Config proposals (inbox, MCP): a finding kind on 3+ PRs becomes a pending `AGENTS.md` change, never applied; idle until findings are stored (ADR-0097).
 - A weekly model scout (AI-268) proposes a tier change from OpenRouter's public models list, at most one a week, never applied; off until its Terraform is applied.

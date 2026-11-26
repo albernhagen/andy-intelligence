@@ -77,8 +77,11 @@ function withRoot(value, root) {
  */
 export const STEP_ALIASES = { sync: "build" };
 
-/** A lowercase DNS host name: labels of letters, digits and inner hyphens, at least one dot. */
-export const HOST = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+/**
+ * A lowercase DNS host name: labels of letters, digits and inner hyphens, at least one dot, and a
+ * last label that starts with a letter, so no IP address (a metadata endpoint) gets through.
+ */
+export const HOST = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 /** Fills `${VERIFY_HOST}` in the step's rules; refuses a step that needs it without a valid host. */
 function withVerifyHost(stepRules, verifyHost) {

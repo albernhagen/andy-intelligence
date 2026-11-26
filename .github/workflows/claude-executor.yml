@@ -140,7 +140,7 @@ jobs:
               (.ticket == null) and (.branch == null) and (.maxTurns <= $verify_turns)
               and (.verify.gitSha | type == "string" and test("^[0-9a-f]{40}$"))
               and (.verify.url | type == "string" and length <= 512
-                and test("^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+(/[A-Za-z0-9._~/-]*)?$"))))
+                and test("^https://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.])+[a-z]([a-z0-9-]{0,61}[a-z0-9])?(/[A-Za-z0-9._~/-]*)?$"))))
             and (.step == "verify" or ((.verify // null) == null))
             and (.baseBranch == null or (
               (.step == "build")

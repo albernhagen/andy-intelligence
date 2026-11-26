@@ -146,6 +146,7 @@ describe("executor context step: verify (AI-188, ADR-0159)", () => {
       { verify: { ...target, url: "https://user:pw@trail-log.example.app" } },
       { verify: { ...target, url: "https://trail-log.example.app:8443" } },
       { verify: { ...target, url: "https://localhost" } },
+      { verify: { ...target, url: "https://169.254.169.254/computeMetadata" } },
       { verify: { ...target, url: "https://x.example.app/a b" } },
       { verify: { ...target, gitSha: "main" } },
       { verify: target, ticket },
