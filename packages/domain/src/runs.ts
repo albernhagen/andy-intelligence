@@ -2085,7 +2085,7 @@ export class RunService {
   private async checkRefinable(ticket: Ticket): Promise<void> {
     if (ticket.stage !== "backlog") {
       throw new DomainError("not_refinable", `${ticket.key} is in ${ticket.stage}`, [
-        "refine runs on Backlog tickets; move it back to Backlog to re-refine",
+        "refine runs on Up next tickets; move it back to Backlog, then into Up next, to re-refine",
       ]);
     }
     if (ticket.archived) {
