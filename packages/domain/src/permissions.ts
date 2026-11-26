@@ -31,6 +31,7 @@ export const OWNER_ACTIONS = {
   send_test_email: "send a test email",
   change_milestones: "create, edit or order milestones, or attach an epic to one",
   merge_pr: "merge a pull request through merge_pr",
+  release: "promote or roll back a release",
 } as const;
 
 export type OwnerAction = keyof typeof OWNER_ACTIONS;

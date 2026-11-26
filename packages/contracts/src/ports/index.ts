@@ -537,7 +537,8 @@ export type WatchdogCheck = z.infer<typeof WatchdogCheck>;
 /**
  * Other delayed checks on the same queue (ADR-0089): a local run's lease expiry, and whether a
  * runner is still away 2 minutes after its last claim. AI-181: whether a ticket is still in
- * Verifying 2 hours after it entered (ADR-0114).
+ * Verifying 2 hours after it entered (ADR-0114). AI-199: how a promote or rollback's workflow run
+ * ended (ADR-0160).
  */
 const CheckSubject = z.string().regex(/^[A-Za-z0-9-]{1,64}$/);
 export const QueuedCheck = z.discriminatedUnion("kind", [
@@ -547,6 +548,12 @@ export const QueuedCheck = z.discriminatedUnion("kind", [
     kind: z.literal("verifying"),
     projectId: CheckSubject,
     ticketId: CheckSubject,
+    at: Timestamp,
+  }),
+  z.object({
+    kind: z.literal("release"),
+    projectId: CheckSubject,
+    requestId: CheckSubject,
     at: Timestamp,
   }),
 ]);
@@ -576,6 +583,8 @@ export function queuedCheckKey(check: QueuedCheck): string {
       return `runner-away-${check.runnerId}-${Math.floor(ms / 60_000)}`;
     case "verifying":
       return `verifying-${check.ticketId}-${Math.ceil(ms / 1000)}`;
+    case "release":
+      return `release-${check.requestId}-${Math.ceil(ms / 1000)}`;
   }
 }
 

@@ -44,7 +44,17 @@ Takes under 5 minutes, usually under one. Two ways: the release workflow (record
 
 ### 3a. With the release workflow (AI-190: M6.11)
 
-From the UI or MCP once AI-199: M6.12 ships (it dispatches this workflow); until then from the Actions tab:
+**From the UI or MCP (AI-199: M6.12):** the Releases page's **Roll back prod** (a confirm names the revision that will serve), or MCP `rollback` with project `AI` (no revision: the one before what serves now). It records a release request and starts this workflow; its status shows under the buttons and in `list_release_requests`:
+
+| Request status         | Meaning                                                                                                  | Do                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| waiting / running      | The run is queued or moving traffic                                                                      | Wait; read the run's summary (link on the request).          |
+| succeeded              | The revision serves                                                                                      | §4.                                                          |
+| not started            | The control plane couldn't start the workflow (the reason says why, e.g. the App lacks `actions: write`) | Fix the cause or use the Actions tab below; nothing changed. |
+| cancelled              | GitHub cancelled the run, usually because a deploy took its place in the queue                           | Ask again once the deploy finishes.                          |
+| ended without a result | The run ended without reporting                                                                          | Read the run's summary; §4.                                  |
+
+`429` means a release request for the project was made in the last minute: wait and ask again. **By hand from the Actions tab** (always works, recorded without a request):
 
 1. Find the revision: the last good Deployment's revision, or `gcloud run revisions list` below.
 2. Actions → _Release control plane_ → **Run workflow**, branch `main`; `action` = `rollback`, `environment` = `prod`, `revision` = the revision; leave `digest` and `request` empty.
@@ -59,7 +69,7 @@ From the UI or MCP once AI-199: M6.12 ships (it dispatches this workflow); until
 
 - A promote stops before traffic moves if the control plane refuses it (no succeeded dev deployment of that digest).
 - If traffic moved but a check failed, the Deployment is `failed` but names the revision now serving.
-- A run waits while a deploy or another release to prod runs (one queue per environment, so a rollback never races a deploy for traffic). GitHub keeps one waiting run: **a merge that starts `deploy.yml` while your rollback waits cancels the rollback**. After dispatching, watch the run; if it shows _cancelled_, run it again once the deploy finishes.
+- A run waits while a deploy or another release to prod runs (one queue per environment, so a rollback never races a deploy for traffic). GitHub keeps one waiting run: **a merge that starts `deploy.yml` while your rollback waits cancels the rollback**. A request from the UI or MCP shows _cancelled_ within about 45 minutes; a run started by hand: watch it. Either way, run it again once the deploy finishes.
 - `promote` doesn't apply to the control plane (prod-only, no dev).
 - It records a `rollback` Deployment, unless the target's image digest has no succeeded deployment among the last 100 in prod (older than the records, or deployed before AI-180: M6.4): then the summary says "Deployment not recorded" and the rollback still runs.
 - Rolling back to a revision from before AI-190: M6.11 loses the finish report (that revision refuses `release.yml`), so the record stays `started`; the rollback itself is unaffected.
