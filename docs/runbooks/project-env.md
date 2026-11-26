@@ -33,5 +33,5 @@ terraform apply env.tfplan
 - Check: the alert email channel shows in Monitoring → Alerting → Notification channels (Google sends no confirmation for email).
 - A deleted pool keeps its ID for 30 days: re-creating within that window fails; undelete it (`gcloud iam workload-identity-pools undelete`) or set another `wif_pool_id`.
 - The main service is public (Cloud Run IAM off) unless you set `allow_unauthenticated = false`; then deploys' smoke tests get 403.
-- Images are deleted after 30 days unless among the newest 10 or tagged `release-*`: a rollback to an older untagged revision can fail to start.
+- Images are deleted after 30 days unless among the newest 10 or tagged `release-*`, and nothing tags `release-*` yet (`release.yml` doesn't). Until it does, a cold start or rollback of prod onto an image past that window can fail to pull it: in `dev-and-prod`, raise `image_keep_count` or `image_max_age_days` on the dev environment.
 - The main service has `deletion_protection`: set it false and apply before a destroy.

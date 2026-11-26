@@ -165,7 +165,7 @@ variable "image_keep_count" {
 
 variable "image_keep_tag_prefixes" {
   type        = list(string)
-  description = "Registry cleanup: versions with a tag starting with one of these are never deleted. Tag what prod runs (e.g. release-<n> on promote) so a later rollback or cold start can still pull it."
+  description = "Registry cleanup: versions with a tag starting with one of these are never deleted. Tag what prod runs (e.g. release-<n> on promote) so a later rollback or cold start can still pull it. Nothing tags release-* yet: until release.yml does, this rule keeps nothing."
   default     = ["release-"]
 }
 
