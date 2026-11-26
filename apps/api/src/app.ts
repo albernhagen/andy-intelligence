@@ -13,6 +13,7 @@ import {
   type WorkTracker,
   type QuotaStore,
   type DeploymentStore,
+  type ReleaseRequestStore,
   type MilestoneStore,
   type EpicBreakdownStore,
   type DigestSummaryStore,
@@ -106,6 +107,8 @@ export interface AppDeps {
    * unset) and read by the DORA panel (AI-200, empty when unset).
    */
   deployments?: DeploymentStore;
+  /** Promote and rollback requests (AI-199: M6.12); routes and tools absent when unset. */
+  releaseRequests?: ReleaseRequestStore;
   /** Model routing (AI-230, AI-238); without it every run takes `DEFAULT_ROUTING`. */
   routing?: RoutingConfigStore;
   /**
@@ -245,6 +248,7 @@ const DOMAIN_STATUS = {
   code_host_unavailable: 503,
   rate_limited: 429,
   not_revertible: 409,
+  not_releasable: 409,
 } as const;
 
 export function createApp(input: AppDeps) {

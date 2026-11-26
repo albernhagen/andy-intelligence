@@ -5,11 +5,14 @@ import {
   WorkTrackerError,
   type DeploymentStore,
   type Project,
+  type ReleaseRequestStatus,
+  type ReleaseRequestStore,
 } from "@andy/contracts";
 import {
   REPORTING_WORKFLOWS,
   mayFinish,
   planStart,
+  releaseRequestMismatch,
   releaseSource,
   reportingWorkflow,
   reportingWorkflowRef,
@@ -31,7 +34,9 @@ import type { RouteModule } from "./services";
  * accepted, and every other caller gets 403 with nothing recorded. The token, not the body, says
  * which repo and workflow; the body adds what the token can't know (image digest, environment,
  * kind, url and request at the start; status and revision at the end). Who may report which kind:
- * `@andy/domain` `deployment-reports`.
+ * `@andy/domain` `deployment-reports`. A release report that names a `request` must match the
+ * promote or rollback the owner asked for (AI-199: M6.12, ADR-0160); its status follows the
+ * deployment's.
  */
 
 export const DEPLOYMENTS_PATH = "/deployments";
@@ -70,6 +75,8 @@ export interface DeploymentCallbackDeps {
   verify: ActionsTokenVerifier;
   /** The project a repo is registered to, or null (cached by the caller). */
   registeredProject: (repo: string) => Promise<Project | null>;
+  /** Promote and rollback requests (AI-199); without it a release's `request` is kept unchecked. */
+  releaseRequests?: ReleaseRequestStore;
   now?: () => Date;
 }
 
@@ -117,6 +124,33 @@ export function registerDeploymentCallbacks(
     return { project, sha: claims.sha, workflow, claims };
   };
 
+  /**
+   * Moves a release request along with its deployment. Never fails the report (a deploy must not
+   * fail on a bookkeeping write): a request already ended elsewhere, or a store error, is logged.
+   */
+  const followRequest = async (
+    requestId: string,
+    status: "started" | "succeeded" | "failed",
+    from: ReleaseRequestStatus[],
+    fields: { deploymentId?: string },
+  ) => {
+    if (!deps.releaseRequests) return;
+    try {
+      await deps.releaseRequests.update(
+        requestId,
+        { status, ...fields, updatedAt: now().toISOString() },
+        from,
+      );
+      log("INFO", "release request updated", { request: requestId, status });
+    } catch (err) {
+      log("WARNING", "release request not updated", {
+        request: requestId,
+        status,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
   const limit = bodyLimit({
     maxSize: DEPLOYMENT_REPORT_MAX_BYTES,
     onError: (c) => c.json({ error: "request body too large" }, 413),
@@ -141,6 +175,8 @@ export function registerDeploymentCallbacks(
     // A release ships an earlier build: record that build's commit, found from a succeeded
     // deployment of the same digest (one bounded read). An unknown digest records nothing.
     let gitSha = caller.sha;
+    /** The release request this report claimed, and the status it had before. */
+    let claimed: { id: string; from: ReleaseRequestStatus } | null = null;
     if (plan.workflow === "release") {
       const recent = await deps.deployments.list(
         caller.project.id,
@@ -157,23 +193,75 @@ export function registerDeploymentCallbacks(
         return c.json({ error: "no succeeded deployment of that image digest" }, 422);
       }
       gitSha = source.gitSha;
+      // A named request must be the owner's promote or rollback of this digest (ADR-0160). An
+      // empty one is a run started by hand from the code host, recorded as before.
+      if (body.data.request !== undefined && deps.releaseRequests) {
+        const asked = await deps.releaseRequests.get(body.data.request);
+        const mismatch = releaseRequestMismatch(asked, {
+          projectId: caller.project.id,
+          kind: plan.kind,
+          environment: plan.environment,
+          imageDigest: body.data.imageDigest,
+        });
+        if (mismatch) {
+          log("WARNING", "deployment start refused", {
+            reason: mismatch,
+            request: body.data.request,
+            kind: plan.kind,
+          });
+          return c.json({ error: mismatch }, 422);
+        }
+        // Claim it atomically before recording, so two start reports for one request (a re-run,
+        // or two instances) can't both record a deployment: the second gets 422.
+        try {
+          await deps.releaseRequests.update(
+            body.data.request,
+            { status: "started", updatedAt: now().toISOString() },
+            ["requested", "dispatched"],
+          );
+        } catch (err) {
+          if (!(err instanceof WorkTrackerError && err.code === "conflict")) throw err;
+          log("WARNING", "deployment start refused", {
+            reason: "release request already matched",
+            request: body.data.request,
+          });
+          return c.json({ error: "release request already matched" }, 422);
+        }
+        claimed = { id: body.data.request, from: asked!.status };
+      }
     }
-    const previous = await deps.deployments.latestGood(caller.project.id, plan.environment);
-    const deployment = await deps.deployments.record({
-      projectId: caller.project.id,
-      environment: plan.environment,
-      imageDigest: body.data.imageDigest,
-      gitSha,
-      revision: null,
-      kind: plan.kind,
-      status: "started",
-      startedAt: now().toISOString(),
-      finishedAt: null,
-      actor: "system",
-      previousDeploymentId: previous?.id ?? null,
-      url: body.data.url ?? null,
-      request: body.data.request ?? null,
-    });
+    let deployment: Deployment;
+    try {
+      const previous = await deps.deployments.latestGood(caller.project.id, plan.environment);
+      deployment = await deps.deployments.record({
+        projectId: caller.project.id,
+        environment: plan.environment,
+        imageDigest: body.data.imageDigest,
+        gitSha,
+        revision: null,
+        kind: plan.kind,
+        status: "started",
+        startedAt: now().toISOString(),
+        finishedAt: null,
+        actor: "system",
+        previousDeploymentId: previous?.id ?? null,
+        url: body.data.url ?? null,
+        request: body.data.request ?? null,
+      });
+    } catch (err) {
+      // Release the claim so the workflow's retry can match the request again, then fail.
+      if (claimed && deps.releaseRequests) {
+        await deps.releaseRequests
+          .update(claimed.id, { status: claimed.from, updatedAt: now().toISOString() }, ["started"])
+          .catch((e: unknown) =>
+            log("WARNING", "release request claim not released", {
+              request: claimed?.id,
+              error: e instanceof Error ? e.message : String(e),
+            }),
+          );
+      }
+      throw err;
+    }
     log("INFO", "deployment started", {
       deploymentId: deployment.id,
       projectId: caller.project.id,
@@ -183,6 +271,11 @@ export function registerDeploymentCallbacks(
       request: deployment.request,
       runId: caller.claims.run_id ?? null,
     });
+    if (deployment.request) {
+      await followRequest(deployment.request, "started", ["started"], {
+        deploymentId: deployment.id,
+      });
+    }
     return c.json({ deploymentId: deployment.id }, 201);
   });
 
@@ -220,6 +313,10 @@ export function registerDeploymentCallbacks(
         ...(body.data.revision ? { revision: body.data.revision } : {}),
       });
       log("INFO", "deployment finished", { deploymentId: done.id, status: done.status });
+      if (done.request && done.status !== "started") {
+        // `dispatched` too: a claim that raced the run's bookkeeping must still end (ADR-0160).
+        await followRequest(done.request, done.status, ["dispatched", "started"], {});
+      }
       return c.json({ deploymentId: done.id, status: done.status }, 200);
     } catch (err) {
       if (err instanceof WorkTrackerError && err.code === "conflict") {
@@ -239,6 +336,7 @@ export const publicRoutes: RouteModule = (app, s) => {
     deployments,
     verify: s.verifyActionsToken,
     registeredProject: (repo) => repoIndex.projectFor(repo),
+    ...(s.deps.releaseRequests ? { releaseRequests: s.deps.releaseRequests } : {}),
     now: s.now,
   });
 };

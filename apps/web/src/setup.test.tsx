@@ -98,7 +98,7 @@ describe("setup path", () => {
     // AI-381: the repo and App steps came before Add project; the baseline PR is next.
     expect(await screen.findByRole("heading", { name: "Finish the baseline PR" })).toBeTruthy();
     expect(h.router.state.location.pathname).toBe("/p/trl/setup");
-    expect(screen.getAllByText("Step 2 of 11", { exact: false }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Step 2 of 12", { exact: false }).length).toBeGreaterThan(0);
   });
 
   it("GivenTheBriefForm_WhenAndySubmitsIt_ThenTheProposedBriefIsWhatSubmitBriefStores", async () => {
@@ -162,7 +162,7 @@ describe("setup path", () => {
   it("GivenANewProjectWithNoTickets_WhenItsBoardOpens_ThenTheNextStepShowsWithOneButtonThatOpensIt", async () => {
     const h = await project("/p/trl");
     const bar = await screen.findByRole("region", { name: "Setup" });
-    expect(within(bar).getByText(/step 7 of 11/)).toBeTruthy();
+    expect(within(bar).getByText(/step 8 of 12/)).toBeTruthy();
     const buttons = within(bar).getAllByRole("link");
     expect(buttons).toHaveLength(1);
     await h.user.click(buttons[0]!);

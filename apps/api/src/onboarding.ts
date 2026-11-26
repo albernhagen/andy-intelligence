@@ -4,6 +4,7 @@ import {
   Onboarding,
   notFound,
   type CodeHost,
+  type DeploymentStore,
   type EventActor,
   type MarkableStepKey,
   type Project,
@@ -243,16 +244,19 @@ export class OnboardingReader {
     /** Where Andy installs the App; null when the App isn't connected. */
     private readonly appInstallUrl: () => Promise<string | null>,
     private readonly now: () => Date = () => new Date(),
+    /** Deployment records (AI-109): a succeeded one shows the deploy environments applied. */
+    private readonly deployments: DeploymentStore | null = null,
   ) {}
 
   async read(projectId: string, opts: { refresh?: boolean } = {}): Promise<Onboarding> {
     const project = await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
     const now = this.now();
-    const [repo, appInstallUrl, refine] = await Promise.all([
+    const [repo, appInstallUrl, refine, deployed] = await Promise.all([
       this.repoFacts(project, now.getTime(), opts.refresh === true),
       this.appInstallUrl(),
       provingRefine(this.tracker, this.runs, projectId, now),
+      this.hasDeployed(project),
     ]);
     return onboarding({
       repoCount: project.repos.length,
@@ -260,9 +264,31 @@ export class OnboardingReader {
       appInstallUrl,
       refine,
       buildEnabled: project.buildEnabled,
+      deployKind: project.deployKind,
+      deployed,
       marks: project.setupMarks,
       readAt: new Date(repo.at).toISOString(),
     });
+  }
+
+  /**
+   * Whether the project has a succeeded deployment to either environment (two reads, only for a
+   * project that deploys). A failed read counts as no: the step then waits for Andy's mark.
+   */
+  private async hasDeployed(project: Project): Promise<boolean> {
+    if (project.deployKind === "none" || !this.deployments) return false;
+    try {
+      const good = await Promise.all(
+        (["prod", "dev"] as const).map((env) => this.deployments!.latestGood(project.id, env)),
+      );
+      return good.some((d) => d !== null);
+    } catch (err) {
+      log("WARNING", "onboarding deployments read failed", {
+        projectId: project.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return false;
+    }
   }
 
   /** Forgets a project's cached read, e.g. after its repo changed. */

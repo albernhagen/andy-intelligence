@@ -1,7 +1,8 @@
 name: Baseline — terraform
 description: >-
   terraform fmt -check and validate for every folder with .tf files under infra/ (roots, shared
-  modules in infra/modules/ and their examples/ roots), then terraform test in each one with a
+  modules in infra/modules/ and their examples/ roots, and template/infra/ when present: the
+  baseline's seed Terraform roots, AI-109), then terraform test in each one with a
   tests/ folder (plan-only tests with mocked providers: no credentials), using the version in
   .terraform-version (ADR-0024, project baseline ADR-0031/ADR-0038). Passes with a notice when the repo has no infra/. Run after actions/checkout.
 
@@ -27,12 +28,17 @@ runs:
         terraform_version: ${{ steps.tf.outputs.version }}
     - if: steps.tf.outputs.skip != 'true'
       shell: bash
-      run: terraform fmt -check -recursive infra
+      run: |
+        roots=infra
+        [ -d template/infra ] && roots="$roots template/infra"
+        for root in $roots; do terraform fmt -check -recursive "$root"; done
     - name: validate
       if: steps.tf.outputs.skip != 'true'
       shell: bash
       run: |
-        for dir in $(find infra -name '*.tf' -not -path '*/.terraform/*' -exec dirname {} \; | sort -u); do
+        roots=infra
+        [ -d template/infra ] && roots="$roots template/infra"
+        for dir in $(find $roots -name '*.tf' -not -path '*/.terraform/*' -exec dirname {} \; | sort -u); do
           terraform -chdir="$dir" init -backend=false -input=false
           terraform -chdir="$dir" validate
           if compgen -G "$dir/tests/*.tftest.hcl" > /dev/null; then

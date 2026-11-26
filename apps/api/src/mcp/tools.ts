@@ -27,6 +27,7 @@ import {
   type DashboardReader,
   type DoraReader,
   type ReleaseReader,
+  type ReleaseService,
 } from "@andy/domain";
 import type { MergeHoldReader, RunnerService } from "@andy/domain";
 import type { SetupChecklistReader } from "../setup";
@@ -108,6 +109,8 @@ export interface ToolDeps {
   releases?: ReleaseReader | null;
   /** Project logos (AI-393); absent or null: no logo tools. */
   logos?: ProjectLogoService | null;
+  /** Promote and rollback (AI-199: M6.12); absent or null: no `promote`, `rollback`, `list_release_requests`. */
+  releaseRequests?: ReleaseService | null;
   /** PRs waiting for Andy's merge (AI-218), in `list_needs_me`; absent or null: none listed. */
   waitingMerges?: WaitingMergesReader | null;
   /** AI-323: the digest's model-written summary; null where it isn't wired. */

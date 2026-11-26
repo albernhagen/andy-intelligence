@@ -942,6 +942,68 @@ export function useRevertSettingsChange(projectId: string) {
 }
 
 /**
+ * What promote and rollback would ship by default (AI-199: M6.12): the newest prod and dev
+ * deployments from the releases listing, which the component reads with the domain's rules.
+ */
+export function useReleaseTargets(projectId: string, withDev: boolean) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["release-targets", projectId, withDev],
+    queryFn: async () => {
+      const read = async (env: "prod" | "dev") =>
+        unwrap(
+          await api.GET("/api/projects/{projectId}/releases", {
+            params: { path: { projectId }, query: { env, limit: 20 } },
+          }),
+        ).items.map((i) => i.deployment);
+      return { prod: await read("prod"), dev: withDev ? await read("dev") : [] };
+    },
+  });
+}
+
+/** A project's recent promote and rollback requests, newest first (AI-199: M6.12). */
+export function useReleaseRequests(projectId: string) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["release-requests", projectId],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/releases/requests", {
+          params: { path: { projectId }, query: { limit: 5 } },
+        }),
+      ).requests,
+  });
+}
+
+/** Andy's promote to prod (AI-199: M6.12): records a request and starts release.yml. */
+export function usePromote(projectId: string) {
+  const api = useApi();
+  return useWrite(async (body: { digest?: string }) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/releases/promote", {
+        params: { path: { projectId } },
+        body,
+      }),
+    ),
+  );
+}
+
+/** Andy's rollback (AI-199: M6.12): records a request and starts release.yml. */
+export function useRollback(projectId: string) {
+  const api = useApi();
+  return useWrite(async (body: { environment?: "prod" | "dev"; revision?: string }) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/releases/rollback", {
+        params: { path: { projectId } },
+        body,
+      }),
+    ),
+  );
+}
+
+/**
  * A project's logo (AI-393), fetched only while it has one and once per `logoUpdatedAt`: the
  * stamp is in the key, so a new upload refetches and an unchanged one never does.
  */

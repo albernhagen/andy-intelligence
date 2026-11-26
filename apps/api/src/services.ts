@@ -30,6 +30,7 @@ import {
   WaitingMergesReader,
   WhatsNewReader,
   ReleaseReader,
+  ReleaseService,
   EmailNotifications,
   wakeAfterRunEnd,
   notifyOnNeedsYou,
@@ -149,6 +150,7 @@ export const METERED_READS = {
   quota: ["latest", "clearsSince"],
   nightLaunches: ["get", "listForProject", "findActive"],
   deployments: ["get", "list", "latestGood"],
+  releaseRequests: ["get", "list"],
   routing: ["getGlobal", "getProject"],
   spendLedger: ["get", "totals", "totalsByProvider"],
   spendCapsStore: ["getGlobal"],
@@ -555,6 +557,19 @@ export function createServices(raw: AppDeps): Services {
           now,
         )
       : null;
+  // AI-199: M6.12: promote and rollback; absent without a deployment or release-request store
+  // (routes and tools both). The code host is read per call, so connecting GitHub later works.
+  const releaseRequests =
+    deps.deployments && deps.releaseRequests
+      ? new ReleaseService({
+          tracker: deps.tracker,
+          deployments: deps.deployments,
+          requests: deps.releaseRequests,
+          codeHost: async () => (connection ? connection.codeHost() : null),
+          queue: deps.watchdog?.queue ?? null,
+          now,
+        })
+      : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
@@ -613,6 +628,7 @@ export function createServices(raw: AppDeps): Services {
         return slug ? `https://github.com/apps/${slug}/installations/new` : null;
       },
       now,
+      deps.deployments ?? null,
     ),
     spend: new SpendSettingsService(
       projects,
@@ -631,6 +647,7 @@ export function createServices(raw: AppDeps): Services {
     releases,
     // AI-393: project logos; absent without a logo store (routes and tools both).
     logos: deps.projectLogos ? new ProjectLogoService(deps.tracker, deps.projectLogos, now) : null,
+    releaseRequests,
     // AI-218: PRs the merge mode leaves for Andy; release notes read from the connected host.
     waitingMerges: new WaitingMergesReader(
       deps.tracker,

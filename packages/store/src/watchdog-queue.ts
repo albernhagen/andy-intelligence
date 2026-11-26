@@ -20,6 +20,10 @@ export const runnerAwayUrl = (publicUrl: string, runnerId: string) =>
 export const verifyingUrl = (publicUrl: string, projectId: string, ticketId: string) =>
   `${publicUrl}/projects/${encodeURIComponent(projectId)}/tickets/${encodeURIComponent(ticketId)}/verifying-check`;
 
+/** A release request's run check (apps/api `RELEASE_CHECK_PATH`, AI-199). */
+export const releaseCheckUrl = (publicUrl: string, projectId: string, requestId: string) =>
+  `${publicUrl}/projects/${encodeURIComponent(projectId)}/release-requests/${encodeURIComponent(requestId)}/check`;
+
 /** The one Cloud Tasks call this adapter makes; a test seam. */
 export interface TaskCreator {
   createTask(request: {
@@ -66,7 +70,7 @@ export class CloudTasksWatchdogQueue implements WatchdogQueue {
   }
 
   /**
-   * Lease and runner-away checks (ADR-0089) and Verifying checks (AI-181): one named task per
+   * Lease and runner-away checks (ADR-0089) Verifying checks (AI-181) and release checks (AI-199): one named task per
    * key, on the same queue.
    */
   async scheduleCheck(check: QueuedCheck): Promise<"scheduled" | "duplicate"> {
@@ -83,6 +87,8 @@ export class CloudTasksWatchdogQueue implements WatchdogQueue {
         return runnerAwayUrl(base, check.runnerId);
       case "verifying":
         return verifyingUrl(base, check.projectId, check.ticketId);
+      case "release":
+        return releaseCheckUrl(base, check.projectId, check.requestId);
     }
   }
 

@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import type { RunService, VerifyingChecks } from "@andy/domain";
+import type { ReleaseService, RunService, VerifyingChecks } from "@andy/domain";
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import { z } from "@hono/zod-openapi";
 import type { AuthEnv } from "./auth";
@@ -20,6 +20,8 @@ export const RUN_LEASE_PATH = "/runs/:runId/lease";
 export const RUNNER_AWAY_PATH = "/runners/:runnerId/away";
 /** A ticket's 2-hour check, queued when it enters Verifying (AI-181, ADR-0114). */
 export const VERIFYING_CHECK_PATH = "/projects/:projectId/tickets/:ticketId/verifying-check";
+/** A release request's run check, queued after its dispatch (AI-199, ADR-0160). */
+export const RELEASE_CHECK_PATH = "/projects/:projectId/release-requests/:requestId/check";
 /** Verified watchdog calls per instance per minute (max 2 instances; ADR-0028). */
 export const RUN_WATCHDOG_RATE_LIMIT = 30;
 
@@ -57,6 +59,8 @@ export interface RunWatchdogDeps {
   runnerAway?: (runnerId: string) => Promise<string>;
   /** The Verifying check (AI-181); its route is absent when unset. */
   verifying?: Pick<VerifyingChecks, "check">;
+  /** The release run check (AI-199); its route is absent when unset. */
+  release?: Pick<ReleaseService, "check">;
   now?: () => Date;
 }
 
@@ -124,6 +128,26 @@ export function registerRunWatchdog(app: Hono<AuthEnv>, deps: RunWatchdogDeps): 
     });
   }
 
+  const release = deps.release;
+  if (release) {
+    app.post(RELEASE_CHECK_PATH, async (c) => {
+      const projectId = RunId.safeParse(c.req.param("projectId"));
+      const requestId = RunId.safeParse(c.req.param("requestId"));
+      if (!projectId.success || !requestId.success) return c.json({ error: "not found" }, 404);
+      if (!(await verified(c.req.header("authorization"), requestId.data))) {
+        return c.json({ error: "unauthenticated" }, 401);
+      }
+      if (!limiter.tryTake()) return c.json({ error: "rate limited" }, 429);
+      const outcome = await release.check(projectId.data, requestId.data);
+      log("INFO", "release check done", {
+        projectId: projectId.data,
+        requestId: requestId.data,
+        outcome,
+      });
+      return c.json({ outcome }, 200);
+    });
+  }
+
   const runnerAway = deps.runnerAway;
   if (runnerAway) {
     app.post(RUNNER_AWAY_PATH, async (c) => {
@@ -151,6 +175,7 @@ export const publicRoutes: RouteModule = (app, s) => {
   registerRunWatchdog(app, {
     runs: s.runs,
     verifying: s.verifying,
+    ...(s.releaseRequests ? { release: s.releaseRequests } : {}),
     ...(runners ? { runnerAway: (id: string) => runners.checkAway(id, s.dispatchNext) } : {}),
     verify:
       watchdog.verifyInvokerToken ??

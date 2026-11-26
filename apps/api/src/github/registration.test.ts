@@ -100,6 +100,61 @@ describe("BaselineProposer", () => {
     ).toMatchObject({ deployKind: "cloud-run" });
   });
 
+  const SCAFFOLD = [
+    ".terraform-version",
+    "infra/main.tf",
+    "infra/variables.tf",
+    "infra/outputs.tf",
+    "infra/terraform.tfvars.example",
+    "infra/tests/plan.tftest.hcl",
+  ];
+  const fileIn = (path: string) =>
+    host.baselineProposals[0]!.proposal.files.find((f) => f.path === path)?.content ?? "";
+  const modules = (main: string) => main.match(/^module "\w+"/gm);
+
+  it("GivenADeployKindNoneProject_WhenProposed_ThenNoDeployScaffoldIsInThePr", async () => {
+    await proposer.onRepoRegistered({ ...project, environments: "dev-and-prod" }, TARGET);
+    const paths = host.baselineProposals[0]!.proposal.files.map((f) => f.path);
+    for (const p of SCAFFOLD) expect(paths).not.toContain(p);
+  });
+
+  it("GivenACloudRunProdOnlyProject_WhenProposed_ThenThePrHasOneEnvironmentWithABudget", async () => {
+    await proposer.onRepoRegistered(
+      { ...project, deployKind: "cloud-run", environments: "prod-only" },
+      TARGET,
+    );
+    const paths = host.baselineProposals[0]!.proposal.files.map((f) => f.path);
+    expect(paths).toEqual(expect.arrayContaining(SCAFFOLD));
+    expect(modules(fileIn("infra/main.tf"))).toEqual(['module "prod"', 'module "prod_budget"']);
+    expect(fileIn("infra/main.tf")).toContain(`//infra/modules/project-env?ref=${SOURCE_TIP}`);
+  });
+
+  it("GivenACloudRunDevAndProdProject_WhenProposed_ThenThePrHasTwoEnvironmentsEachWithABudget", async () => {
+    await proposer.onRepoRegistered(
+      { ...project, deployKind: "cloud-run", environments: "dev-and-prod" },
+      TARGET,
+    );
+    expect(modules(fileIn("infra/main.tf"))).toEqual([
+      'module "dev"',
+      'module "prod"',
+      'module "dev_budget"',
+      'module "prod_budget"',
+    ]);
+  });
+
+  it("GivenACloudRunProjectWithItsOwnInfra_WhenProposed_ThenNoTemplateFileIsAddedBesideIt", async () => {
+    target.set("infra/main.tf", "# ours\n");
+    await proposer.onRepoRegistered({ ...project, deployKind: "cloud-run" }, TARGET);
+    const { proposal } = host.baselineProposals[0]!;
+    const paths = proposal.files.map((f) => f.path);
+    expect(paths.filter((p) => p.startsWith("infra/"))).toEqual([]);
+    expect(paths).toContain(".terraform-version");
+    expect(proposal.body).toContain("- `infra/main.tf`: already there (seed: the project's own)");
+    expect(proposal.body).toContain(
+      "- `infra/outputs.tf`: not added: other `infra/` files are already there, and the group is added only whole",
+    );
+  });
+
   it("GivenAFileThatDiffers_WhenProposed_ThenItIsReportedAndNotInThePr", async () => {
     target.set("lefthook.yml", "ours: true\n");
     await proposer.onRepoRegistered(project, TARGET);
@@ -145,6 +200,18 @@ describe("BaselineProposer", () => {
     expect(ticket?.title).toBe(`Baseline PR for ${TARGET} failed`);
     expect(ticket?.body).toContain("422 Reference already exists");
     expect(ticket?.body).toContain(`baseline.mjs onboard ${TARGET} --ref ${SOURCE_TIP}`);
+  });
+
+  it("GivenACloudRunProjectWhoseOpenFails_WhenProposed_ThenTheOnboardCommandCarriesItsDeployFlags", async () => {
+    host.failPropose = new Error("422 Reference already exists");
+    await proposer.onRepoRegistered(
+      { ...project, deployKind: "cloud-run", environments: "dev-and-prod" },
+      TARGET,
+    );
+    const [ticket] = await needsYou();
+    expect(ticket?.body).toContain(
+      `baseline.mjs onboard ${TARGET} --ref ${SOURCE_TIP} --deploy-kind cloud-run --environments dev-and-prod`,
+    );
   });
 
   it("GivenTheSourceCantBeRead_WhenProposed_ThenTheErrorIsANeedsYouTicketAndNoPr", async () => {

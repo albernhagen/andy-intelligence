@@ -306,6 +306,15 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["list_releases"],
   },
   {
+    action: "Promote and rollback, and their requests (AI-199: M6.12)",
+    routes: [
+      `POST ${P}/releases/promote`,
+      `POST ${P}/releases/rollback`,
+      `GET ${P}/releases/requests`,
+    ],
+    tools: ["promote", "rollback", "list_release_requests"],
+  },
+  {
     action: "Ideate",
     routes: [`POST ${P}/ideate`],
     tools: ["ideate"],

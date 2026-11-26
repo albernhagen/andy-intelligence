@@ -20,6 +20,7 @@ describe("setup steps", () => {
       "repo_app",
       "baseline_pr",
       "repo_settings",
+      "deploy_env",
       "reusable_workflows",
       "reviewer_token",
       "agent_environment",
@@ -29,7 +30,7 @@ describe("setup steps", () => {
       "proving_refine",
       "builds_on",
     ]);
-    expect(STEP_COUNT).toBe(11);
+    expect(STEP_COUNT).toBe(12);
   });
 
   it("GivenANewProjectWithoutTheBaseline_WhenRead_ThenTheBaselineStepIsNext", () => {

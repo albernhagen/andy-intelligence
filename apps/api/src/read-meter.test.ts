@@ -28,6 +28,7 @@ const FAKES: Record<keyof typeof METERED_READS, string> = {
   quota: "InMemoryQuotaStore",
   nightLaunches: "InMemoryNightLaunchStore",
   deployments: "InMemoryDeploymentStore",
+  releaseRequests: "InMemoryReleaseRequestStore",
   routing: "InMemoryRoutingConfigStore",
   spendLedger: "InMemorySpendLedger",
   spendCapsStore: "InMemorySpendCapsStore",
