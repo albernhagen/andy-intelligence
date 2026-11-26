@@ -142,6 +142,8 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
       };
     case "ready_for_review":
       return { text: join("Ready for review", pr, waits(s.syncWaiting)), tone: "default" };
+    case "verifying":
+      return { text: join("Verifying", pr), tone: "default" };
   }
 }
 

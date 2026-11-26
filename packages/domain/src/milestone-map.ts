@@ -71,13 +71,20 @@ export function mapEpics(tickets: readonly Ticket[], epicKey?: string): Ticket[]
   return [one];
 }
 
-/** The tickets in review under the given epics, whose PR numbers the map reads. */
+/**
+ * The tickets in review (or Verifying, AI-181: merged, not yet Done) under the given epics, whose
+ * PR numbers the map reads.
+ */
 export function inReviewUnder(epics: readonly Ticket[], tickets: readonly Ticket[]): Ticket[] {
   const ids = new Set(epics.map((e) => e.id));
   return tickets.filter(
-    (t) =>
-      t.parentId !== null && ids.has(t.parentId) && !t.archived && t.stage === "ready_for_review",
+    (t) => t.parentId !== null && ids.has(t.parentId) && !t.archived && inReviewGroup(t.stage),
   );
+}
+
+/** Ready for review and Verifying count together as "in review" on the map and roadmap. */
+function inReviewGroup(stage: Ticket["stage"]): boolean {
+  return stage === "ready_for_review" || stage === "verifying";
 }
 
 /** Where a child stands, the groups the map and the roadmap (AI-193) both count by. */
@@ -91,6 +98,7 @@ export function childGroup(c: Pick<EpicChild, "stage" | "openBlockers">): ChildG
     case "cancelled":
       return c.stage;
     case "ready_for_review":
+    case "verifying":
       return "inReview";
     case "in_progress":
       return "inProgress";

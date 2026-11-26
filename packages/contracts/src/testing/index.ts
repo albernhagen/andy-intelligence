@@ -330,6 +330,7 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
         ready: 1,
         in_progress: 0,
         ready_for_review: 0,
+        verifying: 0,
         done: 1,
         cancelled: 0,
       });
@@ -1340,9 +1341,28 @@ export function watchdogQueueContract(name: string, make: () => Promise<Watchdog
       ).toBe("duplicate");
     });
 
+    it("GivenAVerifyingCheck_WhenScheduledTwiceForOneTime_ThenDuplicate_AndANewTimeSchedules", async () => {
+      const queue = await make();
+      const ticketId = runId();
+      const check = { kind: "verifying" as const, projectId: "ai", ticketId, at };
+      expect(await queue.scheduleCheck(check)).toBe("scheduled");
+      expect(await queue.scheduleCheck(check)).toBe("duplicate");
+      expect(await queue.scheduleCheck({ ...check, at: "2026-11-04T15:00:00.000Z" })).toBe(
+        "scheduled",
+      );
+    });
+
     it("GivenAnInvalidSubject_WhenACheckIsScheduled_ThenRejected", async () => {
       await expect(
         (await make()).scheduleCheck({ kind: "lease", runId: "a/b", at }),
+      ).rejects.toThrow();
+      await expect(
+        (await make()).scheduleCheck({
+          kind: "verifying",
+          projectId: "ai",
+          ticketId: "a/b",
+          at,
+        }),
       ).rejects.toThrow();
     });
   });

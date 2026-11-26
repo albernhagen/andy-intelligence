@@ -5,7 +5,7 @@ import {
   type Stage,
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
-import { BoardReader, MAX_PR_LOOKUPS, boardLanes } from "./board";
+import { BoardReader, MAX_PR_LOOKUPS, boardLanes, showsVerifyingLane } from "./board";
 
 const NOW = new Date("2026-11-05T12:00:00.000Z");
 const route = { harness: "claude-code", provider: "claude-sub", model: "sonnet" } as const;
@@ -145,10 +145,24 @@ describe("boardLanes (AI-296)", () => {
       "ready",
       "in_progress",
       "ready_for_review",
+      "verifying",
       "done",
     ]);
     expect(lanes[1]!.tickets.map((x) => x.key)).toEqual(["AI-1", "AI-3"]);
-    expect(lanes[4]!.tickets).toEqual([]);
+    expect(lanes[5]!.tickets).toEqual([]);
+  });
+
+  it("GivenShowVerifyingOff_WhenGrouped_ThenNoVerifyingLane", () => {
+    const lanes = boardLanes(tickets, { showVerifying: false });
+
+    expect(lanes.map((l) => l.stage)).not.toContain("verifying");
+  });
+
+  it("GivenAProjectAndItsTickets_WhenAskedForTheVerifyingLane_ThenShownIfItDeploysOrHoldsOne", () => {
+    expect(showsVerifyingLane({ deployKind: "cloud-run" }, [])).toBe(true);
+    expect(showsVerifyingLane({ deployKind: "none" }, [{ stage: "done" }])).toBe(false);
+    expect(showsVerifyingLane(undefined, [])).toBe(false);
+    expect(showsVerifyingLane({ deployKind: "none" }, [{ stage: "verifying" }])).toBe(true);
   });
 
   it("GivenShowArchived_WhenGrouped_ThenArchivedTicketsAndTheCancelledLaneShow", () => {

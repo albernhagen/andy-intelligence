@@ -126,8 +126,9 @@ describe("reads per call (AI-222)", () => {
       expect(result.isError).toBe(false);
     });
     expect(large).toBe(small);
-    // AI-296: the same reader and read cache as the route (ADR-0126): the version counter only.
-    expect(large).toBe(1);
+    // AI-296: the same reader and read cache as the route (ADR-0126): the version counter, and
+    // the project (AI-181: whether it deploys, for the Verifying lane).
+    expect(large).toBe(2);
   });
 
   it("GivenAnUnchangedBoard_WhenTheRoadmapIsRead_ThenItReadsTheProjectOneCounterAndOneMilestoneList", async () => {

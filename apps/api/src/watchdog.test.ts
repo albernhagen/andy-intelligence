@@ -1,6 +1,6 @@
 import { InMemoryWatchdogQueue } from "@andy/contracts";
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair, type JWTPayload } from "jose";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PUBLIC_URL, REPO, createdApp, githubApp } from "./github/test-app";
 import { invokerTokenVerifier } from "./watchdog";
 
@@ -126,6 +126,88 @@ describe("run watchdog endpoint", () => {
   });
 
   it("GivenAMalformedRunId_WhenCalled_Then404", async () => {
+    const { check } = await setup();
+    expect((await check("invoker", "a.b")).status).toBe(404);
+  });
+});
+
+describe("Verifying check endpoint (AI-181)", () => {
+  // The tracker stamps events with the system clock, so the test moves that clock.
+  const at = (iso: string) => vi.setSystemTime(new Date(iso));
+
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.useFakeTimers({ toFake: ["Date"] });
+    at(START.toISOString());
+  });
+  afterEach(() => vi.useRealTimers());
+
+  async function setup() {
+    const queue = new InMemoryWatchdogQueue();
+    const t = githubApp(
+      {},
+      {
+        watchdog: {
+          queue,
+          publicUrl: PUBLIC_URL,
+          invokerEmail: INVOKER,
+          verifyInvokerToken: async (jwt) => {
+            if (jwt !== "invoker") throw new Error("bad token");
+          },
+        },
+      },
+    );
+    const project = await t.tracker.createProject({ name: "AI", key: "AI", repos: [REPO] });
+    await t.tracker.updateProject(project.id, { deployKind: "cloud-run" });
+    const ticket = await t.tracker.createTicket(project.id, { type: "chore", title: "B" }, "andy");
+    const stage = (to: string, force = false) =>
+      t.call(`/api/projects/${project.id}/tickets/${ticket.id}/stage`, {
+        method: "POST",
+        body: JSON.stringify({ to, force }),
+      });
+    expect((await stage("ready_for_review", true)).status).toBe(200);
+    expect((await stage("verifying")).status).toBe(200);
+    const check = (token: string | null = "invoker", id = ticket.id) =>
+      t.call(`/projects/${project.id}/tickets/${id}/verifying-check`, { method: "POST" }, token);
+    return { ...t, queue, project, ticket, check };
+  }
+
+  it("GivenAMoveIntoVerifying_WhenMade_ThenItsCheckIsQueuedTwoHoursLater", async () => {
+    const { queue, project, ticket } = await setup();
+    expect([...queue.queued.values()]).toEqual([
+      {
+        kind: "verifying",
+        projectId: project.id,
+        ticketId: ticket.id,
+        at: "2026-11-04T14:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("GivenNoOrAWrongToken_WhenCalled_Then401AndTheTicketIsUntouched", async () => {
+    const { check, tracker, project, ticket } = await setup();
+    at("2026-11-04T14:01:00.000Z");
+    expect((await check(null)).status).toBe(401);
+    expect((await check("andy")).status).toBe(401);
+    expect((await tracker.getTicket(project.id, ticket.id))?.needsAttention).toBe(false);
+  });
+
+  it("GivenTwoHoursInVerifying_WhenTheCheckArrives_ThenFlaggedNeedsYou", async () => {
+    const { check, tracker, project, ticket } = await setup();
+    at("2026-11-04T14:01:00.000Z");
+    const res = await check();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ outcome: "flagged" });
+    expect((await tracker.getTicket(project.id, ticket.id))?.needsAttention).toBe(true);
+  });
+
+  it("GivenACheckBeforeTwoHours_WhenItArrives_Then503SoTheQueueRetriesLater", async () => {
+    const { check } = await setup();
+    at("2026-11-04T13:58:00.000Z");
+    expect((await check()).status).toBe(503);
+  });
+
+  it("GivenAMalformedTicketId_WhenCalled_Then404", async () => {
     const { check } = await setup();
     expect((await check("invoker", "a.b")).status).toBe(404);
   });

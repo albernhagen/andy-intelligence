@@ -533,12 +533,19 @@ export type WatchdogCheck = z.infer<typeof WatchdogCheck>;
 
 /**
  * Other delayed checks on the same queue (ADR-0089): a local run's lease expiry, and whether a
- * runner is still away 2 minutes after its last claim.
+ * runner is still away 2 minutes after its last claim. AI-181: whether a ticket is still in
+ * Verifying 2 hours after it entered (ADR-0114).
  */
 const CheckSubject = z.string().regex(/^[A-Za-z0-9-]{1,64}$/);
 export const QueuedCheck = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("lease"), runId: CheckSubject, at: Timestamp }),
   z.object({ kind: z.literal("runner_away"), runnerId: CheckSubject, at: Timestamp }),
+  z.object({
+    kind: z.literal("verifying"),
+    projectId: CheckSubject,
+    ticketId: CheckSubject,
+    at: Timestamp,
+  }),
 ]);
 export type QueuedCheck = z.infer<typeof QueuedCheck>;
 
@@ -549,8 +556,9 @@ export interface WatchdogQueue {
    */
   schedule(check: WatchdogCheck): Promise<"scheduled" | "duplicate">;
   /**
-   * Queues a lease or runner-away check for delivery at `at`. Idempotent per subject and time:
-   * a lease per run and second of `at`, a runner-away check per runner and minute of `at`.
+   * Queues a lease, runner-away or Verifying check for delivery at `at`. Idempotent per subject
+   * and time: a lease per run and second of `at`, a runner-away check per runner and minute of
+   * `at`, a Verifying check per ticket and second of `at`.
    */
   scheduleCheck(check: QueuedCheck): Promise<"scheduled" | "duplicate">;
 }
@@ -558,9 +566,14 @@ export interface WatchdogQueue {
 /** The idempotency key of a queued check (also its task name on the queue). */
 export function queuedCheckKey(check: QueuedCheck): string {
   const ms = Date.parse(check.at);
-  return check.kind === "lease"
-    ? `lease-${check.runId}-${Math.ceil(ms / 1000)}`
-    : `runner-away-${check.runnerId}-${Math.floor(ms / 60_000)}`;
+  switch (check.kind) {
+    case "lease":
+      return `lease-${check.runId}-${Math.ceil(ms / 1000)}`;
+    case "runner_away":
+      return `runner-away-${check.runnerId}-${Math.floor(ms / 60_000)}`;
+    case "verifying":
+      return `verifying-${check.ticketId}-${Math.ceil(ms / 1000)}`;
+  }
 }
 
 // ── QuotaSource ──────────────────────────────────────────────────────────────

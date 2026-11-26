@@ -16,6 +16,10 @@ export const leaseUrl = (publicUrl: string, runId: string) =>
 export const runnerAwayUrl = (publicUrl: string, runnerId: string) =>
   `${publicUrl}/runners/${encodeURIComponent(runnerId)}/away`;
 
+/** A ticket's Verifying check (apps/api `VERIFYING_CHECK_PATH`, AI-181). */
+export const verifyingUrl = (publicUrl: string, projectId: string, ticketId: string) =>
+  `${publicUrl}/projects/${encodeURIComponent(projectId)}/tickets/${encodeURIComponent(ticketId)}/verifying-check`;
+
 /** The one Cloud Tasks call this adapter makes; a test seam. */
 export interface TaskCreator {
   createTask(request: {
@@ -61,14 +65,25 @@ export class CloudTasksWatchdogQueue implements WatchdogQueue {
     return this.create(runId, at, watchdogUrl(this.options.publicUrl, runId));
   }
 
-  /** Lease and runner-away checks (ADR-0089): one named task per key, on the same queue. */
+  /**
+   * Lease and runner-away checks (ADR-0089) and Verifying checks (AI-181): one named task per
+   * key, on the same queue.
+   */
   async scheduleCheck(check: QueuedCheck): Promise<"scheduled" | "duplicate"> {
     const parsed = QueuedCheck.parse(check);
-    const url =
-      parsed.kind === "lease"
-        ? leaseUrl(this.options.publicUrl, parsed.runId)
-        : runnerAwayUrl(this.options.publicUrl, parsed.runnerId);
-    return this.create(queuedCheckKey(parsed), parsed.at, url);
+    return this.create(queuedCheckKey(parsed), parsed.at, this.checkUrl(parsed));
+  }
+
+  private checkUrl(check: QueuedCheck): string {
+    const base = this.options.publicUrl;
+    switch (check.kind) {
+      case "lease":
+        return leaseUrl(base, check.runId);
+      case "runner_away":
+        return runnerAwayUrl(base, check.runnerId);
+      case "verifying":
+        return verifyingUrl(base, check.projectId, check.ticketId);
+    }
   }
 
   private async create(

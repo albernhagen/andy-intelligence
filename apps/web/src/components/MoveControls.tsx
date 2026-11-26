@@ -5,15 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { PanelSelect } from "@/components/PanelSelect";
 import { QueryError } from "@/components/Status";
-import { useMoveTicket, useSetUpNext } from "@/lib/queries";
+import { useMoveTicket, useProjects, useSetUpNext } from "@/lib/queries";
 import { STAGE_LABELS, moveOptions } from "@/lib/tickets";
 
 /**
  * The move a ticket would normally make next: the one-step forward move, or reopening a
  * cancelled ticket. Null on Done, where nothing moves forward.
  */
-export function nextMove(stage: Stage): Stage | null {
-  const { allowed } = moveOptions(stage);
+export function nextMove(stage: Stage, deploys = true): Stage | null {
+  const { allowed } = moveOptions(stage, deploys);
   return allowed.find((s) => isForwardMove(stage, s)) ?? allowed[0] ?? null;
 }
 
@@ -27,8 +27,11 @@ export function MoveControls({ ticket, aside }: { ticket: Ticket; aside?: ReactN
   const move = useMoveTicket({ projectId: ticket.projectId, ticketId: ticket.id });
   const upNext = useSetUpNext(ticket.projectId);
   const inUpNext = ticket.upNextRank !== null;
-  const { allowed, forced } = moveOptions(ticket.stage);
-  const next = nextMove(ticket.stage);
+  // AI-181: Verifying is a normal move only where the project deploys.
+  const project = useProjects().data?.find((p) => p.id === ticket.projectId);
+  const deploys = (project?.deployKind ?? "none") !== "none";
+  const { allowed, forced } = moveOptions(ticket.stage, deploys);
+  const next = nextMove(ticket.stage, deploys);
   const others = allowed.filter((s) => s !== next);
   const [more, setMore] = useState(false);
   const [forcing, setForcing] = useState(false);

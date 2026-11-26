@@ -68,6 +68,23 @@ describe("CloudTasksWatchdogQueue", () => {
     ]);
   });
 
+  it("GivenAVerifyingCheck_WhenScheduled_ThenANamedTaskPostsToTheTicketsCheck", async () => {
+    const client = new FakeCloudTasks();
+    await make(client).scheduleCheck({
+      kind: "verifying",
+      projectId: "ai",
+      ticketId: "t1",
+      at: "2026-11-04T12:45:00.000Z",
+    });
+    const seconds = Date.parse("2026-11-04T12:45:00.000Z") / 1000;
+    expect(client.tasks.map((t) => [t.task.name, t.task.httpRequest.url])).toEqual([
+      [
+        `${QUEUE}/tasks/verifying-t1-${seconds}`,
+        `${PUBLIC_URL}/projects/ai/tickets/t1/verifying-check`,
+      ],
+    ]);
+  });
+
   it("GivenCloudTasksFails_WhenScheduled_ThenTheErrorSurfaces", async () => {
     const queue = make({
       createTask: async () => {

@@ -271,7 +271,8 @@ export function milestoneStatus(tickets: readonly Ticket[]): WhatsNewMilestone[]
       needsYou: 0,
     };
     if (t.stage === "done") row.done++;
-    else if (t.stage === "ready_for_review") row.inReview++;
+    // AI-181: Verifying (merged, not yet verified) counts as in review, as on the roadmap.
+    else if (t.stage === "ready_for_review" || t.stage === "verifying") row.inReview++;
     else if (t.stage === "in_progress") row.inProgress++;
     else row.notStarted++;
     if (t.needsAttention && !t.archived && t.stage !== "done") row.needsYou++;

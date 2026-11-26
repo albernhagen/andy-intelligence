@@ -81,7 +81,11 @@ async function setup() {
     const outcomes: string[] = [];
     for (const check of queue.takeDue(now)) {
       const path =
-        check.kind === "lease" ? `/runs/${check.runId}/lease` : `/runners/${check.runnerId}/away`;
+        check.kind === "lease"
+          ? `/runs/${check.runId}/lease`
+          : check.kind === "runner_away"
+            ? `/runners/${check.runnerId}/away`
+            : `/projects/${check.projectId}/tickets/${check.ticketId}/verifying-check`;
       outcomes.push(
         `${check.kind}:${(await json<{ outcome: string }>(send(path, "POST", undefined, INVOKER))).outcome}`,
       );
