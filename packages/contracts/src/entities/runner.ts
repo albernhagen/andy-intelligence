@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Id, RunStep, Timestamp } from "./common";
 import { BaseBranch } from "./build";
 import { PACKAGE_LIMITS, PlanPackage } from "./packages";
+import { VerifyTarget } from "./verify";
 
 /**
  * The local executor (ADR-0089): a runner program on Andy's Mac polls the control plane over plain
@@ -195,6 +196,8 @@ export const RunContextResponse = z.object({
    * installs before the agent (ADR-0156). Absent or empty: nothing to add.
    */
   packages: z.array(PlanPackage).max(PACKAGE_LIMITS.maxPackages).optional(),
+  /** A verify task's deployed URL and commit (AI-188: M6.7); null or absent for other steps. */
+  verify: VerifyTarget.nullable().optional(),
 });
 export type RunContextResponse = z.infer<typeof RunContextResponse>;
 

@@ -63,8 +63,8 @@ const listing = (paths: string[], complete = true): Listing<ChangedFile> => ({
 });
 
 describe("VERIFYING_SWITCH", () => {
-  it("GivenTheShippedCode_WhenRead_ThenTheSwitchIsOffUntilTheVerifyTaskShips", () => {
-    expect(VERIFYING_SWITCH).toBe(false);
+  it("GivenTheShippedCode_WhenRead_ThenTheSwitchIsOnSinceTheVerifyTaskShipped", () => {
+    expect(VERIFYING_SWITCH).toBe(true);
   });
 });
 
@@ -145,10 +145,10 @@ describe("Verifying on merge (AI-181)", () => {
     expect(listChangedFiles).not.toHaveBeenCalled();
   });
 
-  it("GivenTheDefaultOptions_WhenAPullRequestMerges_ThenDoneBecauseTheSwitchShipsOff", async () => {
+  it("GivenTheDefaultOptions_WhenAPullRequestMerges_ThenVerifyingBecauseTheSwitchShipsOn", async () => {
     const t = await ticketAt("ready_for_review");
     await new PullRequestTickets(service, tracker).apply(merged, deploying());
-    expect((await reload(t)).stage).toBe("done");
+    expect((await reload(t)).stage).toBe("verifying");
   });
 
   it("GivenTheSwitchOn_WhenACodePullRequestMergesInADeployingProject_ThenVerifyingAndACheckQueued", async () => {

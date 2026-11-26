@@ -27,6 +27,7 @@ const dep = (over: Partial<Deployment>): Deployment => ({
   url: null,
   request: null,
   release: null,
+  verification: null,
   ...over,
 });
 

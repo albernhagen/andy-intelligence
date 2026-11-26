@@ -106,7 +106,7 @@ export class PullRequestTickets {
     await this.tracker.linkPullRequest(
       ticket.projectId,
       ticket.id,
-      { number: pr.number, url: pr.url, state: pr.state },
+      { number: pr.number, url: pr.url, state: pr.state, mergeSha: pr.mergeSha ?? null },
       "system",
     );
     const reason = `PR #${pr.number} ${outcome}: ${pr.url}`;

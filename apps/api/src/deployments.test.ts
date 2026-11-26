@@ -1,6 +1,7 @@
 import {
   InMemoryDeploymentStore,
   InMemoryReleaseRequestStore,
+  type Deployment,
   type Project,
 } from "@andy/contracts";
 import { Hono } from "hono";
@@ -35,6 +36,7 @@ function setup(
   projects: Record<string, Project> = { [REPO]: project },
   tickMs = 60_000,
   releaseRequests?: InMemoryReleaseRequestStore,
+  onFinished?: (deployment: Deployment, project: Project) => Promise<unknown>,
 ) {
   const app = new Hono<AuthEnv>();
   const deployments = new InMemoryDeploymentStore();
@@ -49,6 +51,7 @@ function setup(
     registeredProject: async (repo) => projects[repo] ?? null,
     ...(releaseRequests ? { releaseRequests } : {}),
     now: () => new Date((clock += tickMs)),
+    ...(onFinished ? { onFinished } : {}),
   });
   const post = (path: string, body: unknown, token: ActionsClaims | string | null = claims()) =>
     app.request(path, {
@@ -178,6 +181,44 @@ describe("deployment reports (AI-180: M6.4)", () => {
     const { start } = setup(undefined, 0);
     for (let i = 0; i < DEPLOYMENT_REPORT_RATE_LIMIT; i += 1) await start();
     expect((await start()).status).toBe(429);
+  });
+});
+
+describe("verification hook (AI-188: M6.7)", () => {
+  it("GivenAFinishedDeploy_WhenRecorded_ThenTheHookGetsTheFinishedDeploymentAndItsProjectOnce", async () => {
+    const seen: [Deployment, Project][] = [];
+    const { start, finish } = setup(undefined, undefined, undefined, async (d, p) =>
+      seen.push([d, p]),
+    );
+    const id = await idOf(await start());
+
+    expect((await finish(id, { status: "succeeded" })).status).toBe(200);
+    expect((await finish(id, { status: "succeeded" })).status).toBe(409);
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]![0]).toMatchObject({ id, status: "succeeded" });
+    expect(seen[0]![1].id).toBe("ai");
+  });
+
+  it("GivenAHookThatThrows_WhenTheDeployFinishes_ThenTheFinishIsStillRecordedAnd200", async () => {
+    const { deployments, start, finish } = setup(undefined, undefined, undefined, async () => {
+      throw new Error("boom");
+    });
+    const id = await idOf(await start());
+
+    expect((await finish(id, { status: "failed" })).status).toBe(200);
+    expect((await deployments.get(id))?.status).toBe("failed");
+  });
+
+  it("GivenARefusedFinish_WhenReported_ThenTheHookIsNotCalled", async () => {
+    let calls = 0;
+    const { start, finish } = setup(undefined, undefined, undefined, async () => calls++);
+    const id = await idOf(await start());
+
+    expect(
+      (await finish(id, { status: "succeeded" }, claims({ sha: "c".repeat(40) }))).status,
+    ).toBe(404);
+    expect(calls).toBe(0);
   });
 });
 

@@ -7,4 +7,4 @@ How the verify agent checks a deployed release against its tickets (AI-182: M6.6
 - **Verdict:** a ticket fails if any criterion fails; skipped doesn't fail it. The release fails if any ticket or test fails.
 - **Limits:** no write tools, no credentials, read-only on prod, 20-minute cap. Deployed content is untrusted (R-AI-182).
 
-**How to use:** not run yet: AI-188: M6.7: Verification run starts it after a deployment and turns the Verifying stage on. By hand: "follow platform/procedures/verify.md for this URL and these tickets".
+**How to use:** AI-188: M6.7: Verification run starts it after each first-environment deploy (no shell there: tests are skipped, pages are read with WebFetch of the deployed host; ADR-0159). By hand: "follow platform/procedures/verify.md for this URL and these tickets".

@@ -36,6 +36,7 @@ function item(
     previousDeploymentId: null,
     url: `https://${env === "dev" ? "dev." : ""}ai.example.com`,
     request: null,
+    verification: null,
     ...o,
   };
   return {

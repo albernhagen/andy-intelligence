@@ -12,7 +12,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 | **Ready** | Waits for dependencies, a worker that is an agent (ADR-0082), quota/budget | Dispatcher starts a run |
 | **In progress** | Build task: plans read-only, then implements (ADR-0050; plan approval below). One automatic retry, then flags Needs-you | PR opened with structured run summary (plan, deviations, verification output) |
 | **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged: → Done, or → Verifying (below) |
-| **Verifying** | Projects whose `deployKind` isn't `none` (ADR-0114, AI-181): the merge deployed; the verify task (AI-188) checks it by `platform/procedures/verify.md`; only a failed criterion or test fails it, skipped ones don't (Andy, 2026-11-26). Merges changing only `docs/**`, `infra/**`, `*.md` skip it. Off until AI-188 turns on `VERIFYING_SWITCH` | Verified → Done; failed → In progress + Needs-you. Over 2 hours → Needs-you |
+| **Verifying** | Projects whose `deployKind` isn't `none` (ADR-0114, AI-181): the merge deployed; the verify task (AI-188, ADR-0159) checks it by `platform/procedures/verify.md`; only a failed criterion or test fails it, skipped ones don't (Andy, 2026-11-26). Merges changing only `docs/**`, `infra/**`, `*.md` skip it. `VERIFYING_SWITCH` on since AI-188 | Verified → Done; failed → In progress + Needs-you. Over 2 hours → Needs-you |
 | **Done** | Summary included in rollups | — |
 | **Cancelled** | Andy cancelled it; runs stop, questions withdrawn | Andy reopens it to Backlog |
 
@@ -57,6 +57,6 @@ Detail: [`review-gate.md`](review-gate.md).
 - **Deploy kind** (ADR-0114), a project setting: `none` (default: no deploy, merge → Done) or `cloud-run`; other kinds (a static site) are later tickets.
 - **Release contract** every kind meets: `deploy.yml` (push to `main` → first environment) and `release.yml` (`workflow_dispatch`: `action`, `environment`, `digest`, `revision`, `request`), each reporting its Deployment (environment, sha, digest, revision, url, status) over the Actions OIDC callback. Promote and rollback (owner, UI or MCP) dispatch it; the API holds no cloud credential.
 - `cloud-run` kind: `environments` `prod-only` (`<app>-prod` + PR previews; default) or `dev-and-prod`; builds once and promotes the **same image digest** with the safe-deploy action; rollback pins an earlier revision.
-- On merge: deploy to the first environment → tests + verification agent → Verifying exits to Done or rework.
+- On merge: deploy to the first environment → one `verify` agent task for the Verifying tickets the deployed commit contains (AI-188, ADR-0159: read-only, WebFetch of the deployed host only; held at caps, quota or pause and retried when a task ends) → pass: Done; fail: In progress + Needs-you with the evidence. A failed deploy sends its tickets back the same way.
 - Deploys are recorded (DORA); release notes from merged PRs' notes.
 - Agent write policy: dev writes per project policy; prod read-only.

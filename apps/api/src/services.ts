@@ -42,6 +42,9 @@ import {
   ProjectReadCache,
   TicketSnapshots,
   VerifyingChecks,
+  VerificationService,
+  VerifyResults,
+  type VerifyTickets,
   ProjectTickets,
   RoutingSettings,
   GlobalSpendCaps,
@@ -110,6 +113,8 @@ export interface Services extends Required<ToolServices> {
   snapshots: TicketSnapshots | null;
   /** The 2-hour Verifying check (AI-181), delivered by the watchdog queue. */
   verifying: VerifyingChecks;
+  /** AI-188: starts verify tasks on deploys and retries waiting ones; null without deployments. */
+  verification: VerificationService | null;
 }
 
 /** A module's routes: registered from its own file and listed once in `public-routes.ts` or `api-routes.ts`. */
@@ -241,6 +246,15 @@ export function createServices(raw: AppDeps): Services {
     deps.digestSummaries && deps.releaseNotes
       ? new DigestSummaryResults(deps.digestSummaries, now)
       : null;
+  // AI-188: verify verdicts move their tickets through the ticket service, built further down.
+  const verifyTickets: VerifyTickets = {
+    move: (projectId, ticketId, to, actor, opts): Promise<Ticket> =>
+      service.move(projectId, ticketId, to, actor, opts),
+    flag: (projectId, ticketId, actor): Promise<Ticket> => service.flag(projectId, ticketId, actor),
+  };
+  const verifyResults: VerifyResults | null = deps.deployments
+    ? new VerifyResults(deps.tracker, verifyTickets, deps.deployments, now)
+    : null;
   // AI-257: spend notices (80% of a cap, a stop) go to the Needs-you email when it is on, else
   // to the logs; their dedupe and daily cap live in the stored notice ledger.
   const spendAlerts = deps.spendNotices
@@ -306,6 +320,7 @@ export function createServices(raw: AppDeps): Services {
     summaryResults,
     epicMode,
     epicTasks,
+    verifyResults,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now, deps.milestones ?? null);
   // AI-124/AI-125: when a launch ends, its morning PR opens (or an empty epic branch goes),
@@ -387,6 +402,8 @@ export function createServices(raw: AppDeps): Services {
     return value;
   };
   const runEnded = async (projectId: string) => {
+    // AI-188: a freed slot may let a waiting verification start; it never throws.
+    if (verification) await verification.retryWaiting();
     await wakeAfterRunEnd({
       freedBy: projectId,
       listProjects: () => deps.tracker.listProjects(),
@@ -419,6 +436,20 @@ export function createServices(raw: AppDeps): Services {
     tickets,
     (ticket) => verifying.entered(ticket),
   );
+  // AI-188: a deploy to a project's first environment starts its verify task (ADR-0159).
+  const verification =
+    deps.deployments && connection
+      ? new VerificationService({
+          tracker: deps.tracker,
+          deployments: deps.deployments,
+          codeHost: new ConnectedCodeHost(connection),
+          starter: runs,
+          tickets: service,
+          quotaLevels: async (projectId) =>
+            subscriptionQuotaLevels(deps.quota ?? null, await runs.routingOf(projectId), now()),
+          now,
+        })
+      : null;
   const claims = runners
     ? new LocalClaims(
         deps.tracker,
@@ -614,6 +645,7 @@ export function createServices(raw: AppDeps): Services {
     direct,
     snapshots,
     verifying,
+    verification,
     tickets,
     setup: new SetupChecklistReader(
       deps.tracker,
