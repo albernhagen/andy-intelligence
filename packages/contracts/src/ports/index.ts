@@ -449,6 +449,7 @@ export const RunPatch = Run.pick({
   plan: true,
   branch: true,
   toolingFiles: true,
+  neededPackages: true,
   pushGrantedAt: true,
   planDecision: true,
   outcome: true,

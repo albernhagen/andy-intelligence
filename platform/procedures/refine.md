@@ -18,7 +18,7 @@ Procedure for the refine step. Sources: [`refine-sources.md`](refine-sources.md)
 3. **Acceptance criteria**, testable, covering failure cases (errors, limits, retries). Feature: EARS form ("WHEN … the API shall …"). Bug: the expected behaviour. Chore: a "done when" checklist. Spike: what its findings answer.
 4. **Size** S, M or L with a one-line reason that fits the files you expect to change (it picks the build model). Spike: the timebox.
 5. **Scope**: `outOfScope` (must not change) and `touches` (areas or path globs it edits).
-6. **Dependencies**: tickets or changes needed first.
+6. **Dependencies**: tickets or changes needed first. A new npm package isn't one: the plan names it and a trusted step installs it before the build (AI-386); mention it in the body if you know the ticket needs one.
 7. **Assumptions**: anything you would have to guess.
 8. **Risk and confidence**, by the rubric below, each with a one-line reason. They never block Ready.
 

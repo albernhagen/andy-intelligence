@@ -47,8 +47,10 @@ export const buildOutput = {
     tests: ["GivenTickets_WhenTheBoardOpens_ThenTheyShow"],
     riskiestStep: "Ordering by rank",
     rejectedAlternatives: ["A table: the board is the design"],
+    packages: [],
   },
   deviations: [],
   verification: [{ command: "pnpm test", passed: true, output: "12 passed" }],
   failingTestFiles: [],
+  neededPackages: [],
 };

@@ -25,6 +25,7 @@ import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
 import { runLocalFields } from "./runner";
 import { runBaseFields } from "./build";
+import { PACKAGE_LIMITS, PackageName, PlanPackages } from "./packages";
 import { runIdeaFields } from "./ideate";
 import { runRouteFields } from "./routing";
 import { ProjectSpendCaps } from "./spend-caps";
@@ -476,6 +477,8 @@ export const BUILD_LIMITS = {
   maxChecks: 10,
   command: 200,
   checkOutput: 2000,
+  /** Packages one ticket's plan may name for the trusted install step (AI-386, ADR-0156). */
+  maxPackages: PACKAGE_LIMITS.maxPackages,
 } as const;
 
 export const BuildPlan = z.strictObject({
@@ -484,6 +487,8 @@ export const BuildPlan = z.strictObject({
   tests: z.array(capped(BUILD_LIMITS.item)).max(BUILD_LIMITS.maxTests),
   riskiestStep: capped(BUILD_LIMITS.item),
   rejectedAlternatives: z.array(capped(BUILD_LIMITS.item)).max(BUILD_LIMITS.maxAlternatives),
+  /** AI-386: packages to install before the build; absent on plans written before it. */
+  packages: PlanPackages.default([]),
 });
 export type BuildPlan = z.infer<typeof BuildPlan>;
 
@@ -502,6 +507,11 @@ export const BuildOutput = z.strictObject({
   verification: z.array(BuildCheck).min(1).max(BUILD_LIMITS.maxChecks),
   /** Bug tickets: the test files that fail before the fix; committed first (ADR-0063). */
   failingTestFiles: z.array(capped(BUILD_LIMITS.path)).max(BUILD_LIMITS.maxTests),
+  /**
+   * AI-386: packages the build needed that its plan didn't name; the build stops instead of
+   * working around them, and the next start writes a new plan that names them.
+   */
+  neededPackages: z.array(PackageName).max(PACKAGE_LIMITS.maxPackages).default([]),
 });
 export type BuildOutput = z.infer<typeof BuildOutput>;
 
@@ -658,6 +668,11 @@ export const Run = z.object({
   branch: z.string().max(200).nullable().default(null),
   /** Tooling or dependency files the build's change touches, flagged on its PR (ADR-0063). */
   toolingFiles: z.array(z.string().max(300)).max(50).default([]),
+  /**
+   * AI-386: packages a build needed that its approved plan didn't name; makes that plan stale,
+   * and the next plan run's prompt lists them.
+   */
+  neededPackages: z.array(PackageName).max(PACKAGE_LIMITS.maxPackages).default([]),
   /** When the run's one repo token was issued to its publish job; null until then. */
   pushGrantedAt: Timestamp.nullable().default(null),
   // Added in M1.8a: Plan approval (ADR-0050).

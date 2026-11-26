@@ -331,6 +331,15 @@ export function pullRequest({
       "**Rejected alternatives**",
       list(p.rejectedAlternatives),
       "",
+      // AI-386: added before the build by the trusted `deps` job (ADR-0156).
+      "**Packages added before the build** (newest version at least 7 days old, install scripts off)",
+      list(
+        (Array.isArray(p.packages) ? p.packages : []).map(
+          (x) =>
+            `\`${String(x?.name)}\` (${String(x?.kind)}, ${String(x?.workspace)}): ${String(x?.why)}`,
+        ),
+      ),
+      "",
       "## Deviations from the plan",
       "",
       list(output.deviations),
