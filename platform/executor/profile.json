@@ -74,6 +74,10 @@
       "allow": ["Read", "Glob", "Grep"],
       "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
     },
+    "plan-epic": {
+      "allow": ["Read", "Glob", "Grep"],
+      "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
+    },
     "summarize": {
       "$comment": "AI-323, ADR-0137: the digest summary. Its whole input is in the prompt, so no tool at all, not even Read.",
       "allow": [],
