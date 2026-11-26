@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { WorkTrackerError } from "@andy/contracts";
 import { STAGES } from "@/lib/tickets";
 import { DROP_ANIMATION } from "@/components/DragPreview";
+import { dragCopySource } from "@/test/drag-layout";
 import { readyStory, renderApp } from "@/test/harness";
 
 /**
@@ -17,11 +18,8 @@ const CARD_STEP = 60;
 const LANES = STAGES.filter((s) => s !== "verifying");
 
 function fakeRect(el: Element): DOMRect {
-  // The dragged copy (AI-396) starts where its card is; dnd-kit moves it by the drag's transform.
-  if (el.closest("[data-drag-overlay]") || el.querySelector(":scope > [data-drag-overlay]")) {
-    const source = document.querySelector("[data-dragging]");
-    return source ? fakeRect(source) : new DOMRect(0, 0, 0, 0);
-  }
+  const source = dragCopySource(el);
+  if (source) return fakeRect(source);
   const lane = el.closest("[data-stage]");
   const i = lane ? LANES.indexOf(lane.getAttribute("data-stage") as never) : -1;
   if (i < 0) return new DOMRect(0, 0, 0, 0);
