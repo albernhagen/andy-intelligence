@@ -25,6 +25,7 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - Merge queue per repo (AI-110): the gate's and `merge_pr`'s merges go one at a time per repo, oldest clean first; the next PR is synced with `main` and re-checked before it merges; a failed sync goes to Needs-you. While `main` is red (a required check failed on its tip), merges wait (`main_red`) and resume when it is green; over 30 minutes, one Needs-you note (AI-382).
 - Needs-you lists "Waiting for your merge": clean PRs the merge mode leaves for Andy, with why and the release note (AI-218).
 - Dashboards chart delivery and cost per week (AI-117), and a project's DORA metrics over 30 or 90 days from its production deployment records (AI-200; lead time not measured until commit times are recorded).
+- Verifying stage (AI-181): between Ready for review and Done for projects that deploy; a merge goes there unless it changed only docs or `infra/`; over 2 hours → Needs-you. Off until the verify task (AI-188) turns it on.
 - Needs-you email (AI-77): each ticket that needs Andy, batched per 10 minutes, 20 a day; off until configured (runbook `email-notifications.md`).
 - Config proposals (inbox, MCP): a finding kind on 3+ PRs becomes a pending `AGENTS.md` change, never applied; idle until findings are stored (ADR-0097).
 - A weekly model scout (AI-268) proposes a tier change from OpenRouter's public models list, at most one a week, never applied; off until its Terraform is applied.

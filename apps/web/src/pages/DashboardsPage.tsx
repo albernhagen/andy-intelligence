@@ -57,6 +57,12 @@ const STAGES: { stage: Stage; label: string; color: string }[] = [
   { stage: "ready", label: "Ready", color: "var(--primary)" },
   { stage: "in_progress", label: "In progress", color: "var(--running)" },
   { stage: "ready_for_review", label: "Ready for review", color: "var(--attention)" },
+  // AI-181: between review and Done, so a mix of their two tokens.
+  {
+    stage: "verifying",
+    label: "Verifying",
+    color: "color-mix(in oklch, var(--attention), var(--success))",
+  },
   { stage: "done", label: "Done", color: "var(--success)" },
   { stage: "cancelled", label: "Cancelled", color: "var(--border)" },
 ];

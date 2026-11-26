@@ -32,6 +32,7 @@ describe("groupByStage", () => {
       "ready",
       "in_progress",
       "ready_for_review",
+      "verifying",
       "done",
       "cancelled",
     ]);
@@ -45,15 +46,19 @@ describe("moveOptions", () => {
   it("GivenReady_WhenListingMoves_ThenDomainMovesAreAllowedAndEveryOtherStageCanBeForced", () => {
     expect(moveOptions("ready")).toEqual({
       allowed: ["in_progress", "backlog"],
-      forced: ["backlog", "in_progress", "ready_for_review", "done"],
+      forced: ["backlog", "in_progress", "ready_for_review", "verifying", "done"],
     });
+  });
+
+  it("GivenVerifying_WhenListingMoves_ThenOnlyDoneAndInProgressAreAllowed", () => {
+    expect(moveOptions("verifying").allowed).toEqual(["done", "in_progress"]);
   });
 
   it("GivenDone_WhenListingMoves_ThenOnlyForcedMovesExist", () => {
     const { allowed, forced } = moveOptions("done");
     expect(allowed).toEqual([]);
     expect(forced).not.toContain("done");
-    expect(forced).toHaveLength(4);
+    expect(forced).toHaveLength(5);
   });
 
   it("GivenCancelled_WhenListingMoves_ThenReopenToBacklogIsAllowedAndCancelledIsNeverForced", () => {

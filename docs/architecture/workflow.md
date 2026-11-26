@@ -11,11 +11,12 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 | **Backlog** | Refinement agent enriches; splits epics into child tickets with dependencies; sizes; assigns tier; **asks Andy questions** | **Definition of Ready (DoR)** met |
 | **Ready** | Waits for dependencies, a worker that is an agent (ADR-0082), quota/budget | Dispatcher starts a run |
 | **In progress** | Build task: plans read-only, then implements (ADR-0050; plan approval below). One automatic retry, then flags Needs-you | PR opened with structured run summary (plan, deviations, verification output) |
-| **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged. M6 adds **Verifying** after it for every project that deploys, AI included (ADR-0069, ADR-0114) |
+| **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged: → Done, or → Verifying (below) |
+| **Verifying** | Projects whose `deployKind` isn't `none` (ADR-0114, AI-181): the merge deployed; the verify task (AI-188) checks it. Merges changing only `docs/**`, `infra/**`, `*.md` skip it. Off until AI-188 turns on `VERIFYING_SWITCH` | Verified → Done; failed → In progress + Needs-you. Over 2 hours → Needs-you |
 | **Done** | Summary included in rollups | — |
 | **Cancelled** | Andy cancelled it; runs stop, questions withdrawn | Andy reopens it to Backlog |
 
-**Stage moves** (`packages/domain`): forward one step, plus back: re-refine (ready → backlog), retry (in progress → ready), rework (ready for review → in progress). Backlog → ready requires the DoR. Only the owner forces (reason optional, ADR-0057; history marks it), cancels (not a move), reopens, archives (policy `can`, AI-19); MCP `move_ticket` steps forward. **Archived** (Done/Cancelled only) hides it from board, inbox, counts.
+**Stage moves** (`packages/domain`): forward one step, plus back: re-refine (ready → backlog), retry (in progress → ready), rework (ready for review or verifying → in progress). Backlog → ready requires the DoR. Only the owner forces (reason optional, ADR-0057; history marks it), cancels (not a move), reopens, archives (policy `can`, AI-19); MCP `move_ticket` steps forward. **Archived** (Done/Cancelled only) hides it from board, inbox, counts.
 
 As built (PR events, build dispatch, plan approval): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 

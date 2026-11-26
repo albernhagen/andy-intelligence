@@ -16,14 +16,16 @@ export const Timestamp = z.iso.datetime({ offset: true });
 
 /**
  * Workflow stages (ARCHITECTURE §4.1). Needs-you is a flag, not a stage. Done and Cancelled are
- * terminal; only Andy cancels, and a cancelled ticket reopens to Backlog. No stage between Ready
- * for review and Done until M6: Dev → prod releases adds one (ADR-0069).
+ * terminal; only Andy cancels, and a cancelled ticket reopens to Backlog. Verifying (AI-181,
+ * ADR-0114) sits between Ready for review and Done for projects that deploy; it is dormant until
+ * the verify task ships (`VERIFYING_SWITCH` in @andy/domain). Added value: no SCHEMA_VERSION bump.
  */
 export const Stage = z.enum([
   "backlog",
   "ready",
   "in_progress",
   "ready_for_review",
+  "verifying",
   "done",
   "cancelled",
 ]);

@@ -329,6 +329,7 @@ describe("status", () => {
             ready: 0,
             in_progress: 0,
             ready_for_review: 0,
+            verifying: 0,
             done: 0,
             cancelled: 0,
           },
