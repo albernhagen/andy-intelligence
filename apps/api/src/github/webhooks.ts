@@ -117,7 +117,8 @@ export function registerGitHubWebhook(app: Hono<AuthEnv>, deps: WebhookDeps): vo
   const now = deps.now ?? (() => new Date());
   const limiter = new FixedWindowLimiter(WEBHOOK_RATE_LIMIT, 60_000, () => now().getTime());
   const repos = new RepoIndex(deps.tracker, () => now().getTime());
-  const prTickets = new PullRequestTickets(deps.tickets, deps.tracker);
+  // AI-181: the Verifying switch is `VERIFYING_SWITCH` (off); files only read once it's on.
+  const prTickets = new PullRequestTickets(deps.tickets, deps.tracker, { files: deps.codeHost });
   const epicMerges = new EpicMerges(deps.nightLaunches ?? null, deps.runs, deps.epicMode ?? null);
   const gate = new PullRequestGate(
     deps.codeHost,

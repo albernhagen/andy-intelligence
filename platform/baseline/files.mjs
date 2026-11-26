@@ -41,20 +41,38 @@ export function mergeLines(existing, required) {
   return `${base}${header}# Project baseline (andy-intelligence)\n${missing.join("\n")}\n`;
 }
 
+/** The project setting `deployKind` (ADR-0114) values; anything else is refused. */
+export const DEPLOY_KINDS = ["none", "cloud-run"];
+
+/** Throws unless `kind` is a known deploy kind; returns it. */
+export function checkDeployKind(kind) {
+  if (!DEPLOY_KINDS.includes(kind)) {
+    throw new Error(`deploy kind must be one of ${DEPLOY_KINDS.join(", ")}, got ${String(kind)}`);
+  }
+  return kind;
+}
+
 /**
- * Renders the manifest. `read(from)` returns a source file's text at the pinned commit.
+ * Renders the manifest. `read(from)` returns a source file's text at the pinned commit. An entry
+ * with `deployKind` is rendered only for a project of that kind (ADR-0114: a `none` project gets
+ * no deploy or release workflow); `deployKind` defaults to `none`.
  * Returns { managed, lines, seed, starter }, each a list of { path, content } (lines: { path, lines }).
  */
-export function renderFiles(manifest, read, { sha, ref }) {
+export function renderFiles(manifest, read, { sha, ref, deployKind = "none" }) {
   const source = manifest.source;
+  checkDeployKind(deployKind);
+  const forKind = (entries) => entries.filter((f) => !f.deployKind || f.deployKind === deployKind);
   return {
-    managed: manifest.managed.map((f) => ({
+    managed: forKind(manifest.managed).map((f) => ({
       path: f.path,
       content: f.pin ? pinActions(read(f.from), { source, sha, ref }) : read(f.from),
     })),
-    lines: manifest.lines.map((f) => ({ path: f.path, lines: requiredLines(read(f.from)) })),
-    seed: manifest.seed.map((f) => ({ path: f.path, content: read(f.from) })),
-    starter: manifest.starter.map((f) => ({ path: f.path, content: read(f.from) })),
+    lines: forKind(manifest.lines).map((f) => ({
+      path: f.path,
+      lines: requiredLines(read(f.from)),
+    })),
+    seed: forKind(manifest.seed).map((f) => ({ path: f.path, content: read(f.from) })),
+    starter: forKind(manifest.starter).map((f) => ({ path: f.path, content: read(f.from) })),
   };
 }
 
@@ -66,9 +84,18 @@ export function seedsToWrite(seed, exists) {
   return seed.filter((f) => !exists(f.path));
 }
 
-/** The `.andy/baseline.json` record written into a managed repo. */
-export function baselineRecord({ source, sha, ref, date }) {
-  return `${JSON.stringify({ source, version: sha, ref, updated: date }, null, 2)}\n`;
+/**
+ * The `.andy/baseline.json` record written into a managed repo. `deployKind` records which kind's
+ * files were rendered, so `check` and a later `files` render the same set.
+ */
+export function baselineRecord({ source, sha, ref, date, deployKind = "none" }) {
+  const record = { source, version: sha, ref, updated: date, deployKind };
+  return `${JSON.stringify(record, null, 2)}\n`;
+}
+
+/** The deploy kind a record names; `none` for records written before the field. */
+export function recordedDeployKind(record) {
+  return checkDeployKind(record?.deployKind ?? "none");
 }
 
 /**

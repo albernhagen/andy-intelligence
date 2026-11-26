@@ -12,9 +12,12 @@ import { readyStory, renderApp } from "@/test/harness";
 const COLUMN_WIDTH = 200;
 const CARD_STEP = 60;
 
+/** The lanes a project that doesn't deploy shows: no Verifying lane (AI-181). */
+const LANES = STAGES.filter((s) => s !== "verifying");
+
 function fakeRect(el: Element): DOMRect {
   const lane = el.closest("[data-stage]");
-  const i = lane ? STAGES.indexOf(lane.getAttribute("data-stage") as never) : -1;
+  const i = lane ? LANES.indexOf(lane.getAttribute("data-stage") as never) : -1;
   if (i < 0) return new DOMRect(0, 0, 0, 0);
   if (el.hasAttribute("data-stage")) return new DOMRect(i * COLUMN_WIDTH, 0, COLUMN_WIDTH, 1000);
   const cards = [...lane!.querySelectorAll("[data-ticket]")];
@@ -570,5 +573,26 @@ describe("board grouped by epic", () => {
 
     expect(groupToggle().getAttribute("aria-checked")).toBe("true");
     expect(rowsIn("Backlog")).toContain("epic:none");
+  });
+});
+
+describe("Verifying lane (AI-181)", () => {
+  it("GivenAProjectThatDoesNotDeploy_WhenTheBoardOpens_ThenNoVerifyingLane", async () => {
+    await boardWith({ type: "chore", title: "Spike" });
+
+    expect(screen.queryByRole("region", { name: "Verifying" })).toBeNull();
+  });
+
+  it("GivenAProjectThatDeploys_WhenTheBoardOpens_ThenTheVerifyingLaneShowsWithItsTicket", async () => {
+    const harness = renderApp();
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    await harness.tracker.updateProject("ai", { deployKind: "cloud-run" });
+    const t = await harness.service.create("ai", { type: "chore", title: "Ship" }, "andy");
+    await harness.service.move("ai", t.id, "ready_for_review", "andy", { force: true });
+    await harness.service.move("ai", t.id, "verifying", "andy");
+    await harness.router.navigate({ to: "/p/ai" });
+
+    const lane = await screen.findByRole("region", { name: "Verifying" });
+    expect(await within(lane).findByText(t.key)).toBeTruthy();
   });
 });

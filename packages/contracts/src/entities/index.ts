@@ -1084,6 +1084,23 @@ export const PullRequestCommit = z.object({
 });
 export type PullRequestCommit = z.infer<typeof PullRequestCommit>;
 
+/** How `head` relates to `base`: what a compare of `base...head` reports (AI-169: M6.8). */
+export const CommitRangeStatus = z.enum(["ahead", "identical", "behind", "diverged"]);
+export type CommitRangeStatus = z.infer<typeof CommitRangeStatus>;
+
+/** A commit in a range; `title` is its message's first line, cut to 256 characters. */
+export const RangeCommit = z.object({
+  sha: z.string().regex(/^[0-9a-f]{40}$/),
+  title: z.string().max(256),
+});
+export type RangeCommit = z.infer<typeof RangeCommit>;
+
+/** The commits `head` has that `base` lacks, oldest first, capped (ADR-0028). */
+export interface CommitRange {
+  status: CommitRangeStatus;
+  commits: Listing<RangeCommit>;
+}
+
 /** A capped listing. `complete` false means more exist, so a caller must not assume none match. */
 export interface Listing<T> {
   items: T[];

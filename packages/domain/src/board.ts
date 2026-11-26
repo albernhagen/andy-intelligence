@@ -3,9 +3,11 @@ import {
   compareRanks,
   notFound,
   type BoardTicket,
+  type Project,
   type Run,
   type RunStore,
   type Stage,
+  type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
 
@@ -112,10 +114,24 @@ export interface BoardLane<T extends LaneTicket = BoardTicket> {
 
 /**
  * The board's lanes in workflow order: the Cancelled lane only with `showArchived` (the board's
- * "Show cancelled and archived"). The web board and MCP `board` both use it (AI-296).
+ * "Show cancelled and archived"), the Verifying lane only with `showVerifying`
+ * (`showsVerifyingLane`). The web board and MCP `board` both use it (AI-296).
  */
-export function boardStages(showArchived: boolean): Stage[] {
-  return StageSchema.options.filter((s) => s !== "cancelled" || showArchived);
+export function boardStages(showArchived: boolean, showVerifying = true): Stage[] {
+  return StageSchema.options.filter(
+    (s) => (s !== "cancelled" || showArchived) && (s !== "verifying" || showVerifying),
+  );
+}
+
+/**
+ * Whether the board shows the Verifying lane (AI-181): for a project that deploys (ADR-0114), or
+ * while a ticket is in it (e.g. after `deployKind` went back to `none`), so no card is hidden.
+ */
+export function showsVerifyingLane(
+  project: Pick<Project, "deployKind"> | null | undefined,
+  tickets: readonly Pick<Ticket, "stage">[],
+): boolean {
+  return (project?.deployKind ?? "none") !== "none" || tickets.some((t) => t.stage === "verifying");
 }
 
 /** Whether a ticket shows on the board: archived ones only with `showArchived` (AI-15). */
@@ -130,10 +146,12 @@ export function onBoard(ticket: Pick<BoardTicket, "archived">, showArchived: boo
  */
 export function boardLanes<T extends LaneTicket>(
   tickets: readonly T[],
-  options: { stage?: Stage; showArchived?: boolean } = {},
+  options: { stage?: Stage; showArchived?: boolean; showVerifying?: boolean } = {},
 ): BoardLane<T>[] {
   const showArchived = options.showArchived ?? false;
-  const stages = options.stage ? [options.stage] : boardStages(showArchived);
+  const stages = options.stage
+    ? [options.stage]
+    : boardStages(showArchived, options.showVerifying ?? true);
   return stages.map((stage) => ({
     stage,
     tickets: tickets

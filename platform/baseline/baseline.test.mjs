@@ -2,8 +2,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { configFor, loadConfig, parseArgs, parseGhResponse } from "./baseline.mjs";
-import { pinActions } from "./files.mjs";
+import { configFor, deployKindFor, loadConfig, parseArgs, parseGhResponse } from "./baseline.mjs";
+import { pinActions, renderFiles } from "./files.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const manifest = JSON.parse(
@@ -37,9 +37,81 @@ describe("parseArgs", () => {
     ).toThrow("--branch");
   });
 
+  it("GivenFilesWithADeployKind_WhenParsed_ThenOptions", () => {
+    expect(parseArgs(["files", "a/b", "--ref", "v1", "--deploy-kind", "cloud-run"])).toMatchObject({
+      command: "files",
+      deployKind: "cloud-run",
+    });
+  });
+
+  it("GivenAnUnknownDeployKindOrOneOnCheck_WhenParsed_ThenError", () => {
+    expect(() => parseArgs(["files", "a/b", "--ref", "v1", "--deploy-kind", "static"])).toThrow(
+      "deploy kind must be one of",
+    );
+    expect(() => parseArgs(["check", "a/b", "--deploy-kind", "cloud-run"])).toThrow(
+      "takes no --deploy-kind",
+    );
+  });
+
   it("GivenABadRepoOrSection_WhenParsed_ThenError", () => {
     expect(() => parseArgs(["check", "scratch"])).toThrow("owner/name");
     expect(() => parseArgs(["check", "a/b", "--only", "ruleset,secrets"])).toThrow("secrets");
+  });
+});
+
+describe("deployKindFor", () => {
+  it("GivenAFlag_WhenResolved_ThenTheFlagWinsOverTheRecord", () => {
+    expect(deployKindFor("none", '{"deployKind":"cloud-run"}')).toBe("none");
+  });
+
+  it("GivenNoFlag_WhenResolved_ThenTheRecordElseNone", () => {
+    expect(deployKindFor(undefined, '{"deployKind":"cloud-run"}')).toBe("cloud-run");
+    expect(deployKindFor(undefined, '{"version":"abc"}')).toBe("none");
+    expect(deployKindFor(undefined, null)).toBe("none");
+  });
+
+  it("GivenARecordThatIsNotJson_WhenResolved_ThenAsksForTheFlag", () => {
+    expect(() => deployKindFor(undefined, "nope")).toThrow("pass --deploy-kind");
+  });
+});
+
+/**
+ * AI-206: M6.17: deploy.yml and release.yml are written only for a `cloud-run` project (ADR-0114),
+ * with every andy-intelligence action pinned by SHA.
+ */
+describe("deploy caller in the baseline", () => {
+  const SHA = "f".repeat(40);
+  const DEPLOY_FILES = [".github/workflows/deploy.yml", ".github/workflows/release.yml"];
+  const render = (deployKind) =>
+    renderFiles(manifest, read, { sha: SHA, ref: "v1.0.0", deployKind }).managed;
+
+  it("GivenACloudRunProject_WhenRendered_ThenDeployAndReleaseArePinnedBySha", () => {
+    const files = render("cloud-run").filter((f) => DEPLOY_FILES.includes(f.path));
+    expect(files.map((f) => f.path)).toEqual(DEPLOY_FILES);
+    for (const f of files) {
+      const uses = [...f.content.matchAll(/uses:\s+(\S+)/g)].map((m) => m[1]);
+      expect(uses.length, f.path).toBeGreaterThan(0);
+      for (const u of uses) expect(u, f.path).toMatch(/@[0-9a-f]{40}$/);
+      expect(f.content).toContain(
+        `${manifest.source}/platform/actions/cloud-run-safe-deploy@${SHA}`,
+      );
+      expect(f.content).toContain(
+        `${manifest.source}/platform/actions/cloud-run-caller-config@${SHA}`,
+      );
+    }
+  });
+
+  it("GivenADeployKindNoneProject_WhenRendered_ThenNeitherDeployNorRelease", () => {
+    const paths = render("none").map((f) => f.path);
+    for (const p of DEPLOY_FILES) expect(paths).not.toContain(p);
+  });
+
+  it("GivenTheManifest_WhenRead_ThenOnlyTheDeployFilesNeedAKind", () => {
+    const kinded = manifest.managed.filter((m) => m.deployKind);
+    expect(kinded.map((m) => [m.path, m.deployKind, m.pin])).toEqual([
+      [".github/workflows/deploy.yml", "cloud-run", true],
+      [".github/workflows/release.yml", "cloud-run", true],
+    ]);
   });
 });
 

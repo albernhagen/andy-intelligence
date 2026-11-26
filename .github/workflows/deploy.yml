@@ -77,6 +77,14 @@ jobs:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
           image: ${{ vars.GCP_IMAGE_REPO }}/control-plane:${{ github.sha }}
+          # The API refuses every host but PUBLIC_URL's, except /health (ADR-0044): elsewhere
+          # /api/me is 404; on the public host it reaches real auth, 401.
+          smoke-checks: |
+            /health 200
+            /api/me 401
+          smoke-checks-other-hosts: |
+            /health 200
+            /api/me 404
 
       - if: always() && steps.report-start.outputs.deployment-id != ''
         uses: ./platform/actions/report-deployment

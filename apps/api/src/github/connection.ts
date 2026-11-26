@@ -138,6 +138,10 @@ export class ConnectedCodeHost implements CodeHost {
     return (await this.connection.codeHost())?.diffDigest(fullName, number) ?? null;
   }
 
+  async listCommitsBetween(fullName: string, base: string, head: string) {
+    return (await this.connection.codeHost())?.listCommitsBetween(fullName, base, head) ?? null;
+  }
+
   async proposeFile(fullName: string, proposal: FileProposal) {
     return (await this.connection.codeHost())?.proposeFile(fullName, proposal) ?? null;
   }

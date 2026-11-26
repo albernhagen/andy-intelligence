@@ -39,6 +39,7 @@ import {
   MorningSteps,
   ProjectReadCache,
   TicketSnapshots,
+  VerifyingChecks,
   ProjectTickets,
   RoutingSettings,
   GlobalSpendCaps,
@@ -104,6 +105,8 @@ export interface Services extends Required<ToolServices> {
   /** Single-call steps on a `direct` route (AI-258); null without a spend ledger. */
   direct: DirectExecutor | null;
   snapshots: TicketSnapshots | null;
+  /** The 2-hour Verifying check (AI-181), delivered by the watchdog queue. */
+  verifying: VerifyingChecks;
 }
 
 /** A module's routes: registered from its own file and listed once in `public-routes.ts` or `api-routes.ts`. */
@@ -399,6 +402,8 @@ export function createServices(raw: AppDeps): Services {
         ),
     });
   };
+  // AI-181: a ticket entering Verifying queues its 2-hour Needs-you check on the watchdog queue.
+  const verifying = new VerifyingChecks(deps.tracker, deps.watchdog?.queue ?? null, now);
   const service = new TicketService(
     deps.tracker,
     runs,
@@ -407,6 +412,7 @@ export function createServices(raw: AppDeps): Services {
     runnerPresence,
     deps.routing ?? null,
     tickets,
+    (ticket) => verifying.entered(ticket),
   );
   const claims = runners
     ? new LocalClaims(
@@ -576,6 +582,7 @@ export function createServices(raw: AppDeps): Services {
     readCache,
     direct,
     snapshots,
+    verifying,
     tickets,
     setup: new SetupChecklistReader(
       deps.tracker,

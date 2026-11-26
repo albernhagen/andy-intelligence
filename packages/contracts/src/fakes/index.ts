@@ -14,6 +14,7 @@ import {
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type CommitRange,
   type PullRequestDetails,
   type ProposedPullRequest,
   type RepoToken,
@@ -606,6 +607,8 @@ export class InMemoryCodeHost implements CodeHost {
   readonly branchUpdates: { fullName: string; number: number; sha: string }[] = [];
   /** Test seam: PRs whose branch update conflicts with the default branch. */
   readonly conflicting = new Set<number>();
+  /** Test seam: answers to `listCommitsBetween` by `<base>...<head>`; others are null (unknown). */
+  readonly commitRanges = new Map<string, CommitRange>();
   /** Files proposed with `proposeFile`, in order. */
   readonly proposals: {
     fullName: string;
@@ -798,6 +801,16 @@ export class InMemoryCodeHost implements CodeHost {
     if (!pr) return null;
     // A PR's own diff, unless a test sets one: the same files read as the same diff.
     return pr.diffDigest !== undefined ? pr.diffDigest : JSON.stringify(pr.files);
+  }
+
+  async listCommitsBetween(
+    fullName: string,
+    base: string,
+    head: string,
+  ): Promise<CommitRange | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    const range = this.commitRanges.get(`${base}...${head}`);
+    return range ? structuredClone(range) : null;
   }
 
   async proposeFile(fullName: string, proposal: FileProposal): Promise<ProposedPullRequest | null> {

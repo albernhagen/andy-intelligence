@@ -179,6 +179,14 @@ describe("GitHub webhook receiver", () => {
       expect((await tracker.getTicket("ai", t.id))?.stage).toBe("done");
     });
 
+    it("GivenTheVerifyingSwitchOff_WhenADeployingProjectsPullRequestMerges_ThenDoneAsToday", async () => {
+      await tracker.updateProject("ai", { deployKind: "cloud-run" });
+      const t = await inProgressTicket();
+      await deliver({ payload: keyed("opened"), id: "d-open" });
+      await deliver({ payload: keyed("closed", { state: "closed", merged: true }), id: "d-merge" });
+      expect((await tracker.getTicket("ai", t.id))?.stage).toBe("done");
+    });
+
     it("GivenALinkedPullRequest_WhenClosedUnmerged_ThenInProgressAndNeedsYou", async () => {
       const t = await inProgressTicket();
       await deliver({ payload: keyed("opened"), id: "d-open" });

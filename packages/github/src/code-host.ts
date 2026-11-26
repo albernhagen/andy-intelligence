@@ -8,6 +8,9 @@ import {
   PullRequest,
   PullRequestDetails,
   PullRequestCommit,
+  RANGE_COMMITS_MAX,
+  RangeCommit,
+  type CommitRange,
   ProposedPullRequest,
   Repo,
   RepoName,
@@ -458,6 +461,34 @@ export class GitHubCodeHost implements CodeHost {
       }
     }
     return null;
+  }
+
+  async listCommitsBetween(
+    fullName: string,
+    base: string,
+    head: string,
+  ): Promise<CommitRange | null> {
+    const client = await this.repoClient(fullName);
+    if (!client) return null;
+    // One page, oldest commits first: a release longer than the cap is reported incomplete.
+    const res = await this.notFoundAsNull(() =>
+      client.octokit.request("GET /repos/{owner}/{repo}/compare/{basehead}", {
+        ...client.repo,
+        basehead: `${base}...${head}`,
+        per_page: RANGE_COMMITS_MAX,
+      }),
+    );
+    if (!res) return null;
+    const items = res.data.commits.slice(0, RANGE_COMMITS_MAX).map((c) =>
+      RangeCommit.parse({
+        sha: c.sha,
+        title: (c.commit.message.split("\n", 1)[0] ?? "").slice(0, 256),
+      }),
+    );
+    return {
+      status: res.data.status,
+      commits: { items, complete: res.data.total_commits <= items.length },
+    };
   }
 
   /** The branch's tip commit; null when the branch (or the App's install) is missing. */

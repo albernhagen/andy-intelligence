@@ -15,6 +15,7 @@ import { SlidersHorizontal } from "lucide-react";
 import { Stage, type BoardTicket, type ReadyFilters } from "@andy/contracts";
 import {
   boardStages,
+  showsVerifyingLane,
   matchesReadyFilters,
   milestoneOf,
   parseWorkView,
@@ -70,6 +71,7 @@ import {
   useBoard,
   useBoardMove,
   useMilestones,
+  useProjects,
   useQuickAdd,
   useRankTicket,
   useSetUpNext,
@@ -312,7 +314,10 @@ function Lanes({
   const [errors, setErrors] = useState<Record<string, Error>>({});
   const [expanded, setExpanded] = useState<Stage[]>([]);
   const [overLane, setOverLane] = useState<Stage | null>(null);
-  const stages = boardStages(showCancelled);
+  // AI-181: the Verifying lane for projects that deploy, or while a ticket is in it.
+  const project = useProjects().data?.find((p) => p.id === projectId);
+  const deploys = (project?.deployKind ?? "none") !== "none";
+  const stages = boardStages(showCancelled, showsVerifyingLane(project, tickets));
   // Picked once, when the board first loads, from the tickets the filters show; a tab click
   // changes it after that.
   const [phoneStage, setPhoneStage] = useState<Stage>(() => {
@@ -390,7 +395,7 @@ function Lanes({
     // Up next has its own order; the lane rank is left alone by a drop there.
     const plan = upNextPlan ? { to: "backlog" as const, rank: null } : lanePlan!;
     if (plan.to === ticket.stage && !plan.rank && !upNextPlan) return;
-    const stageMove = plan.to === ticket.stage ? null : dropMove(ticket.stage, plan.to);
+    const stageMove = plan.to === ticket.stage ? null : dropMove(ticket.stage, plan.to, deploys);
     if (plan.to !== ticket.stage && !stageMove) return;
 
     const id = ticket.id;

@@ -83,7 +83,9 @@ describe("MCP board matches GET …/board (AI-296)", () => {
     const result = await tool({ project: "AI" });
 
     expect(result.isError).toBe(false);
-    expect(keysByLane(result.data.lanes)).toEqual(keysByLane(boardLanes(json)));
+    expect(keysByLane(result.data.lanes)).toEqual(
+      keysByLane(boardLanes(json, { showVerifying: false })),
+    );
     expect(keysByLane(result.data.lanes)).toEqual([
       ["backlog", [epic.key]],
       ["ready", [c.key, a.key]],
@@ -118,10 +120,22 @@ describe("MCP board matches GET …/board (AI-296)", () => {
     const result = await tool({ project: "AI", archived: true });
 
     expect(keysByLane(result.data.lanes)).toEqual(
-      keysByLane(boardLanes(json, { showArchived: true })),
+      keysByLane(boardLanes(json, { showArchived: true, showVerifying: false })),
     );
     expect(result.data.lanes.find((l: { stage: string }) => l.stage === "done").tickets).toEqual([
       expect.objectContaining({ key: old.key, archived: true }),
+    ]);
+  });
+
+  it("GivenAProjectThatDeploys_WhenBoardIsCalled_ThenTheVerifyingLaneShowsBeforeDone", async () => {
+    await seed();
+    await tracker.updateProject("ai", { deployKind: "cloud-run" });
+
+    const result = await tool({ project: "AI" });
+
+    expect(result.data.lanes.map((l: { stage: string }) => l.stage).slice(-2)).toEqual([
+      "verifying",
+      "done",
     ]);
   });
 

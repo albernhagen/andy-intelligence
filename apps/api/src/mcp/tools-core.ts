@@ -374,7 +374,7 @@ export function registerCoreTools(server: McpServer, deps: ToolDeps, run: Run): 
     "move_ticket",
     {
       description:
-        "Moves a ticket one stage forward (backlog → ready → in_progress → ready_for_review → done). Backlog → ready needs the Definition of Ready. Backward or skipping moves are refused; Andy makes those in the UI.",
+        "Moves a ticket one stage forward (backlog → ready → in_progress → ready_for_review → done; for projects that deploy, ready_for_review → verifying → done). Backlog → ready needs the Definition of Ready. Backward or skipping moves are refused; Andy makes those in the UI.",
       inputSchema: MoveInput,
       annotations: { destructiveHint: false, idempotentHint: false },
     },
