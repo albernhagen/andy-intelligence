@@ -83,14 +83,23 @@ export function planBaselinePr(rendered, target, { source, sha, ref, date, deplo
     });
     applied.push({ path: RECORD_PATH, note: `added (baseline ${sha.slice(0, 7)})` });
   } else {
-    let version = null;
+    let parsed = null;
     try {
-      version = JSON.parse(record).version ?? null;
+      parsed = JSON.parse(record);
     } catch {
       // A record that isn't JSON is reported as differing, like any other.
     }
-    if (version !== sha) {
+    if ((parsed?.version ?? null) !== sha) {
       differs.push({ path: RECORD_PATH, note: "records another baseline; left unchanged" });
+    }
+    // `check` and a later `files` render from the recorded kind, so a project whose setting
+    // changed since must be re-rendered with the new one (AI-206: M6.17).
+    const recordedKind = parsed?.deployKind ?? "none";
+    if (parsed && recordedKind !== deployKind) {
+      differs.push({
+        path: RECORD_PATH,
+        note: `records deploy kind \`${String(recordedKind)}\`, but the project's is \`${deployKind}\`: run \`files <repo> --ref <ref> --deploy-kind ${deployKind}\``,
+      });
     }
   }
 

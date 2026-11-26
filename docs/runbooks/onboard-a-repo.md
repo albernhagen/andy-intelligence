@@ -159,7 +159,7 @@ node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.1.0
 node platform/baseline/baseline.mjs files albernhagen/<name> --ref origin/main --deploy-kind cloud-run
 ```
 
-Set its repo variables first (`project-env.md` "After"): until they are, every push to `main` fails `deploy.yml` at its first step, naming what is missing. Back to `none` leaves both workflows in the repo: delete them by hand.
+Set its repo variables first (`project-env.md` "After"): until they are, every push to `main` fails `deploy.yml` at its first step, naming what is missing. Back to `none` leaves both workflows in the repo: delete them by hand. `check` renders from the recorded kind, so it can't see a setting changed since; the App's baseline PR report flags that mismatch on `.andy/baseline.json` with the command to run.
 
 ## 6. M1.16: Project baseline v1 demo ("Done when")
 
