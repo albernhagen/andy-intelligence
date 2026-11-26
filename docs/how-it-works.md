@@ -20,6 +20,7 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 - Dispatch starts a ticket only when its milestone is approved or it has none (AI-306).
 - A daily digest (MCP `digest`) leads with a model-written summary of yesterday (Mountain time; one agent task a day, AI-323), then lists the last 24 hours: exceptions, merges and cost, work in progress, totals. What's new shows that summary, then its exceptions, with a 24 hours window (AI-341).
 - What's new (header, MCP `whats_new`): milestones, the merge mode, merged PRs' release notes and who merged each (the mode or a person, AI-218).
+- Releases (MCP `list_releases`, AI-183: M6.9): a project's deployments to prod or dev, newest first, each with the tickets it shipped and its release notes; no page yet (AI-189: M6.10).
 - Coordinator sessions merge only through MCP `merge_pr` (AI-220): the merge mode decides, the App merges at the judged head, else it answers `wait` with every reason.
 - Epic merge mode (AI-216): a child ticket builds on and merges into `epic/<KEY>`; when the epic's last child ticket is Done one PR to `main` opens for Andy.
 - Merge queue per repo (AI-110): the gate's and `merge_pr`'s merges go one at a time per repo, oldest clean first; the next PR is synced with `main` and re-checked before it merges; a failed sync goes to Needs-you. While `main` is red (a required check failed on its tip), merges wait (`main_red`) and resume when it is green; over 30 minutes, one Needs-you note (AI-382).

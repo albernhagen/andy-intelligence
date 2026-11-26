@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Id, Timestamp } from "./common";
+import { StoredRelease } from "./release-entry";
 
 /**
  * A deployment of a project to one environment (M6: Dev → prod releases, AI-161: M6.3). Every
@@ -71,6 +72,8 @@ export const Deployment = z
     url: DeploymentUrl.nullable().default(null),
     /** The control plane's request that started a promote or rollback (AI-190: M6.11); null otherwise. */
     request: DeploymentRequestId.nullable().default(null),
+    /** Its release, once computed (AI-183: M6.9): written at most once, by `cacheRelease`. */
+    release: StoredRelease.nullable().default(null),
   })
   .refine((d) => (d.status === "started") === (d.finishedAt === null), {
     message: "finishedAt is set exactly when the deployment has finished",
@@ -82,8 +85,8 @@ export const Deployment = z
   });
 export type Deployment = z.infer<typeof Deployment>;
 
-/** What `record` takes: everything but the id, which the store assigns. */
-export type NewDeployment = Omit<z.input<typeof Deployment>, "id">;
+/** What `record` takes: everything but the id, which the store assigns, and the cached release. */
+export type NewDeployment = Omit<z.input<typeof Deployment>, "id" | "release">;
 
 /** The environments a deploy or release workflow reports to; previews report elsewhere (ADR-0114). */
 export const ReportedEnvironment = DeploymentEnvironment.extract(["dev", "prod"]);
@@ -125,6 +128,15 @@ export function finishedDeployment(current: Deployment, finish: DeploymentFinish
     finishedAt: change.finishedAt,
     revision: change.revision ?? current.revision,
   });
+}
+
+/**
+ * The deployment with its release cached (shared by every DeploymentStore): unchanged when one is
+ * already cached, so a release is kept at most once.
+ */
+export function withCachedRelease(current: Deployment, release: StoredRelease): Deployment {
+  if (current.release) return current;
+  return Deployment.parse({ ...current, release: StoredRelease.parse(release) });
 }
 
 /** A listing's page size, clamped to 1..`maxPage`; `defaultPage` when not given. */

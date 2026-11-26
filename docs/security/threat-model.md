@@ -39,6 +39,7 @@ Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs th
 | Infrastructure                 | [`infrastructure.md`](infrastructure.md)                                 |
 | Night runs                     | [`night-runs.md`](night-runs.md)                                         |
 | Deployment reports             | [`deployments.md`](deployments.md)                                       |
+| Releases read                  | [`releases.md`](releases.md)                                             |
 | Deploy caller in managed repos | [`deploy-caller.md`](deploy-caller.md)                                   |
 | Project context in prompts     | [`project-context.md`](project-context.md)                               |
 | Review pipeline                | [`review-pipeline.md`](review-pipeline.md)                               |

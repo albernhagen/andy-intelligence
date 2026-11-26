@@ -53,7 +53,9 @@ export function githubApp(
     | "releaseNotes"
     | "milestones"
     | "epicBreakdowns"
-  > = {},
+    | "deployments"
+  > &
+    Partial<Pick<AppDeps, "projectAccess">> = {},
 ) {
   const connections = new InMemoryCodeHostConnectionStore();
   const host = new InMemoryCodeHost([repo()]);

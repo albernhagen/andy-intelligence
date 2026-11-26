@@ -4,6 +4,7 @@ import type {
   DeploymentFinish,
   NewDeployment,
 } from "../entities/deployment";
+import type { StoredRelease } from "../entities/release-entry";
 
 // ── DeploymentStore ──────────────────────────────────────────────────────────
 // Deployments per project and environment (AI-161: M6.3). Storage only: who may record one and
@@ -19,6 +20,12 @@ export interface DeploymentStore {
    */
   finish(deploymentId: string, finish: DeploymentFinish): Promise<Deployment>;
   get(deploymentId: string): Promise<Deployment | null>;
+  /**
+   * Keeps a computed release on the deployment atomically (AI-183: M6.9), only if none is kept
+   * yet; returns the deployment as stored (with the earlier release if one was there).
+   * `not_found` if unknown.
+   */
+  cacheRelease(deploymentId: string, release: StoredRelease): Promise<Deployment>;
   /**
    * The project's deployments to one environment, newest `startedAt` first: at most `limit`
    * (default `DEPLOYMENT_LIMITS.defaultPage`), never more than `DEPLOYMENT_LIMITS.maxPage`.

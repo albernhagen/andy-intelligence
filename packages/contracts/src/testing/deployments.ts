@@ -5,6 +5,7 @@ import {
   type DeploymentEnvironment,
   type NewDeployment,
 } from "../entities/deployment";
+import type { StoredRelease } from "../entities/release-entry";
 import type { DeploymentStore } from "../ports/deployments";
 
 /** `make` must return a store with nothing in it. */
@@ -126,6 +127,45 @@ export function deploymentStoreContract(
       expect(page).toHaveLength(cap);
       expect(page[0]!.startedAt).toBe(at(cap));
       expect(await store.list("ai", "prod")).toHaveLength(DEPLOYMENT_LIMITS.defaultPage);
+    });
+
+    const stored = (
+      computedAt: string,
+      status: StoredRelease["status"] = "first",
+    ): StoredRelease => ({
+      status,
+      previous: null,
+      entries: [],
+      truncated: false,
+      computedAt,
+    });
+
+    test("GivenANewDeployment_WhenItsReleaseIsCached_ThenItIsStoredAndKeptByFinish", async () => {
+      const store = await make();
+      const recorded = await store.record(deployment());
+      expect(recorded.release).toBeNull();
+      const cached = await store.cacheRelease(recorded.id, stored(at(1)));
+      expect(cached.release).toEqual(stored(at(1)));
+      expect((await store.get(recorded.id))?.release).toEqual(stored(at(1)));
+      const done = await store.finish(recorded.id, { status: "succeeded", finishedAt: at(2) });
+      expect(done.release).toEqual(stored(at(1)));
+    });
+
+    test("GivenACachedRelease_WhenCachedAgain_ThenTheFirstIsKept", async () => {
+      const store = await make();
+      const recorded = await store.record(deployment());
+      await store.cacheRelease(recorded.id, stored(at(1)));
+      const again = await store.cacheRelease(recorded.id, stored(at(2), "same_commit"));
+      expect(again.release).toEqual(stored(at(1)));
+      expect((await store.get(recorded.id))?.release).toEqual(stored(at(1)));
+    });
+
+    test("GivenAnUnknownDeployment_WhenItsReleaseIsCached_ThenNotFound", async () => {
+      const store = await make();
+      await expect(store.cacheRelease("missing", stored(at(1)))).rejects.toMatchObject({
+        name: "WorkTrackerError",
+        code: "not_found",
+      });
     });
 
     test("GivenSucceededFailedAndStartedDeployments_WhenTheLatestGoodIsAsked_ThenTheNewestSucceeded", async () => {

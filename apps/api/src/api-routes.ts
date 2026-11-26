@@ -25,6 +25,7 @@ export { apiRoutes as onboarding } from "./onboarding";
 export { apiRoutes as projectPlan } from "./project-plan";
 export { apiRoutes as quota } from "./quota";
 export { apiRoutes as ready } from "./ready";
+export { apiRoutes as releases } from "./releases";
 export { apiRoutes as roadmap } from "./roadmap";
 export { apiRoutes as routing } from "./routing";
 export { apiRoutes as runners } from "./runners";

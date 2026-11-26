@@ -23,6 +23,7 @@ export { registerProjectPlanTools as projectPlan } from "./tools-project-plan";
 export { registerProjectTaskTools as projectTasks } from "./tools-project-tasks";
 export { registerProjectTools as projects } from "./tools-projects";
 export { registerQuotaTools as quota } from "./tools-quota";
+export { registerReleaseTools as releases } from "./tools-releases";
 export { registerRoadmapTools as roadmap } from "./tools-roadmap";
 export { registerRoutingTools as routing } from "./tools-routing";
 export { registerRunnerTools as runners } from "./tools-runners";

@@ -29,6 +29,7 @@ import {
   TicketService,
   WaitingMergesReader,
   WhatsNewReader,
+  ReleaseReader,
   EmailNotifications,
   wakeAfterRunEnd,
   notifyOnNeedsYou,
@@ -539,6 +540,19 @@ export function createServices(raw: AppDeps): Services {
   const whatsNew = deps.releaseNotes
     ? new WhatsNewReader(deps.tracker, deps.releaseNotes, tickets)
     : null;
+  // AI-183: M6.9: releases; absent without a deployment or release-note store (route and tool
+  // both). Before GitHub is connected, every compare answers "unknown", so nothing is cached.
+  const releases =
+    deps.deployments && deps.releaseNotes
+      ? new ReleaseReader(
+          deps.deployments,
+          connection ? new ConnectedCodeHost(connection) : { listCommitsBetween: async () => null },
+          deps.releaseNotes,
+          deps.tracker,
+          tickets,
+          now,
+        )
+      : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
@@ -612,6 +626,7 @@ export function createServices(raw: AppDeps): Services {
     work: new WorkReader(deps.tracker, board),
     roadmap: new RoadmapReader(deps.tracker, board, deps.milestones ?? null),
     whatsNew,
+    releases,
     // AI-218: PRs the merge mode leaves for Andy; release notes read from the connected host.
     waitingMerges: new WaitingMergesReader(
       deps.tracker,

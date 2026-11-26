@@ -296,6 +296,11 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["whats_new"],
   },
   {
+    action: "Releases: deployments with their tickets and release notes (AI-183: M6.9)",
+    routes: [`GET ${P}/releases`],
+    tools: ["list_releases"],
+  },
+  {
     action: "Ideate",
     routes: [`POST ${P}/ideate`],
     tools: ["ideate"],
