@@ -58,9 +58,10 @@ From the UI or MCP once AI-199: M6.12 ships (it dispatches this workflow); until
 
 - A promote stops before traffic moves if the control plane refuses it (no succeeded dev deployment of that digest).
 - If traffic moved but a check failed, the Deployment is `failed` but names the revision now serving.
-- A run waits while a deploy or another release to prod runs (one queue per environment). A third waiting run replaces the second.
+- A run waits while a deploy or another release to prod runs (one queue per environment, so a rollback never races a deploy for traffic). GitHub keeps one waiting run: **a merge that starts `deploy.yml` while your rollback waits cancels the rollback**. After dispatching, watch the run; if it shows _cancelled_, run it again once the deploy finishes.
 - `promote` doesn't apply to the control plane (prod-only, no dev).
-- It records a `rollback` Deployment. Rolling back to a revision from before AI-190: M6.11 loses the finish report (that revision refuses `release.yml`), so the record stays `started`; the rollback itself is unaffected.
+- It records a `rollback` Deployment, unless the target's image digest has no succeeded deployment among the last 100 in prod (older than the records, or deployed before AI-180: M6.4): then the summary says "Deployment not recorded" and the rollback still runs.
+- Rolling back to a revision from before AI-190: M6.11 loses the finish report (that revision refuses `release.yml`), so the record stays `started`; the rollback itself is unaffected.
 - Like any rollback, traffic stays pinned until the next deploy (§5).
 
 ### 3b. By hand
