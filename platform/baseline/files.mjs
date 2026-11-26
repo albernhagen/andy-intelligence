@@ -123,17 +123,31 @@ export function renderFiles(
       path: f.path,
       lines: requiredLines(read(f.from)),
     })),
-    seed: pick(manifest.seed).map((f) => ({ path: f.path, content: content(f) })),
+    seed: pick(manifest.seed).map((f) => ({
+      path: f.path,
+      content: content(f),
+      ...(f.group ? { group: f.group } : {}),
+    })),
     starter: pick(manifest.starter).map((f) => ({ path: f.path, content: content(f) })),
   };
 }
 
 /**
- * The seed files to write: those the repo doesn't have yet. Seeds (agent rules, threat model,
- * design file) are the project's own once written, so an existing one is never overwritten.
+ * Seed groups with a file already in the repo. A group (e.g. the `infra/` Terraform root) only
+ * works whole, so none of it is written next to a project's own files (AI-109).
+ */
+export function presentGroups(seed, exists) {
+  return new Set(seed.filter((f) => f.group && exists(f.path)).map((f) => f.group));
+}
+
+/**
+ * The seed files to write: those the repo doesn't have yet, and no file of a group that is
+ * partly there. Seeds (agent rules, threat model, design file, the deploy root) are the
+ * project's own once written, so an existing one is never overwritten.
  */
 export function seedsToWrite(seed, exists) {
-  return seed.filter((f) => !exists(f.path));
+  const present = presentGroups(seed, exists);
+  return seed.filter((f) => !exists(f.path) && !(f.group && present.has(f.group)));
 }
 
 /**
@@ -179,7 +193,10 @@ export function fileDrift(rendered, readTarget, { source, version }) {
     if (missing.length > 0)
       drift.push({ path: f.path, issue: `missing lines: ${missing.join(", ")}` });
   }
+  // A group partly there is the project's own (seedsToWrite never adds to it): not drift.
+  const present = presentGroups(rendered.seed, (p) => readTarget(p) !== null);
   for (const f of rendered.seed) {
+    if (f.group && present.has(f.group)) continue;
     if (readTarget(f.path) === null) drift.push({ path: f.path, issue: "missing (seed file)" });
   }
   return drift;

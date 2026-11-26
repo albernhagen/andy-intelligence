@@ -70,3 +70,16 @@ run "given_the_kill_switch_on_when_planned_then_it_targets_the_prod_service" {
     error_message = "The root should plan with the kill switch on."
   }
 }
+
+run "given_two_smoke_checks_when_planned_then_the_output_keeps_both_lines" {
+  command = plan
+
+  variables {
+    smoke_checks = "/health 200\n/ready 200,204"
+  }
+
+  assert {
+    condition     = output.repo_variables.DEPLOY_SMOKE_CHECKS == "/health 200\n/ready 200,204"
+    error_message = "DEPLOY_SMOKE_CHECKS must keep one check per line."
+  }
+}

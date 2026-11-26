@@ -1,8 +1,8 @@
 # Every repo variable the baseline deploy.yml, release.yml and preview.yml read (andy-intelligence
 # docs/features/deploy-caller.md). Not secret. `GCP_DEV_*` makes dev the first environment. Set
 # them all after apply:
-#   terraform output -json repo_variables | jq -r 'to_entries[] | "\(.key)=\(.value)"' > repo-vars.env
-#   gh variable set --repo <owner>/<name> -f repo-vars.env && rm repo-vars.env
+# commands in andy-intelligence runbook docs/runbooks/project-env.md "After" (each value set with
+# `gh variable set --body`, so a multi-line DEPLOY_SMOKE_CHECKS stays intact).
 output "repo_variables" {
   description = "Repo variable name → value for the deploy caller (dev first, then prod by promote)."
   value = {

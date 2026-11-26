@@ -55,7 +55,7 @@ const BASE: Record<OnboardingStepKey, Base> = {
   },
   deploy_env: {
     key: "deploy_env",
-    label: "Apply the deploy environments",
+    label: "Deploy environments",
     instruction: "Nothing to apply: this project doesn't deploy (deploy kind none).",
     commands: [],
     link: null,

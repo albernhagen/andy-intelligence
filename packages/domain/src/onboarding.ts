@@ -65,6 +65,8 @@ export interface OnboardingFacts {
   buildEnabled: boolean;
   /** The project's deploy kind (ADR-0114): `none` has no deploy environments to apply. */
   deployKind: DeployKind;
+  /** The project has a succeeded deployment: its environments are applied already. */
+  deployed: boolean;
   marks: OnboardingMarks;
   readAt: string;
 }
@@ -73,7 +75,7 @@ export const ONBOARDING_LABELS: Record<OnboardingStepKey, string> = {
   repo_app: "Repo and GitHub App",
   baseline_pr: "Finish the baseline PR",
   repo_settings: "Apply the repo settings",
-  deploy_env: "Apply the deploy environments",
+  deploy_env: "Deploy environments",
   reusable_workflows: "Allow reusable workflows",
   reviewer_token: "Reviewer token",
   agent_environment: "Agent environment",
@@ -317,6 +319,7 @@ function specs(f: OnboardingFacts): Record<OnboardingStepKey, StepSpec> {
     },
     deploy_env: deployEnvStep(
       f.deployKind,
+      f.deployed,
       repo,
       link("Open Actions variables", gh("/settings/variables/actions")),
     ),
@@ -385,6 +388,7 @@ const STATE_BUCKET = "gs://<prod project>-tfstate";
  */
 function deployEnvStep(
   deployKind: DeployKind,
+  deployed: boolean,
   repo: string,
   link: OnboardingStep["link"],
 ): StepSpec {
@@ -398,18 +402,29 @@ function deployEnvStep(
       checks: [done("Deploy kind none")],
     };
   }
+  // Applied before this step existed: a succeeded deployment proves it; never re-apply.
+  if (deployed) {
+    return {
+      key: "deploy_env",
+      instruction: "Already applied: the project has a succeeded deployment. Nothing to run.",
+      commands: [],
+      link,
+      how: "live",
+      checks: [done("A deployment succeeded")],
+    };
+  }
   return {
     key: "deploy_env",
     instruction:
-      "After the baseline PR merges, in a clone of the repo: copy infra/terraform.tfvars.example to infra/terraform.tfvars with real values, create the state bucket, plan (expected counts: runbook project-env.md), apply, then set the repo variables from the output.",
+      "Once, for a project not yet deployed (skip if its environments are applied: mark done). After the baseline PR merges, in a clone of the repo: copy infra/terraform.tfvars.example to infra/terraform.tfvars with real values, create the state bucket, plan (expected counts: runbook project-env.md), apply, then set the repo variables from the output.",
     commands: [
       {
         label: "Create the state bucket",
-        text: `gcloud storage buckets create ${STATE_BUCKET} --project <prod project> --location us-central1 --uniform-bucket-level-access`,
+        text: `gcloud storage buckets create ${STATE_BUCKET} --project <prod project> --location us-central1 --uniform-bucket-level-access --public-access-prevention`,
       },
       {
-        label: "Keep old state versions",
-        text: `gcloud storage buckets update ${STATE_BUCKET} --versioning`,
+        label: "Keep the last 10 old state versions",
+        text: `gcloud storage buckets update ${STATE_BUCKET} --versioning --lifecycle-file=<(echo '{"rule":[{"action":{"type":"Delete"},"condition":{"isLive":false,"numNewerVersions":10}}]}')`,
       },
       {
         label: "Init",
@@ -419,11 +434,11 @@ function deployEnvStep(
       { label: "Apply", text: "terraform -chdir=infra apply deploy.tfplan" },
       {
         label: "Write the repo variables",
-        text: `terraform -chdir=infra output -json repo_variables | jq -r 'to_entries[] | "\\(.key)=\\(.value)"' > repo-vars.env`,
+        text: "terraform -chdir=infra output -json repo_variables > repo-vars.json",
       },
       {
-        label: "Set them",
-        text: `gh variable set --repo ${repo} -f repo-vars.env && rm repo-vars.env`,
+        label: "Set them (multi-line values intact)",
+        text: `jq -r 'keys[]' repo-vars.json | while read -r name; do gh variable set "$name" --repo ${repo} --body "$(jq -r --arg n "$name" '.[$n]' repo-vars.json)"; done && rm repo-vars.json`,
       },
     ],
     link,

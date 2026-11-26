@@ -61,6 +61,7 @@ function facts(over: Partial<OnboardingFacts> = {}): OnboardingFacts {
     },
     buildEnabled: true,
     deployKind: "none",
+    deployed: false,
     marks: {
       reusable_workflows: { by: "andy@example.com", at: AT },
       reviewer_token: { by: "andy@example.com", at: AT },
@@ -280,10 +281,25 @@ describe("onboarding deploy environments (AI-109: M6.22)", () => {
     expect(s.commands.map((c) => c.text)).toContain(
       "terraform -chdir=infra plan -out=deploy.tfplan",
     );
-    expect(s.commands.map((c) => c.text)).toContain(
-      `gh variable set --repo ${REPO} -f repo-vars.env && rm repo-vars.env`,
-    );
+    expect(s.commands.some((c) => c.text.includes(`--repo ${REPO} --body`))).toBe(true);
     expect(s.link?.url).toBe(`https://github.com/${REPO}/settings/variables/actions`);
+  });
+
+  it("GivenACloudRunProjectThatHasDeployed_WhenDecided_ThenTheStepIsDoneWithNoCommandToReApply", () => {
+    const s = step(onboarding(facts({ deployKind: "cloud-run", deployed: true })), "deploy_env");
+    expect(s.status).toBe("done");
+    expect(s.commands).toEqual([]);
+  });
+
+  it("GivenACloudRunProject_WhenDecided_ThenVariablesAreSetOneByOneSoMultiLineValuesSurvive", () => {
+    const texts = step(onboarding(facts({ deployKind: "cloud-run" })), "deploy_env").commands.map(
+      (c) => c.text,
+    );
+    expect(texts.some((t) => t.includes('gh variable set "$name"') && t.includes("--body"))).toBe(
+      true,
+    );
+    expect(texts.some((t) => t.includes(" -f "))).toBe(false);
+    expect(texts.some((t) => t.includes("--public-access-prevention"))).toBe(true);
   });
 
   it("GivenACloudRunProjectMarkedDone_WhenDecided_ThenTheStepIsDone", () => {

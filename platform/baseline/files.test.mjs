@@ -6,6 +6,7 @@ import {
   normalizePins,
   pinActions,
   pinModules,
+  presentGroups,
   recordedDeployKind,
   renderFiles,
   seedsToWrite,
@@ -282,5 +283,36 @@ describe("renderFiles with environments", () => {
 
   it("GivenAnUnknownPolicy_WhenRendered_ThenThrows", () => {
     expect(() => seedFor("cloud-run", "staging")).toThrow("environments must be one of");
+  });
+});
+
+describe("seed groups", () => {
+  const seed = [
+    { path: "AGENTS.md", content: "a" },
+    { path: "infra/main.tf", content: "m", group: "infra" },
+    { path: "infra/outputs.tf", content: "o", group: "infra" },
+  ];
+
+  it("GivenNoFileOfTheGroup_WhenSeeded_ThenTheWholeGroupIsWritten", () => {
+    expect(seedsToWrite(seed, () => false).map((f) => f.path)).toEqual([
+      "AGENTS.md",
+      "infra/main.tf",
+      "infra/outputs.tf",
+    ]);
+  });
+
+  it("GivenOneFileOfTheGroup_WhenSeeded_ThenNoneOfItIsWritten", () => {
+    const exists = (p) => p === "infra/main.tf";
+    expect(presentGroups(seed, exists)).toEqual(new Set(["infra"]));
+    expect(seedsToWrite(seed, exists).map((f) => f.path)).toEqual(["AGENTS.md"]);
+  });
+
+  it("GivenAGroupPartlyThere_WhenChecked_ThenItsMissingFilesAreNotDrift", () => {
+    const rendered = { managed: [], lines: [], seed };
+    const drift = fileDrift(rendered, (p) => (p === "infra/main.tf" ? "ours" : null), {
+      source: SOURCE,
+      version: SHA,
+    });
+    expect(drift).toEqual([{ path: "AGENTS.md", issue: "missing (seed file)" }]);
   });
 });

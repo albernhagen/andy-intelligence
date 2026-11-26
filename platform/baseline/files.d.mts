@@ -11,6 +11,7 @@ interface ManifestEntry {
   pin?: boolean;
   deployKind?: DeployKind;
   environments?: Environments;
+  group?: string;
 }
 export interface Manifest {
   source: string;
@@ -22,6 +23,8 @@ export interface Manifest {
 export interface RenderedFile {
   path: string;
   content: string;
+  /** Seed group: written only all together (AI-109). */
+  group?: string;
 }
 export interface Rendered {
   managed: RenderedFile[];

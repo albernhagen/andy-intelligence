@@ -12,7 +12,7 @@ AI-109: M6.22, ADR-0114. When a repo is registered, its baseline PR carries what
 - **No IDs in the repo:** real project IDs, the billing account and the alert email go in the gitignored `infra/terraform.tfvars`; `terraform.tfvars.example` has fake values.
 - **CI:** the root's `tests/plan.tftest.hcl` plans it with the example values and mocked providers (baseline `terraform-check`), here under `template/infra/` and in the managed repo under `infra/`.
 - **Repo variables:** output `repo_variables` names every variable `deploy.yml`, `release.yml` and `preview.yml` read, with its value; one command sets them all.
-- **Setup path:** step "Apply the deploy environments" lists the commands for a `cloud-run` project (marked done by hand) and reads done for `none`.
+- **Setup path:** step "Deploy environments" lists the commands for a `cloud-run` project (marked done by hand) and reads done for `none`.
 - **A new kind** adds its own seed entries to `platform/baseline/manifest.json` (`deployKind`, optionally `environments`) and files under `template/infra/<kind>/`; registration doesn't change.
 
 **How to use:** set the deploy kind and environments before registering the repo (Settings or MCP `set_deploy_kind`, `set_environments`). Then runbook [`project-env.md`](../runbooks/project-env.md). For a repo onboarded by the CLI: `baseline.mjs files <repo> --ref <ref> --deploy-kind cloud-run --environments <policy>`.

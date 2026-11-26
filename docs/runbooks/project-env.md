@@ -1,20 +1,20 @@
 # Runbook: apply a project environment (Andy)
 
-For a managed project whose `deployKind` is `cloud-run`: one apply of the template root in the managed repo's `infra/` (AI-109: M6.22; the baseline PR seeds it, see [`deploy-scaffold.md`](../features/deploy-scaffold.md)). It calls `infra/modules/project-env` (AI-201: M6.16) and `infra/modules/project-budget` once per environment: once for `prod-only`, twice for `dev-and-prod`. Nothing in CI applies it. Run every command from a clone of the managed repo. The setup path's step "Apply the deploy environments" lists the same commands.
+For a managed project whose `deployKind` is `cloud-run`: one apply of the template root in the managed repo's `infra/` (AI-109: M6.22; the baseline PR seeds it, see [`deploy-scaffold.md`](../features/deploy-scaffold.md)). It calls `infra/modules/project-env` (AI-201: M6.16) and `infra/modules/project-budget` once per environment: once for `prod-only`, twice for `dev-and-prod`. Nothing in CI applies it. Run every command from a clone of the managed repo. The setup path's step "Deploy environments" lists the same commands.
 
 ## Before
 
 - Each GCP project (`<app>-prod`, and `<app>-dev` for `dev-and-prod`) exists and is on the billing account. Its budget comes from this root: don't also add it to `infra/billing` `managed_projects` (`billing.md` §8), or it gets two.
 - `cp infra/terraform.tfvars.example infra/terraform.tfvars` (gitignored) and fill in the real values: project IDs, `alert_email`, `billing_account_id`, `github_repository_id` (`gh api repos/<owner>/<name> --jq .id`). Never commit it.
 - Your login can create service accounts, IAM bindings, a Workload Identity pool and budgets in those projects and on the billing account.
-- The state bucket, once, in the prod project:
+- The state bucket, once, in the prod project: no public access, versioned, keeping the last 10 old versions (state holds the alert email and IDs; R-AI-109):
 
 ```bash
-gcloud storage buckets create gs://<prod project>-tfstate --project <prod project> --location us-central1 --uniform-bucket-level-access
+gcloud storage buckets create gs://<prod project>-tfstate --project <prod project> --location us-central1 --uniform-bucket-level-access --public-access-prevention
 ```
 
 ```bash
-gcloud storage buckets update gs://<prod project>-tfstate --versioning
+gcloud storage buckets update gs://<prod project>-tfstate --versioning --lifecycle-file=<(echo '{"rule":[{"action":{"type":"Delete"},"condition":{"isLive":false,"numNewerVersions":10}}]}')
 ```
 
 ## Apply
@@ -42,17 +42,17 @@ terraform -chdir=infra apply deploy.tfplan
 
 ## After
 
-- Set the managed repo's variables from the root's output `repo_variables`: every variable the baseline's `deploy.yml`, `release.yml` and `preview.yml` read (names, not credentials), with `DEPLOY_SMOKE_CHECKS` from `smoke_checks` (default `/health 200`):
+- Set the managed repo's variables from the root's output `repo_variables`: every variable the baseline's `deploy.yml`, `release.yml` and `preview.yml` read (names, not credentials), with `DEPLOY_SMOKE_CHECKS` from `smoke_checks` (default `/health 200`; one check per line, kept intact by `--body`):
 
 ```bash
-terraform -chdir=infra output -json repo_variables | jq -r 'to_entries[] | "\(.key)=\(.value)"' > repo-vars.env
+terraform -chdir=infra output -json repo_variables > repo-vars.json
 ```
 
 ```bash
-gh variable set --repo <owner>/<name> -f repo-vars.env && rm repo-vars.env
+jq -r 'keys[]' repo-vars.json | while read -r name; do gh variable set "$name" --repo <owner>/<name> --body "$(jq -r --arg n "$name" '.[$n]' repo-vars.json)"; done && rm repo-vars.json
 ```
 
-Check: `gh variable list --repo <owner>/<name>`. Then mark "Apply the deploy environments" done on the setup path. What each variable is (AI-206: M6.17). Prefix `GCP_` for prod, `GCP_DEV_` for dev; setting the dev ones makes dev the first environment:
+Check: `gh variable list --repo <owner>/<name>`. Then mark "Deploy environments" done on the setup path. What each variable is (AI-206: M6.17). Prefix `GCP_` for prod, `GCP_DEV_` for dev; setting the dev ones makes dev the first environment:
 
 | Variable (after the prefix) | From                                  |
 | --------------------------- | ------------------------------------- |
@@ -62,7 +62,7 @@ Check: `gh variable list --repo <owner>/<name>`. Then mark "Apply the deploy env
 | `DEPLOYER_SA`               | output `deployer_email`               |
 | `IMAGE_REPO`                | output `image_repository`             |
 
-Plus `DEPLOY_SMOKE_CHECKS` once per repo (one check per line, `<path> <status>`, e.g. `/health 200`). Each with `gh variable set <NAME> --repo <owner>/<name> --body <value>`. Then run the baseline with `--deploy-kind cloud-run` (`onboard-a-repo.md` §5a). For PR previews (`preview.yml`, AI-207: M6.18; first environment only, with `preview_enabled = true`), also set, with the same prefix:
+Plus `DEPLOY_SMOKE_CHECKS` (one check per line, `<path> <status>`, e.g. `/health 200`). A repo onboarded before AI-109: M6.22 has no `infra/`: run the baseline first with `--deploy-kind cloud-run --environments <policy>` (`onboard-a-repo.md` §5a), merge, then this runbook from the top. For PR previews (`preview.yml`, AI-207: M6.18; first environment only, with `preview_enabled = true`), also set, with the same prefix:
 
 | Variable (after the prefix) | From                              |
 | --------------------------- | --------------------------------- |

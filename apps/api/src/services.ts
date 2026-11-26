@@ -611,6 +611,7 @@ export function createServices(raw: AppDeps): Services {
         return slug ? `https://github.com/apps/${slug}/installations/new` : null;
       },
       now,
+      deps.deployments ?? null,
     ),
     spend: new SpendSettingsService(
       projects,

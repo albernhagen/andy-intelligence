@@ -142,12 +142,17 @@ describe("BaselineProposer", () => {
     ]);
   });
 
-  it("GivenACloudRunProjectWithItsOwnInfra_WhenProposed_ThenItsFilesAreKept", async () => {
+  it("GivenACloudRunProjectWithItsOwnInfra_WhenProposed_ThenNoTemplateFileIsAddedBesideIt", async () => {
     target.set("infra/main.tf", "# ours\n");
     await proposer.onRepoRegistered({ ...project, deployKind: "cloud-run" }, TARGET);
     const { proposal } = host.baselineProposals[0]!;
-    expect(proposal.files.map((f) => f.path)).not.toContain("infra/main.tf");
+    const paths = proposal.files.map((f) => f.path);
+    expect(paths.filter((p) => p.startsWith("infra/"))).toEqual([]);
+    expect(paths).toContain(".terraform-version");
     expect(proposal.body).toContain("- `infra/main.tf`: already there (seed: the project's own)");
+    expect(proposal.body).toContain(
+      "- `infra/outputs.tf`: not added: other `infra/` files are already there, and the group is added only whole",
+    );
   });
 
   it("GivenAFileThatDiffers_WhenProposed_ThenItIsReportedAndNotInThePr", async () => {
