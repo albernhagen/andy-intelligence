@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-control-plane
+  group: deploy-prod # shared with release.yml for prod (AI-190: M6.11)
   cancel-in-progress: false
 
 permissions: {}
@@ -66,6 +66,9 @@ jobs:
           control-plane-url: ${{ env.CONTROL_PLANE_URL }}
           phase: start
           image-digest: ${{ steps.build.outputs.digest }}
+          environment: prod
+          kind: deploy
+          url: ${{ env.CONTROL_PLANE_URL }}
 
       # No-traffic revision, smoke test, then traffic; rollback in the job summary (ADR-0076).
       - id: deploy

@@ -7,6 +7,7 @@ import {
   DEPLOYMENT_REPORT_RATE_LIMIT,
   deployWorkflowRef,
   registerDeploymentCallbacks,
+  releaseWorkflowRef,
 } from "./deployments";
 import type { ActionsClaims } from "./github/token";
 
@@ -59,6 +60,12 @@ function setup(projects: Record<string, Project> = { [REPO]: project }, tickMs =
     post(`/deployments/${id}/finish`, body, token);
   return { deployments, start, finish };
 }
+
+/** release.yml's token: the run started on main at a later commit than the build it ships. */
+const MAIN_SHA = "f".repeat(40);
+const release = (overrides: Partial<ActionsClaims> = {}) =>
+  claims({ workflow_ref: releaseWorkflowRef(REPO), sha: MAIN_SHA, ...overrides });
+const idOf = async (r: Response) => ((await r.json()) as { deploymentId: string }).deploymentId;
 
 describe("deployment reports (AI-180: M6.4)", () => {
   it("GivenTheDeployWorkflowOnMain_WhenItStartsAndFinishes_ThenADeploymentIsRecordedFromTheToken", async () => {
@@ -162,5 +169,119 @@ describe("deployment reports (AI-180: M6.4)", () => {
     const { start } = setup(undefined, 0);
     for (let i = 0; i < DEPLOYMENT_REPORT_RATE_LIMIT; i += 1) await start();
     expect((await start()).status).toBe(429);
+  });
+});
+
+describe("release reports (AI-190: M6.11)", () => {
+  it("GivenReleaseYmlRollingBackToADeployedBuild_WhenItReports_ThenARollbackIsRecordedWithTheBuildsCommitUrlAndRequest", async () => {
+    const { deployments, start, finish } = setup();
+    const built = await idOf(await start());
+    await finish(built, { status: "succeeded", revision: "control-plane-00041-old" });
+    const later = `sha256:${"c".repeat(64)}`;
+    const newer = await idOf(await start(undefined, { imageDigest: later }));
+    await finish(newer, { status: "succeeded", revision: "control-plane-00042-new" });
+
+    const started = await start(release(), {
+      imageDigest: DIGEST,
+      environment: "prod",
+      kind: "rollback",
+      url: "https://ai.example.com",
+      request: "req-1",
+    });
+    expect(started.status).toBe(201);
+    const id = await idOf(started);
+    expect(await deployments.get(id)).toMatchObject({
+      environment: "prod",
+      kind: "rollback",
+      imageDigest: DIGEST,
+      gitSha: SHA,
+      url: "https://ai.example.com",
+      request: "req-1",
+      previousDeploymentId: newer,
+      status: "started",
+    });
+
+    const done = await finish(
+      id,
+      { status: "succeeded", revision: "control-plane-00041-old" },
+      release(),
+    );
+    expect(done.status).toBe(200);
+    expect((await deployments.latestGood("ai", "prod"))?.id).toBe(id);
+  });
+
+  it("GivenADigestDevDeployed_WhenReleaseYmlPromotesItToProd_ThenAProdPromoteIsRecorded", async () => {
+    const { deployments, start, finish } = setup();
+    const dev = await idOf(await start(undefined, { imageDigest: DIGEST, environment: "dev" }));
+    await finish(dev, { status: "succeeded" });
+    const id = await idOf(
+      await start(release(), {
+        imageDigest: DIGEST,
+        environment: "prod",
+        kind: "promote",
+        url: "https://prod.example.com",
+      }),
+    );
+    expect(await deployments.get(id)).toMatchObject({
+      environment: "prod",
+      kind: "promote",
+      gitSha: SHA,
+      request: null,
+    });
+    expect(await deployments.list("ai", "dev")).toHaveLength(1);
+  });
+
+  it("GivenADigestNoSucceededDeploymentShipped_WhenReleaseYmlReportsIt_Then422AndNothingRecorded", async () => {
+    const { deployments, start, finish } = setup();
+    const failed = await idOf(await start());
+    await finish(failed, { status: "failed" });
+    const rollback = { imageDigest: DIGEST, environment: "prod", kind: "rollback" };
+    expect((await start(release(), rollback)).status).toBe(422);
+    // Promote reads dev: a prod deployment of the digest is not a source.
+    expect((await start(release(), { ...rollback, kind: "promote" })).status).toBe(422);
+    expect(await deployments.list("ai", "prod")).toHaveLength(1);
+  });
+
+  it("GivenAKindTheWorkflowDoesNotReport_WhenStarted_Then422AndNothingRecorded", async () => {
+    const { deployments, start } = setup();
+    expect((await start(undefined, { imageDigest: DIGEST, kind: "rollback" })).status).toBe(422);
+    expect((await start(undefined, { imageDigest: DIGEST, request: "r1" })).status).toBe(422);
+    expect((await start(release(), { imageDigest: DIGEST, environment: "prod" })).status).toBe(422);
+    expect(
+      (await start(release(), { imageDigest: DIGEST, environment: "prod", kind: "deploy" })).status,
+    ).toBe(422);
+    expect(
+      (await start(release(), { imageDigest: DIGEST, environment: "preview", kind: "rollback" }))
+        .status,
+    ).toBe(400);
+    expect(await deployments.list("ai", "prod")).toEqual([]);
+  });
+
+  it("GivenReleaseYmlOffMainOrFromAnotherRepo_WhenReporting_Then403", async () => {
+    const { deployments, start } = setup();
+    const body = { imageDigest: DIGEST, environment: "prod", kind: "rollback" };
+    for (const token of [
+      release({ workflow_ref: `${REPO}/.github/workflows/release.yml@refs/heads/evil` }),
+      release({ workflow_ref: `${REPO}/.github/workflows/release.yml@refs/tags/v1` }),
+      release({ workflow_ref: releaseWorkflowRef("someone/else") }),
+      release({ repository: "someone/else", workflow_ref: releaseWorkflowRef("someone/else") }),
+    ]) {
+      expect((await start(token, body)).status, JSON.stringify(token)).toBe(403);
+    }
+    expect(await deployments.list("ai", "prod")).toEqual([]);
+  });
+
+  it("GivenADeployAndARelease_WhenTheOtherWorkflowFinishesIt_Then404AndItStaysStarted", async () => {
+    const { deployments, start, finish } = setup();
+    const built = await idOf(await start());
+    await finish(built, { status: "succeeded" });
+    const deploy = await idOf(await start());
+    const rollback = await idOf(
+      await start(release(), { imageDigest: DIGEST, environment: "prod", kind: "rollback" }),
+    );
+    expect((await finish(deploy, { status: "succeeded" }, release({ sha: SHA }))).status).toBe(404);
+    expect((await finish(rollback, { status: "succeeded" })).status).toBe(404);
+    expect((await deployments.get(deploy))?.status).toBe("started");
+    expect((await deployments.get(rollback))?.status).toBe("started");
   });
 });

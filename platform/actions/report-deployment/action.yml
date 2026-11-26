@@ -1,8 +1,9 @@
 name: Baseline — report a deployment
 description: >-
-  Reports a deployment to the control plane (AI-180: M6.4): `start` before the deploy
-  (image digest; the commit comes from the job's OIDC token), `finish` after it (status and the
-  serving revision). Authenticated with the job's GitHub Actions OIDC token (ADR-0019), so the
+  Reports a deployment to the control plane (AI-180: M6.4, AI-190: M6.11): `start` before the
+  deploy, promote or rollback (image digest, and optionally environment, kind, url and request;
+  the repo and workflow come from the job's OIDC token), `finish` after it (status and the serving
+  revision). Only `deploy.yml` and `release.yml` on `main` are accepted. Authenticated with the job's GitHub Actions OIDC token (ADR-0019), so the
   calling job needs `id-token: write`. Never fails the job: any error becomes a warning and a line
   in the job summary saying the deployment was not recorded.
 
@@ -17,12 +18,32 @@ inputs:
     description: "`start`: the deployed image's digest (`sha256:…`)."
     required: false
     default: ""
+  environment:
+    description: "`start`: `dev` or `prod` (optional; the control plane assumes `prod`)."
+    required: false
+    default: ""
+  kind:
+    description: "`start`: `deploy`, `promote` or `rollback` (optional; `deploy` when empty)."
+    required: false
+    default: ""
+  url:
+    description: "`start`: the environment's https URL, where verification tests run (optional)."
+    required: false
+    default: ""
+  request:
+    description: "`start`: the control plane's request id for a promote or rollback (optional)."
+    required: false
+    default: ""
   deployment-id:
     description: "`finish`: the id the `start` report returned."
     required: false
     default: ""
   status:
     description: "`finish`: `succeeded` or `failed`."
+    required: false
+    default: ""
+  revision:
+    description: "`finish`: the serving revision, when the caller knows it (a rollback); wins over `service`."
     required: false
     default: ""
   service:
@@ -49,6 +70,11 @@ runs:
         CONTROL_PLANE_URL: ${{ inputs.control-plane-url }}
         PHASE: ${{ inputs.phase }}
         IMAGE_DIGEST: ${{ inputs.image-digest }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        KIND: ${{ inputs.kind }}
+        URL: ${{ inputs.url }}
+        REQUEST: ${{ inputs.request }}
+        REVISION: ${{ inputs.revision }}
         DEPLOYMENT_ID: ${{ inputs.deployment-id }}
         STATUS: ${{ inputs.status }}
         SERVICE: ${{ inputs.service }}

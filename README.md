@@ -133,4 +133,4 @@ pnpm screenshots:table --write               # after a push: before-and-after ta
 | `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                  |
 | `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                 |
 
-Runbooks for every manual step: [`docs/runbooks/`](docs/runbooks/). Deploys and going back to an earlier revision: [`deploy-and-rollback.md`](docs/runbooks/deploy-and-rollback.md).
+Runbooks for every manual step: [`docs/runbooks/`](docs/runbooks/). Deploys (`deploy.yml`), and promote or rollback (`release.yml`, `workflow_dispatch` on `main`): [`deploy-and-rollback.md`](docs/runbooks/deploy-and-rollback.md).

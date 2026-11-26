@@ -1,6 +1,6 @@
 # Control-plane deploy and rollback — runbook (Andy)
 
-How a merge reaches `control-plane` on Cloud Run, and how to go back (ADR-0076: Control-plane deploy: no-traffic revision, smoke test, then traffic).
+How a merge reaches `control-plane` on Cloud Run, and how to go back (ADR-0076: Control-plane deploy: no-traffic revision, smoke test, then traffic; ADR-0114: Dev → prod releases design).
 
 | Term       | Meaning                                                                                                             |
 | ---------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -35,11 +35,35 @@ Actions → _Deploy control plane_ → the run → Summary: one verdict line, th
 | Traffic may have moved | Compare _Serving after_ with _Serving before_; if different, §3.                                                                    |
 | It is serving traffic  | §3 now, then fix forward.                                                                                                           |
 
-**Deployment record (AI-180: M6.4).** The job reports each deploy to the control plane, which records it as a Deployment (`started`, then `succeeded` or `failed` with the serving revision). The summary says "Deployment … recorded as …". "⚠️ Deployment not recorded in the control plane" means the report failed (control plane unreachable, a refused token, or the first deploy that ships this route, which reports to the old revision): the deploy itself is unaffected and nothing needs doing. Checks and caps: [`docs/security/deployments.md`](../security/deployments.md).
+**Deployment record (AI-180: M6.4).** The job reports each deploy to the control plane, which records it as a Deployment (`started`, then `succeeded` or `failed` with the serving revision). The summary says "Deployment … recorded as …". "⚠️ Deployment not recorded in the control plane" means the report failed (control plane unreachable, a refused token, or the first deploy that ships this route, which reports to the old revision): the deploy itself is unaffected and nothing needs doing. Checks and caps: [`docs/security/deployments.md`](../security/deployments.md). **The first deploy after AI-190: M6.11 merges is not recorded either**: `deploy.yml` then sends `environment`, `kind` and `url`, which the old revision refuses (`400`). Nothing needs doing.
 
 ## 3. Roll back
 
-Takes under 5 minutes, usually under one. Copy the command from the summary, or find the last good revision and pin it:
+Takes under 5 minutes, usually under one. Two ways: the release workflow (recorded, checked), or `gcloud` by hand (§3b).
+
+### 3a. With the release workflow (AI-190: M6.11)
+
+From the UI or MCP once AI-199: M6.12 ships (it dispatches this workflow); until then from the Actions tab:
+
+1. Find the revision: the last good Deployment's revision, or `gcloud run revisions list` below.
+2. Actions → _Release control plane_ → **Run workflow**, branch `main`; `action` = `rollback`, `environment` = `prod`, `revision` = the revision; leave `digest` and `request` empty.
+3. Read the run's summary: "Rolled back." means the revision serves 100 percent and `/health` answered 200.
+
+| Summary or failure                             | Meaning                                                       | Do                                        |
+| ---------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------- |
+| Fails at _Check the inputs_                    | Bad input (not on `main`, no revision, a digest given too)    | Fix the input; nothing changed.           |
+| Fails at _Check the digest or revision exists_ | The revision is not `control-plane`'s, or not ready           | Pick another revision; nothing changed.   |
+| Traffic did not move / could not be pinned     | The pin failed                                                | Compare _Serving after_; §3b if needed.   |
+| Traffic moved, but the check failed            | The revision serves but `/health` or the traffic check failed | §4 now; the summary has the command back. |
+
+- A run waits while a deploy or another release to prod runs (one queue per environment). A third waiting run replaces the second.
+- `promote` doesn't apply to the control plane (prod-only, no dev).
+- It records a `rollback` Deployment. Rolling back to a revision from before AI-190: M6.11 loses the finish report (that revision refuses `release.yml`), so the record stays `started`; the rollback itself is unaffected.
+- Like any rollback, traffic stays pinned until the next deploy (§5).
+
+### 3b. By hand
+
+Copy the command from the summary, or find the last good revision and pin it:
 
 ```bash
 gcloud run revisions list --service control-plane --region us-central1 --limit 5
