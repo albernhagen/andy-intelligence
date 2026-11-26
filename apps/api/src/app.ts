@@ -14,6 +14,7 @@ import {
   type QuotaStore,
   type DeploymentStore,
   type MilestoneStore,
+  type EpicBreakdownStore,
   type DigestSummaryStore,
   type RoutingConfigStore,
   type NightLaunchStore,
@@ -85,6 +86,11 @@ export interface AppDeps {
    * every epic under No milestone. Absent: no milestone routes or tools (AI-304).
    */
   milestones?: MilestoneStore;
+  /**
+   * Epic breakdowns (AI-383, ADR-0155). Needs `milestones` too; absent, no breakdown routes or
+   * tools and plan-epic tasks can't start.
+   */
+  epicBreakdowns?: EpicBreakdownStore;
   /**
    * Digest summaries (AI-323, ADR-0137): one per project per day. Needs `releaseNotes` too;
    * absent, the digest has no summary and the retry route answers 503.

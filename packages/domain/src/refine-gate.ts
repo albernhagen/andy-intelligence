@@ -4,7 +4,6 @@ import {
   WorkTrackerError,
   runQuestionId,
   type Assumption,
-  type EventActor,
   type NewQuestion,
   type Question,
   type RefineGap,
@@ -14,6 +13,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { checkDor, heldGaps } from "./dor";
+import { linkSiblingBlockers } from "./sibling-links";
 import type { NightUnattended } from "./night-unattended";
 
 function log(severity: "INFO" | "WARNING", message: string, fields: object = {}) {
@@ -257,7 +257,7 @@ export class RefineGate {
       );
     }
     const keys = made.map((t) => t.key);
-    if (epic) await this.linkSiblings(output, made, kept, actor);
+    if (epic) await linkSiblingBlockers(this.tracker, output.children, made, kept, actor);
     await this.toIdeas(ticket, epic ? null : output.reason);
     log("INFO", "refine split a ticket", {
       ticket: ticket.key,
@@ -275,31 +275,6 @@ export class RefineGate {
           : ""
       }`,
     };
-  }
-
-  /**
-   * Sets each child's `blockedBy` to the keys of the siblings its indexes name. After every
-   * child exists, since an index may point at a later one; a replay rewrites nothing that matches.
-   * A story the epic already had (`kept`) keeps its blockers.
-   */
-  private async linkSiblings(
-    output: RefineOutput,
-    made: Ticket[],
-    kept: ReadonlySet<string>,
-    actor: EventActor,
-  ) {
-    for (const [i, child] of output.children.entries()) {
-      const ticket = made[i]!;
-      if (kept.has(ticket.id)) continue;
-      const blockedBy = child.blockedBy.map((b) => made[b]!.key);
-      if (blockedBy.join() === ticket.blockedBy.join()) continue;
-      await this.tracker.updateTicket(
-        ticket.projectId,
-        ticket.id,
-        { fields: { blockedBy } },
-        actor,
-      );
-    }
   }
 
   private async toIdeas(ticket: Ticket, sentBackReason: string | null): Promise<void> {

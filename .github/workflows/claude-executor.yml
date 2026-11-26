@@ -163,9 +163,10 @@ jobs:
           # The only steps this executor runs (AI-134): the read-only ones get read-only tools;
           # build and sync are the editing ones. Any other step is refused before the agent job.
           # summarize (AI-323) is read-only with no tools at all: its input is in the prompt.
+          # plan-epic (AI-383) is read-only: it drafts an epic's tickets as a proposal.
           no_tools=false
           case "$step" in
-            refine | plan | review | plan-project | ideate) read_only=true ;;
+            refine | plan | review | plan-project | ideate | plan-epic) read_only=true ;;
             summarize) read_only=true no_tools=true ;;
             build | sync) read_only=false ;;
             *) fail "step $step is not one this executor runs: refusing it" ;;

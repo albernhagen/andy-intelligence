@@ -197,6 +197,8 @@ export async function listNeedsMe(deps: ToolDeps) {
     questions: cards.flatMap((c) => c.questions),
     tickets: await withWorkers(deps, inbox.tickets),
     projectPlans: deps.plans ? await deps.plans.waiting() : [],
+    // AI-383: epics' drafted tickets waiting for approve_epic_breakdown or reject_epic_breakdown.
+    epicBreakdowns: deps.breakdowns ? await deps.breakdowns.waiting() : [],
     // AI-218: the same list as the inbox's "Waiting for your merge".
     waitingMerges: deps.waitingMerges
       ? await deps.waitingMerges.read()
