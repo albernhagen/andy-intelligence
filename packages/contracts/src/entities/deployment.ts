@@ -44,6 +44,32 @@ export const DeploymentRequestId = z
   .string()
   .regex(new RegExp(`^[A-Za-z0-9_-]{1,${DEPLOYMENT_LIMITS.request}}$`));
 
+/**
+ * What the verification run (AI-188: M6.7, ADR-0159) did with a finished deployment to its
+ * project's first environment: `started` a verify task (`runId`), is `waiting` for a free slot,
+ * the quota or the end of a pause (retried when an agent task ends), found `no_tickets` to verify,
+ * or sent the tickets back because the deploy `failed`. Null for every other deployment.
+ */
+export const DeploymentVerificationStatus = z.enum(["waiting", "started", "no_tickets", "failed"]);
+export type DeploymentVerificationStatus = z.infer<typeof DeploymentVerificationStatus>;
+
+/** Tickets one verify task checks (the verify verdict's cap, `VERIFY_LIMITS.tickets`). */
+export const VERIFICATION_MAX_TICKETS = 50;
+
+export const DeploymentVerification = z.strictObject({
+  status: DeploymentVerificationStatus,
+  /** The verify task; null unless `started`. */
+  runId: z.string().min(1).max(80).nullable(),
+  /** The Verifying tickets the deployment contains, by key. */
+  ticketKeys: z
+    .array(z.string().regex(/^[A-Z][A-Z0-9]{0,9}-[0-9]+$/))
+    .max(VERIFICATION_MAX_TICKETS),
+  /** Why it waits, or why nothing started; null otherwise. */
+  reason: z.string().max(500).nullable(),
+  updatedAt: Timestamp,
+});
+export type DeploymentVerification = z.infer<typeof DeploymentVerification>;
+
 export const DeploymentStatus = z.enum(["started", "succeeded", "failed"]);
 export type DeploymentStatus = z.infer<typeof DeploymentStatus>;
 
@@ -74,6 +100,8 @@ export const Deployment = z
     request: DeploymentRequestId.nullable().default(null),
     /** Its release, once computed (AI-183: M6.9): written at most once, by `cacheRelease`. */
     release: StoredRelease.nullable().default(null),
+    /** What the verification run did with it (AI-188: M6.7); null when it hasn't looked. */
+    verification: DeploymentVerification.nullable().default(null),
   })
   .refine((d) => (d.status === "started") === (d.finishedAt === null), {
     message: "finishedAt is set exactly when the deployment has finished",
@@ -86,7 +114,7 @@ export const Deployment = z
 export type Deployment = z.infer<typeof Deployment>;
 
 /** What `record` takes: everything but the id, which the store assigns, and the cached release. */
-export type NewDeployment = Omit<z.input<typeof Deployment>, "id" | "release">;
+export type NewDeployment = Omit<z.input<typeof Deployment>, "id" | "release" | "verification">;
 
 /** The environments a deploy or release workflow reports to; previews report elsewhere (ADR-0114). */
 export const ReportedEnvironment = DeploymentEnvironment.extract(["dev", "prod"]);

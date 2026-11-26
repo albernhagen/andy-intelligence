@@ -90,6 +90,29 @@ describe("toCodeHostEvent", () => {
     expect(event.kind === "pull_request" && event.pullRequest.state).toBe("merged");
   });
 
+  it("GivenAMergedPullRequestWithItsMergeCommit_WhenMapped_ThenTheMergeShaIsKept", () => {
+    const mergeSha = "e".repeat(40);
+    const payload = {
+      ...pullRequest({ state: "closed", merged: true, merge_commit_sha: mergeSha }),
+      action: "closed",
+    };
+    const event = toCodeHostEvent(meta("pull_request"), payload);
+    expect(event.kind === "pull_request" && event.pullRequest.mergeSha).toBe(mergeSha);
+  });
+
+  it("GivenAnOpenPullRequestsTestMergeOrABadSha_WhenMapped_ThenNoMergeSha", () => {
+    const open = toCodeHostEvent(
+      meta("pull_request"),
+      pullRequest({ merge_commit_sha: "e".repeat(40) }),
+    );
+    expect(open.kind === "pull_request" && open.pullRequest.mergeSha).toBeUndefined();
+    const bad = toCodeHostEvent(meta("pull_request"), {
+      ...pullRequest({ state: "closed", merged: true, merge_commit_sha: "not-a-sha" }),
+      action: "closed",
+    });
+    expect(bad.kind === "pull_request" && bad.pullRequest.mergeSha).toBeUndefined();
+  });
+
   it("GivenAClosedUnmergedPullRequest_WhenMapped_ThenStateIsClosed", () => {
     const event = toCodeHostEvent(meta("pull_request"), pullRequest({ state: "closed" }));
     expect(event.kind === "pull_request" && event.pullRequest.state).toBe("closed");

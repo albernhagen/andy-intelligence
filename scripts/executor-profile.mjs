@@ -5,7 +5,9 @@
 // owned files; the workflow installs the result as /etc/claude-code/managed-settings.json.
 //
 // Usage: executor-profile.mjs --step <step> --out <file> [--codeowners <file>] [--root <dir>]
-//        [--profile <profile.json>]
+//        [--profile <profile.json>] [--verify-host <host>]
+// --verify-host fills `${VERIFY_HOST}` in a step's rules (the verify step, AI-188); a step that
+// names it is refused without a valid host.
 // --root is the project checkout (default: cwd); CODEOWNERS paths are anchored there.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -75,10 +77,24 @@ function withRoot(value, root) {
  */
 export const STEP_ALIASES = { sync: "build" };
 
-export function buildProfile({ profile, step, codeowners = "", root }) {
+/** A lowercase DNS host name: labels of letters, digits and inner hyphens, at least one dot. */
+export const HOST = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+/** Fills `${VERIFY_HOST}` in the step's rules; refuses a step that needs it without a valid host. */
+function withVerifyHost(stepRules, verifyHost) {
+  const text = JSON.stringify(stepRules);
+  if (!text.includes("${VERIFY_HOST}")) return stepRules;
+  if (!verifyHost || verifyHost.length > 253 || !HOST.test(verifyHost)) {
+    throw new Error("this step needs --verify-host <host>");
+  }
+  return JSON.parse(text.replaceAll("${VERIFY_HOST}", verifyHost));
+}
+
+export function buildProfile({ profile, step, codeowners = "", root, verifyHost = "" }) {
   const rulesFor = Object.hasOwn(STEP_ALIASES, step) ? STEP_ALIASES[step] : step;
-  const stepRules = Object.hasOwn(profile.steps, rulesFor) ? profile.steps[rulesFor] : null;
-  if (!stepRules) throw new Error(`unknown step "${step}"`);
+  const found = Object.hasOwn(profile.steps, rulesFor) ? profile.steps[rulesFor] : null;
+  if (!found) throw new Error(`unknown step "${step}"`);
+  const stepRules = withVerifyHost(found, verifyHost);
   const settings = JSON.parse(JSON.stringify(profile.settings));
   if (stepRules.sandbox) settings.sandbox = withRoot(stepRules.sandbox, root ?? process.cwd());
   const ownedPaths = codeownersPatterns(codeowners)
@@ -104,6 +120,7 @@ function main() {
       codeowners: { type: "string" },
       root: { type: "string" },
       profile: { type: "string" },
+      "verify-host": { type: "string" },
     },
   });
   if (!values.step || !values.out) throw new Error("--step and --out are required");
@@ -117,6 +134,7 @@ function main() {
     step: values.step,
     codeowners,
     root: values.root ?? process.cwd(),
+    verifyHost: values["verify-host"] ?? "",
   });
   writeFileSync(values.out, `${JSON.stringify(settings, null, 2)}\n`);
 }

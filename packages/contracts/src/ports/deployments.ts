@@ -1,10 +1,13 @@
-import type {
+import {
   Deployment,
-  DeploymentEnvironment,
-  DeploymentFinish,
-  NewDeployment,
+  DeploymentVerification,
+  type DeploymentEnvironment,
+  type DeploymentFinish,
+  type DeploymentVerificationStatus,
+  type NewDeployment,
 } from "../entities/deployment";
 import type { StoredRelease } from "../entities/release-entry";
+import { WorkTrackerError } from "./index";
 
 // ── DeploymentStore ──────────────────────────────────────────────────────────
 // Deployments per project and environment (AI-161: M6.3). Storage only: who may record one and
@@ -27,6 +30,15 @@ export interface DeploymentStore {
    */
   cacheRelease(deploymentId: string, release: StoredRelease): Promise<Deployment>;
   /**
+   * Sets the deployment's verification atomically (AI-188: M6.7), only if its current status is
+   * one of `from` (null: none yet); `conflict` otherwise (nothing written), `not_found` if unknown.
+   */
+  setVerification(
+    deploymentId: string,
+    verification: DeploymentVerification,
+    from: readonly (DeploymentVerificationStatus | null)[],
+  ): Promise<Deployment>;
+  /**
    * The project's deployments to one environment, newest `startedAt` first: at most `limit`
    * (default `DEPLOYMENT_LIMITS.defaultPage`), never more than `DEPLOYMENT_LIMITS.maxPage`.
    */
@@ -37,4 +49,24 @@ export interface DeploymentStore {
   ): Promise<Deployment[]>;
   /** The newest `succeeded` deployment of the project to that environment, or null. */
   latestGood(projectId: string, environment: DeploymentEnvironment): Promise<Deployment | null>;
+}
+
+/**
+ * The deployment with its verification set (shared by every DeploymentStore), or `conflict` when
+ * its current verification status isn't one of `from` (null: none yet), so two writers can't both
+ * claim a waiting verification.
+ */
+export function withVerification(
+  current: Deployment,
+  verification: DeploymentVerification,
+  from: readonly (DeploymentVerificationStatus | null)[],
+): Deployment {
+  const status = current.verification?.status ?? null;
+  if (!from.includes(status)) {
+    throw new WorkTrackerError(
+      "conflict",
+      `deployment ${current.id}'s verification is ${status ?? "unset"}, expected ${from.map((f) => f ?? "unset").join(" or ")}`,
+    );
+  }
+  return Deployment.parse({ ...current, verification: DeploymentVerification.parse(verification) });
 }

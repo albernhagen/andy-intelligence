@@ -28,6 +28,7 @@ import { runLocalFields } from "./runner";
 import { runBaseFields } from "./build";
 import { PACKAGE_LIMITS, PackageName, PlanPackages } from "./packages";
 import { runIdeaFields } from "./ideate";
+import { runVerifyFields } from "./verify";
 import { runRouteFields } from "./routing";
 import { ProjectSpendCaps } from "./spend-caps";
 import { MilestoneId } from "./milestone";
@@ -706,6 +707,7 @@ export const Run = z.object({
   ...runBaseFields,
   ...runIdeaFields,
   ...runRouteFields,
+  ...runVerifyFields,
 });
 export type Run = z.infer<typeof Run>;
 
@@ -927,6 +929,12 @@ export const PullRequest = z.object({
   headSha: z.string().min(1),
   baseRef: z.string().min(1),
   url: z.url(),
+  /** The commit a merge made on the base branch (AI-188); absent or null when not merged or unknown. */
+  mergeSha: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .nullable()
+    .optional(),
   /** Label names (AI-215, capped); absent when not read, which the merge verdict treats as unknown. */
   labels: z.array(z.string().max(100)).max(100).nullable().optional(),
 });

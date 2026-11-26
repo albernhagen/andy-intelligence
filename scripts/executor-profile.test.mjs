@@ -12,7 +12,8 @@ import {
 
 const profile = JSON.parse(readFileSync(DEFAULT_PROFILE, "utf8"));
 const ROOT = "/work/proj";
-const build = (step, codeowners = "") => buildProfile({ profile, step, codeowners, root: ROOT });
+const build = (step, codeowners = "") =>
+  buildProfile({ profile, step, codeowners, root: ROOT, verifyHost: "app.example.run.app" });
 
 describe("buildProfile", () => {
   it("GivenTheSyncStep_WhenBuilt_ThenItGetsExactlyTheBuildsToolsAndSandbox", () => {
@@ -275,5 +276,46 @@ describe("CLI", () => {
     );
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("unknown step");
+  });
+});
+
+describe("buildProfile: verify host (AI-188)", () => {
+  it("GivenTheVerifyStepAndAHost_WhenBuilt_ThenWebFetchIsAllowedForThatHostOnly", () => {
+    const settings = buildProfile({
+      profile,
+      step: "verify",
+      root: ROOT,
+      verifyHost: "app.example.run.app",
+    });
+    expect(settings.permissions.allow).toContain("WebFetch(domain:app.example.run.app)");
+    expect(JSON.stringify(settings)).not.toContain("${VERIFY_HOST}");
+    expect(settings.permissions.deny).toEqual(expect.arrayContaining(["Bash", "Write", "Edit"]));
+    expect(settings.sandbox).toBeUndefined();
+  });
+
+  it("GivenTheVerifyStepWithoutOrWithABadHost_WhenBuilt_ThenRefused", () => {
+    for (const verifyHost of [
+      "",
+      "localhost",
+      "a.b/c",
+      "A.example.com",
+      "x.example.com)",
+      "*.example.com",
+    ]) {
+      expect(
+        () => buildProfile({ profile, step: "verify", root: ROOT, verifyHost }),
+        verifyHost,
+      ).toThrow(/needs --verify-host/);
+    }
+  });
+
+  it("GivenAnotherStepAndAHost_WhenBuilt_ThenTheHostIsIgnored", () => {
+    const settings = buildProfile({
+      profile,
+      step: "refine",
+      root: ROOT,
+      verifyHost: "app.example.com",
+    });
+    expect(JSON.stringify(settings)).not.toContain("app.example.com");
   });
 });

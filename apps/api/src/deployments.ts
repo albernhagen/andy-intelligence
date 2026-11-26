@@ -70,6 +70,11 @@ export interface DeploymentCallbackDeps {
   verify: ActionsTokenVerifier;
   /** The project a repo is registered to, or null (cached by the caller). */
   registeredProject: (repo: string) => Promise<Project | null>;
+  /**
+   * After a finish is recorded (AI-188: M6.7): the verification run acts on a deploy to the
+   * project's first environment. Never throws; the answer doesn't wait on its outcome's success.
+   */
+  onFinished?: (deployment: Deployment, project: Project) => Promise<unknown>;
   now?: () => Date;
 }
 
@@ -220,6 +225,14 @@ export function registerDeploymentCallbacks(
         ...(body.data.revision ? { revision: body.data.revision } : {}),
       });
       log("INFO", "deployment finished", { deploymentId: done.id, status: done.status });
+      if (deps.onFinished) {
+        await deps.onFinished(done, caller.project).catch((err: unknown) =>
+          log("WARNING", "deployment finish hook failed", {
+            deploymentId: done.id,
+            error: String(err),
+          }),
+        );
+      }
       return c.json({ deploymentId: done.id, status: done.status }, 200);
     } catch (err) {
       if (err instanceof WorkTrackerError && err.code === "conflict") {
@@ -240,5 +253,11 @@ export const publicRoutes: RouteModule = (app, s) => {
     verify: s.verifyActionsToken,
     registeredProject: (repo) => repoIndex.projectFor(repo),
     now: s.now,
+    ...(s.verification
+      ? {
+          onFinished: (deployment: Deployment, project: Project) =>
+            s.verification!.deploymentFinished(deployment, project),
+        }
+      : {}),
   });
 };

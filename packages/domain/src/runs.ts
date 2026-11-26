@@ -30,6 +30,9 @@ import {
   type RunUsage,
   type ProviderKey,
   type QuotaLevel,
+  type Deployment,
+  type VerifyTarget,
+  VERIFY_LIMITS,
   type RouteSkip,
   type Question,
   type Route,
@@ -97,6 +100,7 @@ import {
   type ResolvedRoute,
 } from "./route-resolver";
 import { DIGEST_SUMMARY_RUN, type DigestSummaryResults } from "./digest-summary";
+import { VERIFY_RUN, type VerifyResults } from "./verify-dispatch";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 import { syncPrompt, type SyncTarget } from "./sync-runs";
 import { winsNightSlot, type NightSlot } from "./night-budget";
@@ -307,6 +311,8 @@ export class RunService {
       EpicBreakdownService,
       "prepareTask" | "applyRun"
     > | null = null,
+    /** Applies verify verdicts (AI-188: M6.7); null: verify tasks can't start. */
+    private readonly verifyResults: Pick<VerifyResults, "apply" | "target"> | null = null,
   ) {}
 
   /** The refine gate with this service's tracker, clock and night launches. */
@@ -645,6 +651,112 @@ export class RunService {
         null,
         repo,
         `Started a summarize task (${route.model})`,
+        budget,
+      );
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
+  }
+
+  /**
+   * A deployment's verify task (AI-188: M6.7, ADR-0159), started by `VerificationService`: no
+   * ticket, read-only, the `verify` step's route (fast tier), `VERIFY_RUN`'s turns and deadline.
+   * Refused while paused, at the quota reserve, at the project's dial or the global cap, with a
+   * verify task in flight in the project, or when builds are off; the service then leaves the
+   * deployment waiting. One per project in flight; the oldest wins a race (ADR-0079).
+   */
+  async requestVerify(
+    projectId: string,
+    input: {
+      deployment: Deployment;
+      ticketIds: string[];
+      prompt: string;
+      quota: Partial<Record<string, QuotaLevel>>;
+    },
+  ): Promise<Run> {
+    if (!this.executor || !this.verifyResults) {
+      throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
+    }
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
+    const repo = project.repos[0];
+    if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
+    if (project.paused) throw new DomainError("paused", `dispatch is paused for ${project.key}`);
+    if (!project.buildEnabled) {
+      throw new DomainError("not_buildable", `builds are off for project ${project.key}`);
+    }
+    if (input.ticketIds.length === 0 || input.ticketIds.length > VERIFY_LIMITS.tickets) {
+      throw new DomainError("invalid_field", "a verify task takes 1 to 50 tickets");
+    }
+    const resolved = resolveRoute("verify", "fast", await this.routingOf(projectId));
+    if (!resolved.route || resolved.route.harness !== "claude-code") {
+      const why = resolved.route
+        ? `its route is ${resolved.route.harness}; verify runs only on claude-code`
+        : skippedText(resolved.skipped);
+      throw new DomainError(
+        "no_route",
+        `no usable verify route in the ${resolved.tier} tier: ${why}`,
+      );
+    }
+    const route = resolved.route;
+    if (
+      PROVIDER_BILLING[route.provider] === "subscription" &&
+      input.quota[route.provider] === "pause"
+    ) {
+      throw new DomainError("quota_reserve", `${route.provider} is at its quota reserve`);
+    }
+    const sameStep = (r: Run) => r.ticketId === null && r.step === "verify";
+    const everywhere = await this.inFlightEverywhere();
+    const active = everywhere.filter((r) => r.projectId === projectId);
+    if (active.some(sameStep)) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} already has a verify task in flight`,
+      );
+    }
+    if (active.filter(countsForDial).length >= project.runsAtOnce) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} is at its agent-tasks-at-once dial`,
+      );
+    }
+    if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
+      throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached");
+    }
+    const run = await this.runs.create({
+      projectId,
+      ticketId: null,
+      step: "verify",
+      route,
+      routeSkips: routeSkips(resolved),
+      tier: resolved.tier,
+      deadline: new Date(this.now().getTime() + VERIFY_RUN.timeoutMinutes * 60_000).toISOString(),
+      prompt: input.prompt,
+      maxTurns: VERIFY_RUN.maxTurns,
+      deploymentId: input.deployment.id,
+      verifyTicketIds: input.ticketIds,
+    });
+    const after = await this.inFlightEverywhere();
+    const inProject = after.filter((r) => r.projectId === projectId);
+    const won =
+      after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
+      inProject
+        .filter(countsForDial)
+        .slice(0, project.runsAtOnce)
+        .some((r) => r.id === run.id) &&
+      inProject.find(sameStep)?.id === run.id;
+    if (!won) {
+      await this.fail(run.id, "another agent task started at the same time");
+      throw new DomainError("run_limit", `project ${project.key} has no free agent task slot`);
+    }
+    const budget = await this.reserveSpend(run);
+    try {
+      return await this.dispatchRun(
+        run,
+        null,
+        repo,
+        `Started a verify task (${route.model})`,
         budget,
       );
     } catch (err) {
@@ -1221,7 +1333,18 @@ export class RunService {
       billingType,
       maxBudgetUsd,
       packages: await this.packagesFor(run),
+      verify: await this.verifyTargetOf(run),
     };
+  }
+
+  /** A verify task's deployed URL and commit (AI-188), from its deployment; null otherwise. */
+  private async verifyTargetOf(run: Run): Promise<VerifyTarget | null> {
+    if (run.step !== "verify") return null;
+    const target = this.verifyResults ? await this.verifyResults.target(run) : null;
+    if (!target) {
+      throw new DomainError("run_finished", `run ${run.id}'s deployment has no URL to verify`);
+    }
+    return target;
   }
 
   /**
@@ -1344,6 +1467,19 @@ export class RunService {
         error = applied.error;
       } else {
         summary = applied.summary;
+      }
+    }
+    // AI-188: the verdict moves its tickets, or the rejected answer fails the run (none move).
+    if (run.step === "verify" && status === "succeeded") {
+      const applied = this.verifyResults
+        ? await this.verifyResults.apply(run, result.output)
+        : { error: "verify tasks aren't wired on this instance" };
+      if ("error" in applied) {
+        status = "failed";
+        error = applied.error;
+        log("WARNING", "verify result rejected", { runId: run.id, error });
+      } else {
+        summary = applied.summary.slice(0, RUN_SUMMARY_MAX);
       }
     }
     if (run.step === "build") {

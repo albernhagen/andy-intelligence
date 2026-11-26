@@ -106,3 +106,28 @@ export const VerifyVerdict = z
     }
   });
 export type VerifyVerdict = z.infer<typeof VerifyVerdict>;
+
+/**
+ * Spread into `Run` (AI-188: M6.7). A verify task has no ticket: it names its deployment and the
+ * tickets it checks. Defaults keep older documents readable (no schema version bump).
+ */
+export const runVerifyFields = {
+  /** A verify task's deployment; null for other steps. */
+  deploymentId: z
+    .string()
+    .regex(/^[A-Za-z0-9-]{1,80}$/)
+    .nullable()
+    .default(null),
+  /** A verify task's tickets (ids), in the order its prompt lists them; empty for other steps. */
+  verifyTicketIds: z.array(z.string().min(1)).max(VERIFY_LIMITS.tickets).default([]),
+};
+
+/**
+ * What the executor needs for a verify task (AI-188), besides its prompt: the deployed URL (its
+ * host is the only one the agent may fetch) and the commit to check out.
+ */
+export const VerifyTarget = z.strictObject({
+  url: z.url().max(512),
+  gitSha: z.string().regex(/^[0-9a-f]{40}$/),
+});
+export type VerifyTarget = z.infer<typeof VerifyTarget>;

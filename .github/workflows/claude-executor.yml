@@ -65,6 +65,8 @@ jobs:
       platform_sha: ${{ steps.context.outputs.platform_sha }}
       max_budget_usd: ${{ steps.context.outputs.max_budget_usd }}
       packages: ${{ steps.context.outputs.packages }}
+      verify_host: ${{ steps.context.outputs.verify_host }}
+      verify_sha: ${{ steps.context.outputs.verify_sha }}
       error: ${{ steps.context.outputs.error }}
     steps:
       - name: Validate inputs and fetch the run context
@@ -75,6 +77,7 @@ jobs:
           MAX_TURNS_CAP: 200 # spend cap per run (ADR-0028), whatever the control plane asks
           MAX_BUDGET_USD_CAP: 50 # USD per pay_per_use run (AI-260), whatever the control plane asks
           SUMMARIZE_MAX_TURNS: 3 # the digest summary is one answer, no tools (AI-323, ADR-0137)
+          VERIFY_MAX_TURNS: 30 # a verify task reads pages of one deployment (AI-188, ADR-0159)
           MAX_PROMPT_CHARS: 200000
           MAX_PACKAGES: 5 # plan-named packages per ticket (AI-386, ADR-0028)
         run: |
@@ -107,7 +110,7 @@ jobs:
             fail "GET /runs/$RUN_ID/context returned HTTP $code: $(head -c 300 "$body" 2>/dev/null | tr -d '\r\n')"
           fi
           jq -e --arg id "$RUN_ID" --argjson cap "$MAX_TURNS_CAP" --argjson max "$MAX_PROMPT_CHARS" \
-            --argjson summarize_turns "$SUMMARIZE_MAX_TURNS" \
+            --argjson summarize_turns "$SUMMARIZE_MAX_TURNS" --argjson verify_turns "$VERIFY_MAX_TURNS" \
             --argjson budgetcap "$MAX_BUDGET_USD_CAP" --argjson max_packages "$MAX_PACKAGES" '
             (.runId == $id)
             and ((.billingType // "subscription") as $b | ($b == "subscription" or $b == "pay_per_use"))
@@ -133,6 +136,12 @@ jobs:
               and (.sync.headSha | type == "string" and test("^[0-9a-f]{40}$"))))
             and (.step != "summarize" or (
               (.ticket == null) and (.branch == null) and (.maxTurns <= $summarize_turns)))
+            and (.step != "verify" or (
+              (.ticket == null) and (.branch == null) and (.maxTurns <= $verify_turns)
+              and (.verify.gitSha | type == "string" and test("^[0-9a-f]{40}$"))
+              and (.verify.url | type == "string" and length <= 512
+                and test("^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?([.][a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+(/[A-Za-z0-9._~/-]*)?$"))))
+            and (.step == "verify" or ((.verify // null) == null))
             and (.baseBranch == null or (
               (.step == "build")
               and (.baseBranch | type == "string" and test("^epic/[A-Z][A-Z0-9]{0,9}-[0-9]{1,9}$"))
@@ -164,10 +173,20 @@ jobs:
           # build and sync are the editing ones. Any other step is refused before the agent job.
           # summarize (AI-323) is read-only with no tools at all: its input is in the prompt.
           # plan-epic (AI-383) is read-only: it drafts an epic's tickets as a proposal.
+          # verify (AI-188, ADR-0159) is read-only too, plus WebFetch of the deployed host alone:
+          # the host and commit were checked above; no Bash, so it can't write or reach elsewhere.
           no_tools=false
+          verify_host=""
+          verify_sha=""
           case "$step" in
             refine | plan | review | plan-project | ideate | plan-epic) read_only=true ;;
             summarize) read_only=true no_tools=true ;;
+            verify)
+              read_only=true
+              verify_host=$(jq -r '.verify.url | ltrimstr("https://") | split("/") | .[0]' "$body")
+              verify_sha=$(jq -r .verify.gitSha "$body")
+              [[ "$verify_host" =~ ^[a-z0-9.-]{1,253}$ && "$verify_sha" =~ ^[0-9a-f]{40}$ ]] || fail "unexpected verify target"
+              ;;
             build | sync) read_only=false ;;
             *) fail "step $step is not one this executor runs: refusing it" ;;
           esac
@@ -178,6 +197,8 @@ jobs:
             echo "max_budget_usd=$max_budget_usd"
             echo "read_only=$read_only"
             echo "no_tools=$no_tools"
+            echo "verify_host=$verify_host"
+            echo "verify_sha=$verify_sha"
             echo "platform_sha=$platform_sha"
             echo "ticket_key=$(jq -r '.ticket.key // ""' "$body")"
             echo "project_id=$(jq -r '.ticket.projectId // ""' "$body")"
@@ -321,11 +342,11 @@ jobs:
       # A sync run checks out the PR head it was started on, with history, to merge the default
       # branch into it; a night launch's story build checks out its epic branch (AI-122, checked in
       # the context job), with history, to compare it with the default branch; every other step
-      # starts from the default branch.
+      # starts from the default branch, but a verify task (AI-188) reads the deployed commit.
       - name: Check out the project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.context.outputs.step == 'sync' && needs.context.outputs.head_sha || needs.context.outputs.base_branch || github.event.repository.default_branch }}
+          ref: ${{ needs.context.outputs.step == 'sync' && needs.context.outputs.head_sha || needs.context.outputs.verify_sha || needs.context.outputs.base_branch || github.event.repository.default_branch }}
           fetch-depth: ${{ fromJSON((needs.context.outputs.step == 'sync' || needs.context.outputs.base_branch != '') && '0' || '1') }}
           persist-credentials: false
 
@@ -381,6 +402,7 @@ jobs:
       - name: Install the permission profile as managed settings
         env:
           STEP: ${{ needs.context.outputs.step }}
+          VERIFY_HOST: ${{ needs.context.outputs.verify_host }}
         run: |
           mv .executor-platform "$RUNNER_TEMP/platform"
           codeowners=""
@@ -388,7 +410,8 @@ jobs:
             if [ -f "$f" ]; then codeowners="$GITHUB_WORKSPACE/$f"; break; fi
           done
           node "$RUNNER_TEMP/platform/scripts/executor-profile.mjs" --step "$STEP" \
-            --root "$GITHUB_WORKSPACE" --codeowners "$codeowners" --out "$RUNNER_TEMP/managed-settings.json"
+            --root "$GITHUB_WORKSPACE" --codeowners "$codeowners" --verify-host "$VERIFY_HOST" \
+            --out "$RUNNER_TEMP/managed-settings.json"
           # Managed settings are Claude Code's top-precedence source: the project's .claude/
           # can't loosen them. Root-owned, and the only managed source on the runner.
           sudo rm -rf /etc/claude-code
@@ -648,7 +671,7 @@ jobs:
         id: claude
         if: steps.mode.outputs.skip_agent != 'true'
         continue-on-error: true # a failed agent is reported as a failed run, not a crashed job
-        timeout-minutes: ${{ needs.context.outputs.step == 'build' && 55 || (needs.context.outputs.step == 'sync' && 40) || (needs.context.outputs.step == 'summarize' && 10) || 25 }}
+        timeout-minutes: ${{ needs.context.outputs.step == 'build' && 55 || (needs.context.outputs.step == 'sync' && 40) || (needs.context.outputs.step == 'summarize' && 10) || (needs.context.outputs.step == 'verify' && 20) || 25 }}
         uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
         env:
           # Build and sync: strip credentials from every subprocess and give Bash its own PID
@@ -673,14 +696,14 @@ jobs:
           # model, max_turns and max_budget_usd (pay_per_use only, AI-260) were validated in `context`. The managed profile already holds
           # the step's allow/deny rules (allowManagedPermissionRulesOnly ignores --allowedTools);
           # the flags repeat them for read-only steps as a second layer (summarize: no tools at all,
-          # AI-323). With a schema, the run
+          # AI-323; verify: WebFetch of the deployed host only, AI-188). With a schema, the run
           # must end in structured output matching it (the report sends it as `output`).
           claude_args: |
             --model ${{ needs.context.outputs.model }}
             --max-turns ${{ needs.context.outputs.max_turns }}
             ${{ needs.context.outputs.max_budget_usd != '' && format('--max-budget-usd {0}', needs.context.outputs.max_budget_usd) || '' }}
             ${{ steps.procedure.outputs.schema_args }}
-            ${{ needs.context.outputs.no_tools == 'true' && '--disallowedTools "Read,Glob,Grep,Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task"' || (needs.context.outputs.read_only == 'true' && '--allowedTools "Read,Glob,Grep" --disallowedTools "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch"' || '') }}
+            ${{ needs.context.outputs.no_tools == 'true' && '--disallowedTools "Read,Glob,Grep,Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task"' || (needs.context.outputs.step == 'verify' && format('--allowedTools "Read,Glob,Grep,WebFetch(domain:{0})" --disallowedTools "Bash,Edit,Write,MultiEdit,NotebookEdit,WebSearch,Task"', needs.context.outputs.verify_host) || (needs.context.outputs.read_only == 'true' && '--allowedTools "Read,Glob,Grep" --disallowedTools "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch"' || '')) }}
 
       # Build only. The checkout is hostile now: git reads the copy of .git taken before the agent
       # (no hooks, fsmonitor or filters the agent could plant), and the change leaves as a patch.
