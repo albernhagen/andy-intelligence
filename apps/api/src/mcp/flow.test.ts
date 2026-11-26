@@ -438,6 +438,47 @@ describe("MCP lookup cap (ADR-0028)", () => {
     expect(res.headers.get("retry-after")).toBe("60");
   });
 
+  const rateLimitLogs = (spy: { mock: { calls: unknown[][] } }, message: string) =>
+    spy.mock.calls.filter((call) => String(call[0]).includes(`"message":"${message}"`));
+
+  it("GivenTheCapIsSpent_WhenMoreMcpCallsArrive_ThenEach429sAndOneRateLimitLineIsLogged", async () => {
+    const ctx = setup();
+    for (let i = 0; i < LOOKUPS_PER_MINUTE; i++) await callMcp(ctx, newToken());
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const statuses = [];
+    for (let i = 0; i < 3; i++) statuses.push((await callMcp(ctx, newToken())).status);
+
+    expect(statuses).toEqual([429, 429, 429]);
+    expect(rateLimitLogs(spy, "mcp request rate limited")).toHaveLength(1);
+    spy.mockRestore();
+  });
+
+  it("GivenTheCapIsSpent_WhenMoreRefreshesArrive_ThenEach429sAndOneRateLimitLineIsLogged", async () => {
+    const ctx = setup();
+    const refresh = () =>
+      ctx.appFetch(`${PUBLIC_URL}/oauth/token`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: newToken(),
+          client_id: CLIENT_ID,
+        }),
+      });
+    const quiet = vi.spyOn(console, "log").mockImplementation(() => {});
+    for (let i = 0; i < LOOKUPS_PER_MINUTE; i++) await refresh();
+    quiet.mockRestore();
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const statuses = [];
+    for (let i = 0; i < 3; i++) statuses.push((await refresh()).status);
+
+    expect(statuses).toEqual([429, 429, 429]);
+    expect(rateLimitLogs(spy, "oauth request rate limited")).toHaveLength(1);
+    spy.mockRestore();
+  });
+
   it("GivenMalformedTokens_WhenCallingMcpOrTheTokenEndpoint_ThenNoLookupIsSpent", async () => {
     const ctx = setup();
     for (let i = 0; i < LOOKUPS_PER_MINUTE + 5; i++)

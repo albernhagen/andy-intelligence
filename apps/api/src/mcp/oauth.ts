@@ -137,7 +137,10 @@ export function registerOAuthRoutes(app: Hono<AuthEnv>, deps: McpAuthDeps & Look
 
   function oauthError(c: Context, err: unknown) {
     if (err instanceof RateLimited) {
-      log("WARNING", "oauth request rate limited", { path: c.req.path });
+      // Once per window per instance, so a flood can't flood the logs (ADR-0028).
+      if (deps.lookups.firstRefusalInWindow()) {
+        log("WARNING", "oauth request rate limited", { path: c.req.path });
+      }
       c.header("retry-after", "60");
       return c.json({ error: "rate_limited" }, 429);
     }
