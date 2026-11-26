@@ -8,6 +8,7 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
   InMemoryDeploymentStore,
+  InMemoryReleaseRequestStore,
   InMemoryMilestoneStore,
   InMemoryRoutingConfigStore,
   InMemorySpendCapsStore,
@@ -42,6 +43,8 @@ export function renderApp(
     email?: Parameters<typeof createApp>[0]["email"];
     /** A tracker to use instead of a fresh one (e.g. one that reports epics' milestones). */
     tracker?: InMemoryWorkTracker;
+    /** A component to render alone, against the same API, instead of the router. */
+    ui?: React.ReactElement;
   } = {},
 ) {
   const tracker = opts.tracker ?? new InMemoryWorkTracker();
@@ -52,6 +55,7 @@ export function renderApp(
   const configChanges = new InMemoryConfigChangeStore();
   const nightLaunches = new InMemoryNightLaunchStore();
   const deployments = new InMemoryDeploymentStore();
+  const releaseRequests = new InMemoryReleaseRequestStore();
   const routing = new InMemoryRoutingConfigStore();
   const spendCapsStore = new InMemorySpendCapsStore();
   const releaseNotes = new InMemoryReleaseNoteStore();
@@ -85,6 +89,7 @@ export function renderApp(
     configChanges,
     nightLaunches,
     deployments,
+    releaseRequests,
     milestones,
     releaseNotes,
     digestSummaries,
@@ -136,7 +141,7 @@ export function renderApp(
   render(
     <QueryClientProvider client={queryClient}>
       <ApiContext.Provider value={api}>
-        <RouterProvider router={router} />
+        {opts.ui ?? <RouterProvider router={router} />}
       </ApiContext.Provider>
     </QueryClientProvider>,
   );
@@ -158,6 +163,7 @@ export function renderApp(
     connections,
     nightLaunches,
     deployments,
+    releaseRequests,
     routing,
     service: new TicketService(tracker),
   };

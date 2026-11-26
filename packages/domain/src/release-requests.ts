@@ -102,11 +102,14 @@ export function releaseRefusal(
   return null;
 }
 
+/** The fields the target rules read; the web's listing rows have them too. */
+export type ReleaseCandidate = Pick<Deployment, "status" | "imageDigest" | "revision" | "gitSha">;
+
 /** The deployment a promote ships: the named digest's, or the newest succeeded dev one. */
-export function promoteSource(
-  dev: readonly Deployment[],
+export function promoteSource<D extends ReleaseCandidate>(
+  dev: readonly D[],
   digest: string | undefined,
-): Deployment | string {
+): D | string {
   const good = dev.filter((d) => d.status === "succeeded");
   if (digest === undefined) return good[0] ?? "nothing has succeeded in dev to promote";
   return (
@@ -119,11 +122,11 @@ export function promoteSource(
  * The deployment a rollback returns to (newest first input): the named revision's, or the newest
  * succeeded one whose revision differs from what serves now (the newest succeeded deployment).
  */
-export function rollbackTarget(
-  deployments: readonly Deployment[],
+export function rollbackTarget<D extends ReleaseCandidate>(
+  deployments: readonly D[],
   environment: ReportedEnvironment,
   revision: string | undefined,
-): Deployment | string {
+): D | string {
   const good = deployments.filter((d) => d.status === "succeeded" && d.revision !== null);
   const serving = good[0];
   if (!serving) return `nothing has succeeded in ${environment} with a known revision`;
