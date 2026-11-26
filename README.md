@@ -121,8 +121,9 @@ pnpm screenshots:table --write               # after a push: before-and-after ta
 | `packages/github`     | GitHub App adapter: `GitHubCodeHost`, webhook HMAC + mapping        |
 | `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)                  |
 | `infra/control-plane` | Control-plane GCP resources                                         |
-| `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only)       |
+| `infra/billing`       | Budgets (control plane + managed projects), opt-in kill switches    |
 | `infra/dns`           | Cloudflare records for `ai.andybernhagen.com` (local plans only)    |
+| `infra/modules`       | Terraform modules for managed projects (`project-budget`)           |
 | `scripts`             | Repo tooling: format hook, review gate, coordinator tools           |
 | `platform/actions`    | Composite actions behind every required check (baseline)            |
 | `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`               |

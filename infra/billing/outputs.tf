@@ -12,3 +12,8 @@ output "kill_switch_topic" {
   description = "Topic the budget publishes to; publish a fake message here to test the switch (billing runbook §4)."
   value       = var.kill_switch_enabled ? google_pubsub_topic.budget[0].id : null
 }
+
+output "managed_project_kill_switch_topics" {
+  description = "Kill switch topic per managed project entry (null where the switch is off)."
+  value       = { for k, m in module.managed_project_budget : k => m.kill_switch_topic }
+}

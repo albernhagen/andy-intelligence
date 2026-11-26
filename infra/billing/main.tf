@@ -1,6 +1,7 @@
 # Billing guardrails (ADR-0028, ADR-0029): a Cloud Billing budget with email alerts for the
 # control-plane project, and the opt-in cost kill switch (kill-switch.tf). Budgets belong to
-# the billing account, so they live in their own root.
+# the billing account, so they live in their own root. Each managed project environment gets
+# its own budget from infra/modules/project-budget (managed_projects, bottom of this file).
 # Plans and applies are local only (Andy): CI runs fmt/validate but has no billing access.
 
 terraform {
@@ -89,6 +90,23 @@ resource "google_billing_budget" "control_plane" {
       disable_default_iam_recipients = false
     }
   }
+
+  depends_on = [google_project_service.billingbudgets]
+}
+
+# One budget (and opt-in kill switch) per managed project environment (AI-162: M6.14).
+module "managed_project_budget" {
+  source   = "../modules/project-budget"
+  for_each = var.managed_projects
+
+  billing_account_id     = var.billing_account_id
+  project_id             = each.value.project_id
+  budget_amount_usd      = each.value.budget_amount_usd
+  region                 = each.value.region
+  kill_switch_enabled    = each.value.kill_switch_enabled
+  kill_switch_ratio      = each.value.kill_switch_ratio
+  kill_switch_service    = each.value.kill_switch_service
+  kill_switch_runtime_sa = each.value.kill_switch_runtime_sa
 
   depends_on = [google_project_service.billingbudgets]
 }
