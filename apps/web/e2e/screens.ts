@@ -78,6 +78,15 @@ export const SCREENS: Screen[] = [
     url: "/p/ops/whats-new",
     ready: "Backups now land in a second region",
   },
+  // AI-189: M6.10: listings served (coverage.spec.ts) as the fake has no GitHub; the newest prod
+  // deployment opened to its release notes.
+  {
+    route: "/p/$projectId/releases",
+    name: "releases",
+    url: "/p/ai/releases",
+    ready: "Promote and rollback from the Releases page",
+    dark: true,
+  },
   {
     route: "/p/$projectId/dashboards",
     name: "dashboards",

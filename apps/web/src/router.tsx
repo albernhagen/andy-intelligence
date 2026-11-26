@@ -19,6 +19,7 @@ import { ProjectSettingsPage } from "@/pages/ProjectSettingsPage";
 import { SetupPage } from "@/pages/SetupPage";
 import { readySearch } from "@/lib/ready";
 import type { ReadyFilters } from "@andy/contracts";
+import { ReleasesPage } from "@/pages/ReleasesPage";
 import { RunnersPage } from "@/pages/RunnersPage";
 import { RunPage } from "@/pages/RunPage";
 import { TicketPage } from "@/pages/TicketPage";
@@ -155,6 +156,12 @@ const routeTree = rootRoute.addChildren([
       const days = Number(search.days);
       return days === 1 || days === 30 || days === 90 ? { days } : {};
     },
+  }),
+  // Releases (AI-189: M6.10): under What's new, project-scoped only, as releases are per project.
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/releases",
+    component: ReleasesPage,
   }),
   createRoute({
     getParentRoute: () => rootRoute,

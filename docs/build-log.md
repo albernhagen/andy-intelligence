@@ -15,7 +15,6 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 ## Pending decisions (Andy)
 
 - AI-322 UX review: approve the ranked list in [`build-log/2026-11-21-ux-review.md`](build-log/2026-11-21-ux-review.md) (AI-325 to AI-343, all in Ideas) before any is built.
-- Production monitoring (alerts, error budget per project) as part of "shipped" (brief): add to M6: Dev → prod releases when it is split into tickets.
 - `autoMerge` on for project `AI`: after a trial of five tickets where the gate's `would_auto_merge` calls are compared with the coordinator's (Andy, 2026-11-10).
 - Context sources design (open question 12).
 - Night of 2026-11-23, PRs waiting for Andy's merge and the epic PR: [2026-11-24-handover-night.md](build-log/2026-11-24-handover-night.md).
