@@ -37,6 +37,19 @@ export const MergeQueueEntry = z.object({
   syncRequestedSha: Sha.nullable(),
   /** When the queue first judged it (the hold cap's start); null until then. */
   judgedSince: Timestamp.nullable(),
+  /**
+   * AI-388 (ADR-0157): `owner` when Andy asked from the web app, which waives the reasons the merge
+   * mode keeps for him (kept and high-risk paths, the mode, his accepted label) and nothing else.
+   * Null for the gate and MCP `merge_pr`. Absent in records stored before it.
+   */
+  approval: z.enum(["owner"]).nullable().default(null),
+  /**
+   * The PR's own diff Andy approved (`CodeHost.diffDigest`): the approval covers a later head only
+   * while its diff is the same, so a sync of the default branch keeps it and a new change doesn't.
+   */
+  approvedDiff: z.string().min(1).max(200).nullable().default(null),
+  /** What the queue last found it waiting for, shown to Andy (AI-388); null until judged. */
+  lastNote: z.string().max(500).nullable().default(null),
 });
 export type MergeQueueEntry = z.infer<typeof MergeQueueEntry>;
 

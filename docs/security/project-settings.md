@@ -1,6 +1,6 @@
 # Threat model: Project settings
 
-Per-project settings Andy changes. Environments (AI-160), deploy kind (AI-387), merge mode (AI-214); questions per day: MCP `set_daily_question_cap` (AI-292), rules and log as `PATCH`; others: [ui-and-mcp.md](ui-and-mcp.md).
+Per-project settings Andy changes. Environments (AI-160), deploy kind (AI-387), PR sync (AI-388), merge mode (AI-214); questions per day: MCP `set_daily_question_cap` (AI-292), rules and log as `PATCH`; others: [ui-and-mcp.md](ui-and-mcp.md).
 
 ## Entry points
 
@@ -9,6 +9,7 @@ Per-project settings Andy changes. Environments (AI-160), deploy kind (AI-387), 
 | `PATCH /api/projects/:id` field `environments` (the settings page's Environments select) | Allow-listed users (Firebase ID token on `/api`)    | Owner-only through the project-settings rule (`change_project_settings` in `permissions.ts`, unchanged); agents and the system get 403 | A fixed two-value list, `prod-only` (default) or `dev-and-prod`; anything else is a 400. Each change goes into the config change log with who and when, and can be reverted there under the same rule |
 | MCP `set_environments`                                                                   | Allow-listed users, with our access token on `/mcp` | Same rule; the tool acts as the signed-in user (`user:<uid>`)                                                                          | Same value list and log; `get_project_settings` reads it                                                                                                                                              |
 | `PATCH …` field `deployKind`; MCP `set_deploy_kind` (AI-387, ADR-0114)                   | Same                                                | Same rule                                                                                                                              | `none` (default) or `cloud-run`; else 400. Logged, revertable. R-AI-387                                                                                                                               |
+| `PATCH …` field `prSync`; MCP `set_pr_sync` (AI-388, ADR-0157)                           | Same                                                | Same rule                                                                                                                              | `queue` (default) or `all`; else 400. Logged, revertable. Read by the re-sync workflow through `POST /github/pr-sync` ([entry-points-and-credentials.md](entry-points-and-credentials.md)). R-AI-388  |
 | `PATCH …` field `mergeMode`; MCP `set_merge_mode` (AI-214, ADR-0124)                     | Same                                                | Same rule                                                                                                                              | Gate merges by it (AI-215); unset: none; MCP only tightens. R-AI-214                                                                                                                                  |
 
 ## What it changes

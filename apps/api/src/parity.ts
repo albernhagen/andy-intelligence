@@ -35,6 +35,12 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["list_needs_me", "answer_question"],
   },
   {
+    action: "Merge a PR through the repo's merge queue (AI-220, AI-388)",
+    routes: [`POST ${P}/merges`],
+    tools: ["merge_pr"],
+    note: "Only the web route carries Andy's approval, which waives what the merge mode keeps for him (ADR-0157); merge_pr follows the mode, since coordinator sessions call it with Andy's MCP grant.",
+  },
+  {
     action: "Approve or reject an agent's plan",
     routes: [`POST ${T}/runs/:runId/plan-decision`],
     tools: ["approve_plan", "reject_plan"],
@@ -176,6 +182,7 @@ export const PARITY: readonly ParityEntry[] = [
       "set_email_notifications",
       "set_environments",
       "set_merge_mode",
+      "set_pr_sync",
       "set_paused",
       "set_plan_approval",
       "set_runs_at_once",
@@ -348,13 +355,7 @@ export const PARITY: readonly ParityEntry[] = [
     tools: [],
     oneSide: "GitHub's manifest flow needs a browser.",
   },
-  {
-    action: "Merge a session PR by the merge mode",
-    routes: [],
-    tools: ["merge_pr"],
-    oneSide:
-      "For coordinator sessions (AI-220, ADR-0124); Andy merges in GitHub, which shows the same PR.",
-  },
+
   // ── Open gaps, each with its ticket ─────────────────────────────────────────
   {
     action: "The board, every stage",

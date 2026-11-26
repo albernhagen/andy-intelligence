@@ -81,7 +81,6 @@ The registry `apps/api/src/parity.ts` (AI-300) holds every action with its route
 | Turn Builds on or off                                 | Web only | ADR-0063: Builds is set only in the app                                                                  |
 | Register a runner                                     | Web only | Returns the runner token once; a token should not land in a chat transcript                              |
 | OAuth consent (`POST /oauth/approve`)                 | Web only | The browser half of MCP sign-in                                                                          |
-| Merge a session PR by the merge mode (`merge_pr`)     | MCP only | For coordinator sessions (AI-220: Merge modes: coordinator sessions merge through MCP merge_pr); Andy merges in GitHub |
 | GitHub App setup (`/github`, `/manifest`, `/connect`) | Web only | GitHub's manifest flow needs a browser                                                                   |
 | `submit_brief`, `submit_project_plan`                 | MCP only | Written by a Claude session following `onboard.md` and `plan-project.md`; the web shows and decides them; the setup path (AI-373) also submits the brief through `POST …/brief` |
 

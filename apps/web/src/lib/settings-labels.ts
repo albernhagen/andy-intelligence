@@ -1,5 +1,6 @@
 import type {
   DeployKind,
+  PrSync,
   EnvironmentPolicy,
   ExecutorKind,
   HarnessKey,
@@ -33,6 +34,7 @@ export const SETTING_LABELS: Record<keyof ProjectSettings, string> = {
   emailNotifications: "Email notifications",
   environments: "Environments",
   deployKind: "Deploy kind",
+  prSync: "Keep open PRs up to date",
   spendCaps: "Spend caps",
 };
 
@@ -106,6 +108,20 @@ export const DEPLOY_KIND_OPTIONS: Record<DeployKind, SettingOption> = {
   },
 };
 
+/** Which open PRs are synced with main (AI-388, ADR-0157). */
+export const PR_SYNC_OPTIONS: Record<PrSync, SettingOption> = {
+  queue: {
+    label: "Next in the queue",
+    description:
+      "Only the PR next in the merge queue is synced with main, so a merge reruns one PR's checks.",
+  },
+  all: {
+    label: "Every open PR",
+    description:
+      "After each merge, main is merged into every open PR and all their checks run again.",
+  },
+};
+
 /** Each picker setting's options, so the change log shows the same names as the page. */
 const OPTION_LABELS: Partial<Record<keyof ProjectSettings, Record<string, SettingOption>>> = {
   mergeMode: MERGE_MODE_OPTIONS,
@@ -114,6 +130,7 @@ const OPTION_LABELS: Partial<Record<keyof ProjectSettings, Record<string, Settin
   executor: EXECUTOR_OPTIONS,
   environments: ENVIRONMENT_OPTIONS,
   deployKind: DEPLOY_KIND_OPTIONS,
+  prSync: PR_SYNC_OPTIONS,
 };
 
 /**

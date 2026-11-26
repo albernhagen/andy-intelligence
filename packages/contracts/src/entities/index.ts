@@ -78,6 +78,14 @@ export type EnvironmentPolicy = z.infer<typeof EnvironmentPolicy>;
 export const DeployKind = z.enum(["none", "cloud-run"]);
 export type DeployKind = z.infer<typeof DeployKind>;
 
+/**
+ * Which open PRs are kept up to date with the default branch (AI-388, ADR-0157): `queue` (the
+ * default; only the PR next in the merge queue is synced, by the queue) or `all` (the re-sync
+ * workflow merges the default branch into every open PR after each merge, ADR-0111).
+ */
+export const PrSync = z.enum(["queue", "all"]);
+export type PrSync = z.infer<typeof PrSync>;
+
 export const Project = z.object({
   id: Id,
   name: z.string().min(1),
@@ -129,6 +137,8 @@ export const Project = z.object({
   environments: EnvironmentPolicy.default("prod-only"),
   /** How it ships (AI-387); projects stored before it read as `none`, unrewritten. */
   deployKind: DeployKind.default("none"),
+  /** Which open PRs are synced (AI-388); projects stored before it read as `queue`, unrewritten. */
+  prSync: PrSync.default("queue"),
   /**
    * The project's own spend caps (AI-249: M10.8); each can only lower the global cap, and a
    * missing field takes the global value. Projects stored before it read as `{}`, unrewritten.
