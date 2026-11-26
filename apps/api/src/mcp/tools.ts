@@ -26,6 +26,7 @@ import {
   type ProjectTickets,
   type DashboardReader,
   type DoraReader,
+  type ReleaseReader,
 } from "@andy/domain";
 import type { MergeHoldReader, RunnerService } from "@andy/domain";
 import type { SetupChecklistReader } from "../setup";
@@ -102,6 +103,8 @@ export interface ToolDeps {
   now?: () => Date;
   /** What's new (AI-159); absent or null: no `whats_new` tool. */
   whatsNew?: WhatsNewReader | null;
+  /** Releases (AI-183: M6.9); absent or null: no `list_releases` tool. */
+  releases?: ReleaseReader | null;
   /** PRs waiting for Andy's merge (AI-218), in `list_needs_me`; absent or null: none listed. */
   waitingMerges?: WaitingMergesReader | null;
   /** AI-323: the digest's model-written summary; null where it isn't wired. */

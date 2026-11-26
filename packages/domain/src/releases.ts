@@ -1,16 +1,22 @@
 import {
   DEPLOYMENT_LIMITS,
   DeploymentRelease,
+  ReleaseListing,
+  deploymentPageSize,
   notFound,
   releaseNoteId,
   type CodeHost,
   type CommitRange,
   type Deployment,
+  type DeploymentReleaseStatus,
   type DeploymentStore,
   type ReleaseEntry,
+  type ReleaseEnvironment,
   type ReleaseGroup,
   type ReleaseNote,
   type ReleaseNoteStore,
+  type ReleaseTicket,
+  type StoredRelease,
   type Ticket,
   type WorkTracker,
 } from "@andy/contracts";
@@ -140,59 +146,235 @@ export function renderReleaseText(r: DeploymentRelease): string {
   return lines.join("\n");
 }
 
+/** Uncached releases a listing computes at once: each is one code-host compare (ADR-0028). */
+export const RELEASE_COMPARES_AT_ONCE = 5;
+
+/** A release before epic grouping: what is kept on the deployment, or why it can't be read. */
+type ReleaseCore = Omit<StoredRelease, "status" | "computedAt"> & {
+  status: DeploymentReleaseStatus;
+  reason: string | null;
+};
+
 /**
- * Reads one deployment's release: the deployment, the environment's latest deployments (one
- * capped list), one compare on the code host (capped), and the listed PRs' notes (one read
- * each, at most the commit cap). Tickets are read only when a note names one.
+ * Whether a computed release can be kept for good: never `unavailable` (read again next time),
+ * never while the deployment is still `started`, and never while a deployment started between
+ * the previous succeeded one and this one is still `started` (it may yet succeed and become the
+ * previous one).
+ */
+export function canKeepRelease(
+  target: Deployment,
+  recent: readonly Deployment[],
+  core: Pick<ReleaseCore, "status" | "previous">,
+): boolean {
+  if (core.status === "unavailable" || target.status === "started") return false;
+  const since = core.previous
+    ? recent.find((d) => d.id === core.previous!.deploymentId)?.startedAt
+    : undefined;
+  return !recent.some(
+    (d) =>
+      d.id !== target.id &&
+      d.status === "started" &&
+      d.startedAt < target.startedAt &&
+      (since === undefined || d.startedAt > since),
+  );
+}
+
+/** The tickets a release shipped, from its PRs' stored notes, in order of their first PR. */
+export function releaseTickets(
+  entries: readonly ReleaseEntry[],
+  byKey: ReadonlyMap<string, Ticket>,
+  epicOf: EpicOf,
+): ReleaseTicket[] {
+  const keys = [...new Set(entries.map((e) => e.note?.ticketKey).filter((k): k is string => !!k))];
+  return keys.map((key) => ({
+    key,
+    title: byKey.get(key)?.title ?? null,
+    epicKey: epicOf(key)?.key ?? null,
+  }));
+}
+
+/** Plain text for MCP: one block per deployment, newest first. The lines quote PR authors. */
+export function renderReleaseListingText(listing: ReleaseListing): string {
+  const head = `${listing.projectId.toUpperCase()} ${listing.environment} releases: ${listing.items.length} deployment${listing.items.length === 1 ? "" : "s"}, newest first.`;
+  if (listing.items.length === 0) return `${head}\nNo deployments to ${listing.environment} yet.`;
+  const blocks = listing.items.map(({ deployment: d, tickets, release }) => {
+    const lines = [
+      `${d.startedAt} · ${d.kind} · ${d.status} · ${d.gitSha.slice(0, 7)} · deployment ${d.id}`,
+    ];
+    if (tickets.length > 0) {
+      lines.push(
+        `Tickets: ${tickets.map((t) => (t.title ? `${t.key}: ${t.title}` : t.key)).join("; ")}`,
+      );
+    }
+    lines.push(renderReleaseText(release));
+    return lines.join("\n");
+  });
+  return [head, ...blocks].join("\n\n");
+}
+
+/**
+ * Releases per deployment (AI-169: M6.8; listing and caching AI-183: M6.9). Each release is
+ * worked out once: the environment's latest deployments (one capped list), one compare on the code
+ * host (capped), and the listed PRs' notes (one read each, at most the commit cap); then it is
+ * kept on the deployment when it can't change (`canKeepRelease`) and read from there after.
+ * Tickets are read once per call, only when a note names one.
  */
 export class ReleaseReader {
   constructor(
-    private readonly deployments: Pick<DeploymentStore, "get" | "list">,
+    private readonly deployments: Pick<DeploymentStore, "get" | "list" | "cacheRelease">,
     private readonly codeHost: Pick<CodeHost, "listCommitsBetween">,
     private readonly notes: Pick<ReleaseNoteStore, "get">,
     private readonly tracker: Pick<WorkTracker, "getProject" | "listTickets">,
     private readonly tickets: ProjectTickets = new ProjectTickets(tracker),
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
+  /** One deployment's release; `not_found` when the deployment isn't the project's. */
   async read(projectId: string, deploymentId: string): Promise<DeploymentRelease> {
     const deployment = await this.deployments.get(deploymentId);
     if (!deployment || deployment.projectId !== projectId) {
       throw notFound("deployment", deploymentId);
     }
-    const project = await this.tracker.getProject(projectId);
-    if (!project) throw notFound("project", projectId);
+    const repo = await this.repoOf(projectId);
     const recent = await this.deployments.list(
       projectId,
       deployment.environment,
       DEPLOYMENT_LIMITS.maxPage,
     );
-    const previous = previousSucceeded(deployment, recent);
-    const base = {
+    const core = await this.coreOf(deployment, recent, repo);
+    const { epicOf } = await this.ticketLookup(projectId, [core]);
+    return this.toRelease(deployment, core, epicOf);
+  }
+
+  /**
+   * The environment's deployments, newest first, at most `limit` (default 20, never more than
+   * 100), each with the tickets it shipped and its release. A deployment on a full page of 100
+   * whose previous succeeded one is further back comes back `unavailable`.
+   */
+  async list(
+    projectId: string,
+    environment: ReleaseEnvironment,
+    limit?: number,
+  ): Promise<ReleaseListing> {
+    const repo = await this.repoOf(projectId);
+    const recent = await this.deployments.list(projectId, environment, DEPLOYMENT_LIMITS.maxPage);
+    const page = recent.slice(0, deploymentPageSize(limit));
+    const cores: ReleaseCore[] = [];
+    for (let i = 0; i < page.length; i += RELEASE_COMPARES_AT_ONCE) {
+      const batch = page.slice(i, i + RELEASE_COMPARES_AT_ONCE);
+      cores.push(...(await Promise.all(batch.map((d) => this.coreOf(d, recent, repo)))));
+    }
+    const { epicOf, byKey } = await this.ticketLookup(projectId, cores);
+    return ReleaseListing.parse({
       projectId,
+      environment,
+      items: page.map((deployment, i) => {
+        return {
+          // ReleaseListing parses `deployment` with ReleaseDeployment, which drops the cached release.
+          deployment,
+          tickets: releaseTickets(cores[i]!.entries, byKey, epicOf),
+          release: this.toRelease(deployment, cores[i]!, epicOf),
+        };
+      }),
+    });
+  }
+
+  /** The project's first repo, or null; `not_found` when the project doesn't exist. */
+  private async repoOf(projectId: string): Promise<string | null> {
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
+    return project.repos[0] ?? null;
+  }
+
+  private async ticketLookup(
+    projectId: string,
+    cores: readonly ReleaseCore[],
+  ): Promise<{ epicOf: EpicOf; byKey: ReadonlyMap<string, Ticket> }> {
+    if (!cores.some((c) => c.entries.some((e) => e.note?.ticketKey))) {
+      return { epicOf: () => null, byKey: new Map() };
+    }
+    const tickets = await this.tickets.list(projectId);
+    return { epicOf: epicLookup(tickets), byKey: new Map(tickets.map((t) => [t.key, t])) };
+  }
+
+  private toRelease(deployment: Deployment, core: ReleaseCore, epicOf: EpicOf): DeploymentRelease {
+    return DeploymentRelease.parse({
+      projectId: deployment.projectId,
       environment: deployment.environment,
       deploymentId: deployment.id,
       gitSha: deployment.gitSha,
+      previous: core.previous,
+      status: core.status,
+      reason: core.reason,
+      entries: core.entries,
+      groups: releaseNotesFor(core.entries, epicOf),
+      truncated: core.truncated,
+    });
+  }
+
+  /** The kept release, or one computed now (and kept when it can't change). */
+  private async coreOf(
+    deployment: Deployment,
+    recent: readonly Deployment[],
+    repo: string | null,
+  ): Promise<ReleaseCore> {
+    if (deployment.release) return { ...deployment.release, reason: null };
+    const core = await this.compute(deployment, recent, repo);
+    if (core.status === "unavailable" || !canKeepRelease(deployment, recent, core)) return core;
+    try {
+      const kept = await this.deployments.cacheRelease(deployment.id, {
+        status: core.status,
+        previous: core.previous,
+        entries: core.entries,
+        truncated: core.truncated,
+        computedAt: this.now().toISOString(),
+      });
+      // Another read may have kept one first: the kept one wins, so every reader agrees.
+      return kept.release ? { ...kept.release, reason: null } : core;
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          severity: "ERROR",
+          message: "release: keeping the computed release failed",
+          component: "releases",
+          projectId: deployment.projectId,
+          deploymentId: deployment.id,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return core;
+    }
+  }
+
+  private async compute(
+    deployment: Deployment,
+    recent: readonly Deployment[],
+    repo: string | null,
+  ): Promise<ReleaseCore> {
+    const { projectId } = deployment;
+    const previous = previousSucceeded(deployment, recent);
+    const base = {
       previous: previous.found
         ? { deploymentId: previous.found.id, gitSha: previous.found.gitSha }
         : null,
       entries: [],
-      groups: [],
       truncated: false,
+      reason: null,
     };
-    const unavailable = (reason: string) =>
-      DeploymentRelease.parse({ ...base, status: "unavailable", reason });
+    const unavailable = (reason: string): ReleaseCore => ({
+      ...base,
+      status: "unavailable",
+      reason,
+    });
 
     if (!previous.found) {
       return previous.reason === "none"
-        ? DeploymentRelease.parse({ ...base, status: "first", reason: null })
+        ? { ...base, status: "first" }
         : unavailable(
             `no succeeded deployment among the latest ${DEPLOYMENT_LIMITS.maxPage} before this one`,
           );
     }
-    if (previous.found.gitSha === deployment.gitSha) {
-      return DeploymentRelease.parse({ ...base, status: "same_commit", reason: null });
-    }
-    const repo = project.repos[0];
+    if (previous.found.gitSha === deployment.gitSha) return { ...base, status: "same_commit" };
     if (!repo) return unavailable("the project has no repo");
 
     let range: CommitRange | null;
@@ -210,7 +392,7 @@ export class ReleaseReader {
           message: "release: commit range read failed",
           component: "releases",
           projectId,
-          deploymentId,
+          deploymentId: deployment.id,
           error,
         }),
       );
@@ -218,12 +400,8 @@ export class ReleaseReader {
       return unavailable("the code host read failed");
     }
     if (!range) return unavailable("the code host does not know the repo or one of the commits");
-    if (range.status === "identical") {
-      return DeploymentRelease.parse({ ...base, status: "same_commit", reason: null });
-    }
-    if (range.status !== "ahead") {
-      return DeploymentRelease.parse({ ...base, status: "not_ahead", reason: null });
-    }
+    if (range.status === "identical") return { ...base, status: "same_commit" };
+    if (range.status !== "ahead") return { ...base, status: "not_ahead" };
 
     const prNumbers = [
       ...new Set(
@@ -238,17 +416,11 @@ export class ReleaseReader {
     const notesByPr = new Map(
       found.filter((n): n is ReleaseNote => n !== null).map((n) => [n.prNumber, n]),
     );
-    const entries = releaseEntries(range, notesByPr);
-    const epicOf: EpicOf = entries.some((e) => e.note?.ticketKey)
-      ? epicLookup(await this.tickets.list(projectId))
-      : () => null;
-    return DeploymentRelease.parse({
+    return {
       ...base,
       status: "listed",
-      reason: null,
-      entries,
-      groups: releaseNotesFor(entries, epicOf),
+      entries: releaseEntries(range, notesByPr),
       truncated: !range.commits.complete,
-    });
+    };
   }
 }
