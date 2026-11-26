@@ -12,7 +12,8 @@ export const VERIFY_LIMITS = {
   summary: 4000,
   /** Tickets one release may verify in one run. */
   tickets: 50,
-  criteria: 10,
+  /** Criteria checked per ticket (refine's cap); a ticket with none gets one skipped entry. */
+  criteria: 20,
   criterion: 500,
   reason: 1000,
   evidence: 10,

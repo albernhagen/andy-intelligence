@@ -84,6 +84,37 @@ describe("VerifyVerdict", () => {
     expect(VerifyVerdict.safeParse(input).success).toBe(true);
   });
 
+  it("GivenEveryCriterionSkipped_WhenParsed_ThenTheTicketPasses", () => {
+    // Andy's rule (2026-11-26): skipped never fails a ticket; the summary names such tickets.
+    const skipped = check({ result: "skipped", reason: "needs sign-in", evidence: [] });
+    const input = verdict({ tickets: [ticket({ criteria: [skipped, skipped] })] });
+    expect(VerifyVerdict.safeParse(input).success).toBe(true);
+    const asFailed = verdict({ tickets: [ticket({ verdict: "fail", criteria: [skipped] })] });
+    expect(messages(asFailed)).toContain("verdict must be pass");
+  });
+
+  it("GivenATicketWithNoCriteria_WhenItGetsOneSkippedEntry_ThenAccepted", () => {
+    const none = check({
+      criterion: "none",
+      result: "skipped",
+      reason: "no criteria",
+      evidence: [],
+    });
+    expect(
+      VerifyVerdict.safeParse(verdict({ tickets: [ticket({ criteria: [none] })] })).success,
+    ).toBe(true);
+    expect(VerifyVerdict.safeParse(verdict({ tickets: [ticket({ criteria: [] })] })).success).toBe(
+      false,
+    );
+  });
+
+  it("GivenTwentyCriteria_WhenParsed_ThenAcceptedAndOneMoreIsRefused", () => {
+    const many = (n: number) => Array.from({ length: n }, () => check());
+    const input = (n: number) => verdict({ tickets: [ticket({ criteria: many(n) })] });
+    expect(VerifyVerdict.safeParse(input(VERIFY_LIMITS.criteria)).success).toBe(true);
+    expect(VerifyVerdict.safeParse(input(VERIFY_LIMITS.criteria + 1)).success).toBe(false);
+  });
+
   it("GivenAFailingCriterionInAPassingTicket_WhenParsed_ThenRefused", () => {
     const input = verdict({ tickets: [ticket({ criteria: [check({ result: "fail" })] })] });
     expect(messages(input)).toContain("verdict must be fail");

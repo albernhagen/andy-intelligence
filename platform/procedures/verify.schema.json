@@ -50,7 +50,8 @@
           "criteria": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 10,
+            "maxItems": 20,
+            "description": "One per acceptance criterion checked, at most the first 20. A ticket with none gets one skipped entry, criterion none.",
             "items": {
               "type": "object",
               "additionalProperties": false,
