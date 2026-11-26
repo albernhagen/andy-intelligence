@@ -51,6 +51,24 @@ export const PARITY: readonly ParityEntry[] = [
     note: "A Claude session writes the plan (plan-project.md); the web shows and decides it.",
   },
   {
+    action: "Epic breakdown: start, submit, read, decide (AI-383)",
+    routes: [
+      `POST ${T}/breakdown/agent-task`,
+      `POST ${T}/breakdown`,
+      `GET ${T}/breakdown`,
+      "GET /api/epic-breakdowns/waiting",
+      `POST ${T}/breakdown/decision`,
+    ],
+    tools: [
+      "start_epic_breakdown",
+      "submit_epic_breakdown",
+      "list_needs_me",
+      "approve_epic_breakdown",
+      "reject_epic_breakdown",
+    ],
+    note: "One service (`EpicBreakdownService`, `RunService.requestEpicTask`), same caps and refusals. The web panel and inbox section come in a follow-up PR; a Claude session can draft by hand (plan-epic.md).",
+  },
+  {
     action: "Project brief: submit",
     routes: [`POST ${P}/brief`],
     tools: ["submit_brief"],

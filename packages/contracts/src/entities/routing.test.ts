@@ -93,6 +93,12 @@ describe("routing config", () => {
     expect(read.steps.refine).toBe("strong");
   });
 
+  it("GivenAConfigStoredBeforeThePlanEpicStep_WhenRead_ThenItReadsAsStrong", () => {
+    const stored = structuredClone(DEFAULT_ROUTING);
+    delete (stored.steps as Partial<typeof stored.steps>)["plan-epic"];
+    expect(RoutingConfig.parse(stored).steps["plan-epic"]).toBe("strong");
+  });
+
   it("GivenAStoredConfigWithoutAStamp_WhenParsed_ThenRefused", () => {
     expect(RoutingConfig.safeParse(input).success).toBe(false);
   });

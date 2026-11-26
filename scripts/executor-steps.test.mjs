@@ -23,7 +23,7 @@ const context = (step, over = {}) => ({
 
 describe("executor context step: step list (AI-134)", () => {
   it("GivenAReadOnlyStep_WhenTheContextIsRead_ThenItRunsReadOnly", () => {
-    for (const step of ["refine", "plan", "review", "plan-project", "ideate"]) {
+    for (const step of ["refine", "plan", "review", "plan-project", "ideate", "plan-epic"]) {
       const r = runContext(context(step));
 
       expect(r.status, `${step}: ${r.log}`).toBe(0);
@@ -70,7 +70,7 @@ describe("executor context step: step list (AI-134)", () => {
         expect.arrayContaining(["Bash", "Edit", "Write", "WebFetch"]),
       );
     }
-    expect(listed).toEqual(expect.arrayContaining(["plan-project", "ideate"]));
+    expect(listed).toEqual(expect.arrayContaining(["plan-project", "ideate", "plan-epic"]));
   });
 });
 
