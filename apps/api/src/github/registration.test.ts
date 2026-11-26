@@ -76,6 +76,30 @@ describe("BaselineProposer", () => {
     expect(await needsYou()).toEqual([]);
   });
 
+  it("GivenADeployKindNoneProject_WhenProposed_ThenNoDeployOrReleaseWorkflowIsListed", async () => {
+    await proposer.onRepoRegistered(project, TARGET);
+    const { proposal } = host.baselineProposals[0]!;
+    expect(proposal.body).not.toContain("deploy.yml");
+    expect(proposal.body).not.toContain("release.yml");
+    expect(proposal.body).not.toContain("--deploy-kind");
+    expect(
+      JSON.parse(proposal.files.find((f) => f.path === ".andy/baseline.json")!.content),
+    ).toMatchObject({ deployKind: "none" });
+  });
+
+  it("GivenACloudRunProject_WhenProposed_ThenDeployAndReleaseAreLeftForFinishWithTheKind", async () => {
+    const cloudRun = { ...project, deployKind: "cloud-run" as const };
+    await proposer.onRepoRegistered(cloudRun, TARGET);
+    const { proposal } = host.baselineProposals[0]!;
+    expect(proposal.files.map((f) => f.path)).not.toContain(".github/workflows/deploy.yml");
+    expect(proposal.body).toContain("`.github/workflows/deploy.yml`: missing");
+    expect(proposal.body).toContain("`.github/workflows/release.yml`: missing");
+    expect(proposal.body).toContain("--branch baseline/eeeeeee --deploy-kind cloud-run");
+    expect(
+      JSON.parse(proposal.files.find((f) => f.path === ".andy/baseline.json")!.content),
+    ).toMatchObject({ deployKind: "cloud-run" });
+  });
+
   it("GivenAFileThatDiffers_WhenProposed_ThenItIsReportedAndNotInThePr", async () => {
     target.set("lefthook.yml", "ours: true\n");
     await proposer.onRepoRegistered(project, TARGET);

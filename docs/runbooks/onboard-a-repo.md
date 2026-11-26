@@ -151,6 +151,16 @@ Dependabot bumps the action pins weekly. `check` then reports `pins …, but .an
 node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.1.0
 ```
 
+### 5a. A project that deploys (`deployKind` `cloud-run`, AI-206: M6.17)
+
+`files`, `onboard` and `finish` take `--deploy-kind none|cloud-run`; without it they use what the repo's `.andy/baseline.json` records, else `none`. `cloud-run` adds `deploy.yml` and `release.yml`; `check` reads the kind from the record. After setting the project to `cloud-run` (Settings or MCP `set_deploy_kind`), once per repo:
+
+```sh
+node platform/baseline/baseline.mjs files albernhagen/<name> --ref origin/main --deploy-kind cloud-run
+```
+
+Set its repo variables first (`project-env.md` "After"): until they are, every push to `main` fails `deploy.yml` at its first step, naming what is missing. Back to `none` leaves both workflows in the repo: delete them by hand.
+
 ## 6. M1.16: Project baseline v1 demo ("Done when")
 
 Run it before merging, from the PR branch. The scratch repo gets no Claude token, so both review agents report "not reviewed" under the same check names and use no quota. Since ADR-0140 those two checks fail; add `security-accepted` and `review-accepted` to the test PR.

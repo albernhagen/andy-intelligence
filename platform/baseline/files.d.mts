@@ -1,10 +1,13 @@
 // Types for files.mjs, so the API's TypeScript can import it (AI-113).
+export type DeployKind = "none" | "cloud-run";
+export const DEPLOY_KINDS: DeployKind[];
+export function checkDeployKind(kind: unknown): DeployKind;
 export interface Manifest {
   source: string;
-  managed: { path: string; from: string; pin?: boolean }[];
-  lines: { path: string; from: string }[];
-  seed: { path: string; from: string }[];
-  starter: { path: string; from: string }[];
+  managed: { path: string; from: string; pin?: boolean; deployKind?: DeployKind }[];
+  lines: { path: string; from: string; deployKind?: DeployKind }[];
+  seed: { path: string; from: string; deployKind?: DeployKind }[];
+  starter: { path: string; from: string; deployKind?: DeployKind }[];
 }
 export interface RenderedFile {
   path: string;
@@ -19,7 +22,7 @@ export interface Rendered {
 export function renderFiles(
   manifest: Manifest,
   read: (from: string) => string,
-  pin: { sha: string; ref: string },
+  pin: { sha: string; ref: string; deployKind?: DeployKind },
 ): Rendered;
 export function mergeLines(existing: string | null | undefined, required: string[]): string;
 export function baselineRecord(r: {
@@ -27,4 +30,5 @@ export function baselineRecord(r: {
   sha: string;
   ref: string;
   date: string;
+  deployKind?: DeployKind;
 }): string;

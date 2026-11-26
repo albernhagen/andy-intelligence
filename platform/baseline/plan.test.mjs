@@ -135,6 +135,16 @@ describe("renderReport", () => {
     expect(md).toContain("### Applied (");
   });
 
+  it("GivenACloudRunProject_WhenRendered_ThenTheFinishCommandCarriesTheKind", () => {
+    const md = renderReport({ ...base, settings: { results: [] }, deployKind: "cloud-run" });
+    expect(md).toContain("--branch baseline/aaaaaaa --deploy-kind cloud-run\n");
+  });
+
+  it("GivenANoneProject_WhenRendered_ThenTheFinishCommandHasNoKind", () => {
+    const md = renderReport({ ...base, settings: { results: [] }, deployKind: "none" });
+    expect(md).not.toContain("--deploy-kind");
+  });
+
   it("GivenSettingsResults_WhenRendered_ThenEachSectionAndItsDifferencesAreListedWithApply", () => {
     const md = renderReport({
       ...base,

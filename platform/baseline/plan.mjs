@@ -23,7 +23,7 @@ const sameManaged = (want, have, source) =>
  * asks about to the repo's text or null (missing). Returns { files, applied, differs, skipped,
  * held }: files to commit ({ path, content }), and report entries ({ path, note }).
  */
-export function planBaselinePr(rendered, target, { source, sha, ref, date }) {
+export function planBaselinePr(rendered, target, { source, sha, ref, date, deployKind = "none" }) {
   const read = (p) => target.get(p) ?? null;
   const files = [];
   const applied = [];
@@ -77,7 +77,10 @@ export function planBaselinePr(rendered, target, { source, sha, ref, date }) {
 
   const record = read(RECORD_PATH);
   if (record === null) {
-    files.push({ path: RECORD_PATH, content: baselineRecord({ source, sha, ref, date }) });
+    files.push({
+      path: RECORD_PATH,
+      content: baselineRecord({ source, sha, ref, date, deployKind }),
+    });
     applied.push({ path: RECORD_PATH, note: `added (baseline ${sha.slice(0, 7)})` });
   } else {
     let version = null;
@@ -168,7 +171,17 @@ function settingsReport(settings, repo) {
 }
 
 /** Markdown for the PR description: what was applied, differs, was skipped or left out. */
-export function renderReport({ repo, source, sha, ref, branch, plan, settings }) {
+export function renderReport({
+  repo,
+  source,
+  sha,
+  ref,
+  branch,
+  plan,
+  settings,
+  deployKind = "none",
+}) {
+  const kind = deployKind === "none" ? "" : ` --deploy-kind ${deployKind}`;
   const section = (title, entries, empty) =>
     `### ${title} (${entries.length})\n\n${entries.length ? list(entries) : empty}`;
   const parts = [
@@ -184,7 +197,7 @@ export function renderReport({ repo, source, sha, ref, branch, plan, settings })
             "The App can't write workflows or agent settings. From an up-to-date andy-intelligence checkout, this commits the missing ones to this PR's branch:",
             "",
             "```bash",
-            `node platform/baseline/baseline.mjs finish ${repo} --ref ${sha} --branch ${branch}`,
+            `node platform/baseline/baseline.mjs finish ${repo} --ref ${sha} --branch ${branch}${kind}`,
             "```",
             "",
             list(plan.held),

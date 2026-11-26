@@ -182,7 +182,13 @@ export class BaselineProposer {
     const all = [...froms, ...configPaths];
     const read = await Promise.all(all.map((from) => source(from)));
     all.forEach((from, i) => texts.set(from, read[i]!));
-    const rendered = renderFiles(manifest, (from) => texts.get(from)!, { sha, ref: BASELINE_REF });
+    // Deploy files only for the project's deploy kind (ADR-0114; `none` gets none).
+    const deployKind = project.deployKind;
+    const rendered = renderFiles(manifest, (from) => texts.get(from)!, {
+      sha,
+      ref: BASELINE_REF,
+      deployKind,
+    });
 
     const target = await this.codeHost.getRepo(repo);
     if (!target) throw new Error(`the App isn't installed on ${repo}`);
@@ -201,6 +207,7 @@ export class BaselineProposer {
       sha,
       ref: BASELINE_REF,
       date: this.now().toISOString().slice(0, 10),
+      deployKind,
     });
     const config = configFor(
       parseConfig((name) => texts.get(`platform/baseline/github/${name}`)!),
@@ -217,6 +224,7 @@ export class BaselineProposer {
       branch,
       plan,
       settings,
+      deployKind,
     });
     const title = `Project baseline ${BASELINE_REF} (${sha.slice(0, 7)})`;
 
