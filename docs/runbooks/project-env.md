@@ -1,0 +1,35 @@
+# Runbook: apply a project environment (Andy)
+
+For a managed project whose `deployKind` is `cloud-run`: one apply per environment of `infra/modules/project-env` (AI-201: M6.16), from the template root in the managed repo (AI-109: M6.22 adds that root; until then, copy `infra/modules/project-env/examples/basic`). Nothing in CI applies it.
+
+## Before
+
+- The GCP project exists, is on the billing account, and has its budget (`billing.md` §8).
+- Real values go in a gitignored `terraform.tfvars` or `TF_VAR_*`, never the repo: project ID, `alert_email`, `github_repository_id` (`gh api repos/<owner>/<name> --jq .id`).
+- Your login can create service accounts, IAM bindings and a Workload Identity pool in that project.
+
+## Apply
+
+```bash
+terraform init && terraform plan -out=env.tfplan
+```
+
+Expected **adds, 0 to change, 0 to destroy**, where N = entries in `runtime_project_roles`:
+
+| Environment                                                     | Adds   |
+| --------------------------------------------------------------- | ------ |
+| First environment, with previews (`prod-only`, or dev)          | 38 + N |
+| Prod in `dev-and-prod` (`preview_enabled = false`, promote set) | 29 + N |
+
+38 = 7 APIs, 2 registry repos, pool + provider, 4 service accounts, 4 runtime role grants, main deployer 5 grants (2 federation, push, run, actAs), preview deployer 4 grants, 2 services, 1 log exclusion, 1 email channel, 6 alerts. Anything else (a change or destroy) is drift: stop and check.
+
+```bash
+terraform apply env.tfplan
+```
+
+## After
+
+- Put outputs `workload_identity_provider`, `deployer_email` and `preview_deployer_email` in the repo's workflow inputs (not secrets: they are names, not credentials).
+- Check: the alert email channel shows in Monitoring → Alerting → Notification channels (Google sends no confirmation for email).
+- A deleted pool keeps its ID for 30 days: re-creating within that window fails; undelete it (`gcloud iam workload-identity-pools undelete`) or set another `wif_pool_id`.
+- The main service has `deletion_protection`: set it false and apply before a destroy.

@@ -40,7 +40,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Lint, typecheck, test, build | 0022 | `ci.yml` (`check`) → `platform/actions/ci-check` | A | carried (M1.16) |
 | Firestore adapter contract suites on the emulator (path-gated) | 0034, 0048 | `firestore-suite.yml` | — | control plane only (`github/source-only.json`) |
 | Workflow linter (actionlint) | 0027 | `ci.yml` → `platform/actions/actionlint` | A | carried (M1.16) |
-| Terraform fmt/validate; `terraform test` (mocked) in roots with `tests/` | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` | A | carried (M1.16; tests: next baseline tag) |
+| Terraform fmt/validate (roots, `infra/modules/` and their `examples/`); `terraform test` (mocked) where there is `tests/` | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` | A | carried (M1.16; tests: next baseline tag) |
 | Public-safe Terraform plan summary | 0011 | `terraform-plan.yml` | — | not yet carried (M6: Dev → prod releases; needs per-project WIF) |
 | Secret scan (TruffleHog) | 0015 | `secret-scan.yml` → `platform/actions/secret-scan` | A | carried (M1.16) |
 | CodeQL, dependency review, Terraform misconfig scan | 0025, 0030 | `security-scans.yml` → `platform/actions/{codeql,dependency-review,terraform-misconfig}` | A | carried (M1.16) |
@@ -62,7 +62,9 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 | Public-repo hygiene (`.gitignore`: tfvars, state, `.env*`) | 0015 | `template/gitignore.lines` | M (lines) | carried (M1.16) |
 | Reviewer token secret | 0030 | `CLAUDE_CODE_OAUTH_TOKEN` | RB | carried (M1.16: `docs/runbooks/onboard-a-repo.md`) |
 | GCP budget + alerts | 0028, 0029, 0114 | `infra/modules/project-budget` via `infra/billing` `managed_projects` | TF | carried (TF): Andy adds an entry and applies (billing runbook §8) |
-| Cloud Run caps, log exclusions, usage alerts, daily Firestore backup (7-day retention), Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
+| Cloud Run caps (scale to zero, max instances, concurrency, timeout), log exclusions, usage alerts | 0028, 0114 | `infra/control-plane`; `infra/modules/project-env` | TF | carried (TF): `cloud-run` projects, one call per environment; Andy applies (runbook `project-env.md`) |
+| Deployers over WIF (main: `deploy.yml`/`release.yml` on `main` only; preview: same-repo PRs, preview service only); per-service runtime identities | 0114 | `infra/modules/project-env` | TF | carried (TF): `cloud-run` projects |
+| Daily Firestore backup (7-day retention), Cloud Tasks queue caps (rate, concurrency, retries) | 0028 | `infra/control-plane` | TF | not yet carried (M6: Dev → prod releases) |
 | Alert: config change not in the change log (AI-136); test keeps filter and message in step | — | `infra/control-plane`, `config-changes.test.ts` | TF | not yet carried (M6: Dev → prod releases) |
 | Cost kill switch (opt-in) | 0028, 0036 | `infra/billing/kill-switch.tf`; `infra/modules/project-budget` (+ workflow YAML) | TF | carried (TF): per entry, off by default |
 | Safe deploy: no-traffic revision, smoke test, then traffic | 0076, 0114 | `platform/actions/cloud-run-safe-deploy` | A | control plane only until M6: Dev → prod releases, then `cloud-run` projects |
