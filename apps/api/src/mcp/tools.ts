@@ -41,6 +41,7 @@ import {
   type ProjectAccess,
 } from "../project-access";
 import * as toolGroups from "./tool-groups";
+import type { OnboardingReader } from "../onboarding";
 
 /**
  * MCP tools: thin adapters over TicketService, RunService and the other domain services, the
@@ -88,6 +89,8 @@ export interface ToolDeps {
   board?: BoardReader;
   /** A project's setup checklist (AI-287); the app always passes it, unit tests may not. */
   setup?: SetupChecklistReader;
+  /** A project's onboarding steps (AI-381), in `project_setup`; unit tests may not pass it. */
+  onboarding?: OnboardingReader;
   /** Spend caps settings (AI-249); the app always passes it, unit tests may not. */
   spend?: SpendSettingsService;
   /** The global spend caps (AI-276); the app always passes it, unit tests may not. */

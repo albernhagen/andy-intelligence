@@ -73,6 +73,7 @@ import { runnerCredentials } from "./runners";
 import { OpenRouterGateway } from "./openrouter";
 import { PullRequestMerger } from "./merge";
 import { SetupChecklistReader } from "./setup";
+import { OnboardingReader } from "./onboarding";
 import { SpendSettingsService } from "./spend";
 
 /**
@@ -572,6 +573,16 @@ export function createServices(raw: AppDeps): Services {
     setup: new SetupChecklistReader(
       deps.tracker,
       connection ? new ConnectedCodeHost(connection) : null,
+    ),
+    onboarding: new OnboardingReader(
+      deps.tracker,
+      deps.runs,
+      connection ? new ConnectedCodeHost(connection) : null,
+      async () => {
+        const slug = (await connection?.get())?.slug;
+        return slug ? `https://github.com/apps/${slug}/installations/new` : null;
+      },
+      now,
     ),
     spend: new SpendSettingsService(
       projects,

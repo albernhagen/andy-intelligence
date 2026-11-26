@@ -9,6 +9,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 - Paid cost from OpenRouter usage; subscription runs record **API-equivalent cost estimates** (labelled as estimates) alongside quota %.
 - Cost per run and ticket (AI-67): `packages/domain/src/cost.ts`; a run without usage is unknown, counted but not priced.
 - Dashboards (AI-102): `domain/src/dashboard.ts`; lead time: Done from its cycle's first Ready.
+- DORA (M6, ADR-0114): from Deployment records the release workflow reports, prod only, for any deploy kind (`domain/src/dora.ts`).
 - Transcripts are not stored; run detail links to the Action log / Jules session / PR.
 ### 10.1 GCP cost guardrails (ADR-0028)
 

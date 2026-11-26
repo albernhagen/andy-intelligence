@@ -20,6 +20,7 @@ export { apiRoutes as milestoneMap } from "./milestone-map";
 export { apiRoutes as milestones } from "./milestones";
 export { apiRoutes as night } from "./night";
 export { apiRoutes as notify } from "./notify";
+export { apiRoutes as onboarding } from "./onboarding";
 export { apiRoutes as projectPlan } from "./project-plan";
 export { apiRoutes as quota } from "./quota";
 export { apiRoutes as ready } from "./ready";
