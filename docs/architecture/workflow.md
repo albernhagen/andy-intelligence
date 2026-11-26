@@ -12,7 +12,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 | **Ready** | Waits for dependencies, a worker that is an agent (ADR-0082), quota/budget | Dispatcher starts a run |
 | **In progress** | Build task: plans read-only, then implements (ADR-0050; plan approval below). One automatic retry, then flags Needs-you | PR opened with structured run summary (plan, deviations, verification output) |
 | **Ready for review** | Rule-based gate decides auto-merge vs. Andy | Merged: → Done, or → Verifying (below) |
-| **Verifying** | Projects whose `deployKind` isn't `none` (ADR-0114, AI-181): the merge deployed; the verify task (AI-188) checks it. Merges changing only `docs/**`, `infra/**`, `*.md` skip it. Off until AI-188 turns on `VERIFYING_SWITCH` | Verified → Done; failed → In progress + Needs-you. Over 2 hours → Needs-you |
+| **Verifying** | Projects whose `deployKind` isn't `none` (ADR-0114, AI-181): the merge deployed; the verify task (AI-188) checks it by `platform/procedures/verify.md`. Merges changing only `docs/**`, `infra/**`, `*.md` skip it. Off until AI-188 turns on `VERIFYING_SWITCH` | Verified → Done; failed → In progress + Needs-you. Over 2 hours → Needs-you |
 | **Done** | Summary included in rollups | — |
 | **Cancelled** | Andy cancelled it; runs stop, questions withdrawn | Andy reopens it to Backlog |
 
