@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { cancelDrag, holdMidDrag } from "./drag";
 import { expectShellLoaded } from "./shell";
 
 /**
@@ -46,6 +47,20 @@ test("board: every card marker, Done as a strip", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai", "Building · 12 min");
   await expect(page).toHaveScreenshot("board.png", { fullPage: true });
+});
+
+/** AI-396: the dragged card is drawn under the pointer, its slot a placeholder, Ready lit. */
+test("board: a card mid-drag over Ready", async ({ page }) => {
+  await page.clock.setFixedTime(SEED_NOW);
+  await open(page, "/p/ai", "Building · 12 min");
+  const card = page.locator('[data-ticket="AI-3"]');
+  const ready = (await page.locator("section[data-stage=ready]").boundingBox())!;
+  const from = (await card.boundingBox())!;
+  await holdMidDrag(page, card, ready.x + ready.width / 2 - (from.x + from.width / 2), 40);
+  await expect(page.locator("[data-drag-overlay]")).toBeVisible();
+  await expect(page.locator("section[data-stage=ready][data-drop-over]")).toBeVisible();
+  await expect(page).toHaveScreenshot("board-drag.png");
+  await cancelDrag(page);
 });
 
 /**

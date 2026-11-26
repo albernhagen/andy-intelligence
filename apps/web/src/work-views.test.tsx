@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import { STAGES } from "@/lib/tickets";
 import { readyStory, renderApp } from "@/test/harness";
+import { dragCopySource } from "@/test/drag-layout";
 
 /**
  * Board work view chips (AI-187): All plus five fixed views, kept in `?view=`. Drags use dnd-kit's
@@ -14,6 +15,8 @@ const CARD_STEP = 60;
 const LANES = STAGES.filter((s) => s !== "verifying");
 
 function fakeRect(el: Element): DOMRect {
+  const source = dragCopySource(el);
+  if (source) return fakeRect(source);
   const lane = el.closest("[data-stage]");
   const i = lane ? LANES.indexOf(lane.getAttribute("data-stage") as never) : -1;
   if (i < 0) return new DOMRect(0, 0, 0, 0);
