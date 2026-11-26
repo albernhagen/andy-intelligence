@@ -102,6 +102,19 @@ run "given_defaults_when_planned_then_services_are_capped_and_scale_to_zero" {
   }
 }
 
+run "given_defaults_when_planned_then_main_is_public_preview_is_private_and_releases_are_kept" {
+  command = plan
+
+  assert {
+    condition     = google_cloud_run_v2_service.main.invoker_iam_disabled == true && google_cloud_run_v2_service.preview[0].invoker_iam_disabled == false
+    error_message = "The main service should skip Cloud Run IAM (safe-deploy smoke tests call it without a token); the preview must keep it."
+  }
+  assert {
+    condition     = contains([for p in google_artifact_registry_repository.images["example"].cleanup_policies : p.id], "keep-tagged-releases")
+    error_message = "Images tagged release-* must be kept by the cleanup policy."
+  }
+}
+
 run "given_preview_disabled_when_planned_then_no_preview_resources" {
   command = plan
 

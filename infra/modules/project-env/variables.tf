@@ -70,8 +70,8 @@ variable "preview_enabled" {
 
 variable "allow_unauthenticated" {
   type        = bool
-  description = "Serve the main service without Cloud Run IAM (a public app doing its own auth). Off: callers need run.invoker."
-  default     = false
+  description = "Serve the main service without Cloud Run IAM: a public app doing its own auth, like the control plane. On by default because cloud-run-safe-deploy's smoke tests and the verify task call the service without an identity token (ADR-0076, ADR-0114). Off: callers need run.invoker, and those calls fail."
+  default     = true
 }
 
 variable "preview_allow_unauthenticated" {
@@ -161,6 +161,12 @@ variable "image_keep_count" {
   type        = number
   description = "Registry cleanup: the newest versions always kept in each repo."
   default     = 10
+}
+
+variable "image_keep_tag_prefixes" {
+  type        = list(string)
+  description = "Registry cleanup: versions with a tag starting with one of these are never deleted. Tag what prod runs (e.g. release-<n> on promote) so a later rollback or cold start can still pull it."
+  default     = ["release-"]
 }
 
 variable "image_max_age_days" {

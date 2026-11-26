@@ -62,6 +62,19 @@ resource "google_artifact_registry_repository" "images" {
       keep_count = var.image_keep_count
     }
   }
+  # Cloud Run needs the image to start new instances of a revision, so an image prod runs or may
+  # roll back to must not be deleted; tag it with a keep prefix.
+  dynamic "cleanup_policies" {
+    for_each = length(var.image_keep_tag_prefixes) > 0 ? [1] : []
+    content {
+      id     = "keep-tagged-releases"
+      action = "KEEP"
+      condition {
+        tag_state    = "TAGGED"
+        tag_prefixes = var.image_keep_tag_prefixes
+      }
+    }
+  }
   cleanup_policies {
     id     = "delete-old"
     action = "DELETE"
