@@ -39,7 +39,7 @@ Ticket first (under its epic, with spec and criteria); the brief adds what it ca
 
 ## 3. While workers run
 
-- When a worker reports, read the PR yourself: checks, mergeability, each reviewer's verdict on the head. Use the repo's coordinator tools.
+- When a worker reports (remote workers send no note), read the PR yourself: checks, mergeability, each reviewer's verdict on the head. Use the repo's coordinator tools.
 - Stalled sessions or timeouts: check the machine first.
 - Unanswered findings or a red check go back to its worker.
 - Questions only the owner can answer: §8.
