@@ -576,6 +576,10 @@ export const MergeWaitReason = z.enum([
   "review_findings_unknown",
   "open_review_findings",
   "not_ready_for_review",
+  // A required check failed on the default branch's head (AI-382, ADR-0154): main is red.
+  "main_red",
+  // The default branch's checks couldn't be read: never counted as green.
+  "main_checks_unknown",
 ]);
 export type MergeWaitReason = z.infer<typeof MergeWaitReason>;
 export type GateReason = z.infer<typeof GateReason>;

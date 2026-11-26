@@ -386,7 +386,7 @@ export function registerCoreTools(server: McpServer, deps: ToolDeps, run: Run): 
     "status",
     {
       description:
-        "With a ticket key: its stage, Definition of Ready gaps, questions, recent history, and `routing`: its build worker, tier and route, each with the layer that set it (ticket override, epic override, project default, global) and why earlier routes were skipped; an epic's key also returns `epic`: its stories in dependency order, progress (Done of non-cancelled) and summed cost, read from at most 50 stories' agent tasks (two reads each; `partial` past that) and one ticket list per other project a blocker names (at most 5). Without: every project's ticket counts by stage, its dispatch dial, pause switch and last dispatch decision (why nothing is running), and the Needs-you count: `tickets` waiting on Andy, the header's number (one per ticket, however many questions; `stale` is the Done part), and `projectPlans`, new projects' plans.",
+        "With a ticket key: its stage, Definition of Ready gaps, questions, recent history, and `routing`: its build worker, tier and route, each with the layer that set it (ticket override, epic override, project default, global) and why earlier routes were skipped; an epic's key also returns `epic`: its stories in dependency order, progress (Done of non-cancelled) and summed cost, read from at most 50 stories' agent tasks (two reads each; `partial` past that) and one ticket list per other project a blocker names (at most 5). Without: every project's ticket counts by stage, its dispatch dial, pause switch and last dispatch decision (why nothing is running), and the Needs-you count: `tickets` waiting on Andy, the header's number (one per ticket, however many questions; `stale` is the Done part), and `projectPlans`, new projects' plans; `mergeHolds` lists repos whose merges wait because a required check failed on the default branch's head (main_red), with the failing checks, since when and how many PRs wait.",
       inputSchema: StatusInput,
       annotations: { readOnlyHint: true },
     },
@@ -403,10 +403,23 @@ export function registerCoreTools(server: McpServer, deps: ToolDeps, run: Run): 
                 signedInAs: deps.email,
                 ...overview,
                 needsYou: { ...overview.needsYou, projectPlans: plans },
+                mergeHolds: await mergeHoldsOf(deps),
               };
             })(),
       ),
   );
+}
+
+/** AI-382: every project's repos held while main is red, each with its project's key. */
+async function mergeHoldsOf(deps: ToolDeps) {
+  if (!deps.mergeHolds) return [];
+  const projects = await deps.tracker.listProjects();
+  const held = await Promise.all(
+    projects.map(async (p) =>
+      (await deps.mergeHolds!.forRepos(p.repos)).map((h) => ({ project: p.key, ...h })),
+    ),
+  );
+  return held.flat();
 }
 
 /** The status with its cost, and the agent tasks the cost was read from, for the line too. */

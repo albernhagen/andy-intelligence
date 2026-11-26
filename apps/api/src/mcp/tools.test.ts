@@ -336,6 +336,7 @@ describe("status", () => {
         },
       ],
       needsYou: { tickets: 0, stale: 0, projectPlans: 0 },
+      mergeHolds: [],
     });
   });
 

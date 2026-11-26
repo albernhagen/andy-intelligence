@@ -4,6 +4,7 @@ import {
   MilestoneService,
   BuildDispatcher,
   SyncRuns,
+  MergeHoldReader,
   MergeQueue,
   ProjectService,
   RefineDispatcher,
@@ -339,13 +340,12 @@ export function createServices(raw: AppDeps): Services {
   );
   // AI-110 (ADR-0150): one queue per process over the shared store, so every merge into a
   // default branch (the gate's and merge_pr's) is serialised per repo across instances.
+  const mergeQueues = deps.mergeQueues ?? new InMemoryMergeQueueStore();
   const mergeQueue = connection
-    ? new MergeQueue(
-        deps.mergeQueues ?? new InMemoryMergeQueueStore(),
-        new ConnectedCodeHost(connection),
-        now,
-      )
+    ? new MergeQueue(mergeQueues, new ConnectedCodeHost(connection), now)
     : null;
+  // AI-382: repos held while their default branch is red, for the digest and MCP `status`.
+  const mergeHolds = new MergeHoldReader(mergeQueues);
   const dispatchOnce = async (projectId: string, wakeWaiters: boolean) => {
     // AI-75 (ADR-0087): held gaps are asked first, as the question caps allow; no run needed.
     await refiner.askHeld(projectId);
@@ -459,7 +459,14 @@ export function createServices(raw: AppDeps): Services {
       return lowestThresholds("claude-sub", routings, CLAUDE_SUB_THRESHOLDS);
     },
   );
-  const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now, tickets);
+  const digest = new DigestReader(
+    deps.tracker,
+    deps.runs,
+    deps.quota ?? null,
+    now,
+    tickets,
+    mergeHolds,
+  );
   // AI-323 (ADR-0137): Andy's first digest read after a day ends starts its summary task.
   const digestSummaries =
     deps.digestSummaries && deps.releaseNotes
@@ -600,6 +607,7 @@ export function createServices(raw: AppDeps): Services {
       mergeQueue,
     ),
     milestones: deps.milestones ?? null,
+    mergeHolds,
     // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
     dashboard: new DashboardReader(deps.tracker, deps.runs, tickets),
     dora: new DoraReader(deps.tracker, deps.deployments ?? null, now),
