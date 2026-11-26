@@ -144,6 +144,11 @@ export const Project = z.object({
    * missing field takes the global value. Projects stored before it read as `{}`, unrewritten.
    */
   spendCaps: ProjectSpendCaps.default({}),
+  /**
+   * When the project's logo last changed (AI-393), null while it shows its default mark. The file
+   * itself lives in its own store; this stamp tells readers when to fetch it again.
+   */
+  logoUpdatedAt: Timestamp.nullable().default(null),
 });
 export type Project = z.infer<typeof Project>;
 

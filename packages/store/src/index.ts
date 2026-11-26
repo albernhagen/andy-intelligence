@@ -14,6 +14,7 @@ import {
   OAuthGrant,
   Policy,
   Project,
+  ProjectLogo,
   Provider,
   PushSendState,
   PushSettings,
@@ -92,6 +93,8 @@ export const collections = {
     path: (projectId: string) => `projects/${projectId}/digestSummaries`,
     schema: DigestSummary,
   },
+  /** AI-393: one sanitized logo per project, keyed by the project id; server-only. */
+  projectLogos: { path: () => "projectLogos", schema: ProjectLogo },
   /** Summary writes started per UTC day across projects (ADR-0137), server-only: `{ count }`. */
   digestSummaryDays: { path: () => "digestSummaryDays" },
   oauthGrants: { path: () => "oauthGrants", schema: OAuthGrant },

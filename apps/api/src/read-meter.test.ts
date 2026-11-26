@@ -32,6 +32,7 @@ const FAKES: Record<keyof typeof METERED_READS, string> = {
   routing: "InMemoryRoutingConfigStore",
   spendLedger: "InMemorySpendLedger",
   spendCapsStore: "InMemorySpendCapsStore",
+  projectLogos: "InMemoryProjectLogoStore",
   spendNotices: "InMemorySpendNoticeLedger",
   projectVersions: "InMemoryProjectVersions",
   mergeQueues: "InMemoryMergeQueueStore",

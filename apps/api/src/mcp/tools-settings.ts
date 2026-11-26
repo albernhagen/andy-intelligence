@@ -50,6 +50,8 @@ export const settingsOf = (p: Project) => ({
   environments: p.environments,
   deployKind: p.deployKind,
   prSync: p.prSync,
+  // AI-393: when the logo last changed, null for the default mark; `get_project_logo` reads it.
+  logoUpdatedAt: p.logoUpdatedAt,
   lastDispatch: p.lastDispatch,
 });
 
@@ -102,7 +104,7 @@ export function registerSettingsTools(
     "get_project_settings",
     {
       description:
-        "Reads every setting of one project: Builds (buildEnabled, with who turned it on or off and when; set only in the app), auto-build, plan approval, auto-refine, questions per day, merge mode (mergeMode: who merges PRs; null until one is saved, and then nothing merges without Andy; suggestedMergeMode while unset), agent tasks at once (runsAtOnce), paused, default worker, default executor (actions or local), email notifications (sent only once email is configured: set_email_notifications says), release environments (prod-only or dev-and-prod; read only when deployKind is cloud-run), deploy kind (deployKind: none or cloud-run), PR sync (prSync: queue or all), and the dispatcher's last decision (lastDispatch: why it is idle, or what it did). Each setting has its own set_* tool except Builds.",
+        "Reads every setting of one project: Builds (buildEnabled, with who turned it on or off and when; set only in the app), auto-build, plan approval, auto-refine, questions per day, merge mode (mergeMode: who merges PRs; null until one is saved, and then nothing merges without Andy; suggestedMergeMode while unset), agent tasks at once (runsAtOnce), paused, default worker, default executor (actions or local), email notifications (sent only once email is configured: set_email_notifications says), release environments (prod-only or dev-and-prod; read only when deployKind is cloud-run), deploy kind (deployKind: none or cloud-run), PR sync (prSync: queue or all), when the logo last changed (logoUpdatedAt, null for the default mark; get_project_logo reads it), and the dispatcher's last decision (lastDispatch: why it is idle, or what it did). Each setting has its own set_* tool except Builds.",
       inputSchema: SettingsInput,
       annotations: { readOnlyHint: true },
     },

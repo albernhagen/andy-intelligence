@@ -44,6 +44,7 @@ export function fullAppDeps(
     releaseRequests: new contracts.InMemoryReleaseRequestStore(),
     digestSummaries: new contracts.InMemoryDigestSummaryStore(),
     projectVersions: new contracts.InMemoryProjectVersions(),
+    projectLogos: new contracts.InMemoryProjectLogoStore(),
     publicHost: "localhost",
     watchdog: {
       queue: new contracts.InMemoryWatchdogQueue(),
