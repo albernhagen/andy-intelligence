@@ -8,6 +8,7 @@ import {
   InMemoryCodeHostConnectionStore,
   InMemoryConfigChangeStore,
   InMemoryDeploymentStore,
+  InMemoryEpicBreakdownStore,
   InMemoryMilestoneStore,
   InMemoryRoutingConfigStore,
   InMemorySpendCapsStore,
@@ -46,6 +47,7 @@ export function renderApp(
 ) {
   const tracker = opts.tracker ?? new InMemoryWorkTracker();
   const milestones = new InMemoryMilestoneStore();
+  const epicBreakdowns = new InMemoryEpicBreakdownStore();
   const runs = new InMemoryRunStore();
   const quota = new InMemoryQuotaStore();
   const runners = new InMemoryRunnerStore();
@@ -86,6 +88,7 @@ export function renderApp(
     nightLaunches,
     deployments,
     milestones,
+    epicBreakdowns,
     releaseNotes,
     digestSummaries,
     reviewFindings,
@@ -142,6 +145,7 @@ export function renderApp(
   );
   return {
     milestones,
+    epicBreakdowns,
     runners,
     spendCapsStore,
     releaseNotes,

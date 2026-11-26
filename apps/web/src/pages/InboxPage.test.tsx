@@ -75,6 +75,10 @@ vi.mock("@/components/ProjectPlan", () => ({
   ProjectPlansWaiting: () => null,
   useWaitingPlans: () => ({ shown: [], error: null }),
 }));
+vi.mock("@/components/EpicBreakdown", () => ({
+  EpicBreakdownsWaiting: () => null,
+  useWaitingBreakdowns: () => ({ shown: [], error: null }),
+}));
 vi.mock("@/components/ConfigChanges", () => ({ ConfigChanges: () => null }));
 vi.mock("@/components/inbox/InboxTicketCard", () => ({
   InboxTicketCard: ({ card }: { card: { ticket: Ticket } }) => (
