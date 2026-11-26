@@ -14,6 +14,7 @@ import {
   type Listing,
   type PullRequest,
   type PullRequestCommit,
+  type CommitRange,
   type PullRequestDetails,
   type ProposedPullRequest,
   type RepoToken,
@@ -601,6 +602,8 @@ export class InMemoryCodeHost implements CodeHost {
   failMerge: Error | null = null;
   /** Test seam: head commits that don't contain the default branch yet (others do). */
   readonly behindDefault = new Set<string>();
+  /** Test seam: answers to `listCommitsBetween` by `<base>...<head>`; others are null (unknown). */
+  readonly commitRanges = new Map<string, CommitRange>();
   /** Files proposed with `proposeFile`, in order. */
   readonly proposals: {
     fullName: string;
@@ -771,6 +774,16 @@ export class InMemoryCodeHost implements CodeHost {
   async headContains(fullName: string, head: string): Promise<boolean | null> {
     if (!(await this.getRepo(fullName))) return null;
     return !this.behindDefault.has(head);
+  }
+
+  async listCommitsBetween(
+    fullName: string,
+    base: string,
+    head: string,
+  ): Promise<CommitRange | null> {
+    if (!(await this.getRepo(fullName))) return null;
+    const range = this.commitRanges.get(`${base}...${head}`);
+    return range ? structuredClone(range) : null;
   }
 
   async proposeFile(fullName: string, proposal: FileProposal): Promise<ProposedPullRequest | null> {
