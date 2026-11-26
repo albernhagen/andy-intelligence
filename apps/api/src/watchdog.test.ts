@@ -158,6 +158,7 @@ describe("Verifying check endpoint (AI-181)", () => {
       },
     );
     const project = await t.tracker.createProject({ name: "AI", key: "AI", repos: [REPO] });
+    await t.tracker.updateProject(project.id, { deployKind: "cloud-run" });
     const ticket = await t.tracker.createTicket(project.id, { type: "chore", title: "B" }, "andy");
     const stage = (to: string, force = false) =>
       t.call(`/api/projects/${project.id}/tickets/${ticket.id}/stage`, {

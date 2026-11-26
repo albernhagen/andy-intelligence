@@ -50,6 +50,16 @@ describe("moveOptions", () => {
     });
   });
 
+  it("GivenAProjectThatDoesNotDeploy_WhenListingMovesFromReview_ThenVerifyingIsForcedOnly", () => {
+    const { allowed, forced } = moveOptions("ready_for_review", false);
+    expect(allowed).toEqual(["done", "in_progress"]);
+    expect(forced).toContain("verifying");
+    expect(dropMove("ready_for_review", "verifying", false)).toEqual({
+      to: "verifying",
+      force: true,
+    });
+  });
+
   it("GivenVerifying_WhenListingMoves_ThenOnlyDoneAndInProgressAreAllowed", () => {
     expect(moveOptions("verifying").allowed).toEqual(["done", "in_progress"]);
   });

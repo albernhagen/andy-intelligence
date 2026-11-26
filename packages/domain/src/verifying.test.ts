@@ -119,6 +119,7 @@ describe("Verifying on merge (AI-181)", () => {
       checks.entered(t),
     );
     project = await tracker.createProject({ name: "AI", key: "AI" });
+    project = await tracker.updateProject(project.id, { deployKind: "cloud-run" });
   });
 
   async function ticketAt(stage: Stage): Promise<Ticket> {
@@ -208,6 +209,20 @@ describe("Verifying on merge (AI-181)", () => {
     expect((await reload(t)).stage).toBe("done");
   });
 
+  it("GivenAProjectThatDoesNotDeploy_WhenMovedToVerifying_ThenRefusedUnlessForced", async () => {
+    await tracker.updateProject(project.id, { deployKind: "none" });
+    const t = await ticketAt("ready_for_review");
+    await expect(service.move(project.id, t.id, "verifying", "andy")).rejects.toThrow(
+      "doesn't deploy",
+    );
+    await expect(service.moveForward("AI-1", "verifying", "agent:r1")).rejects.toThrow(
+      "doesn't deploy",
+    );
+    expect(
+      await service.move(project.id, t.id, "verifying", "andy", { force: true }),
+    ).toMatchObject({ stage: "verifying" });
+  });
+
   it("GivenATicketInVerifying_WhenMovedToReadyForReview_ThenRefused", async () => {
     const t = await ticketAt("ready_for_review");
     await service.move(project.id, t.id, "verifying", "andy");
@@ -251,6 +266,7 @@ describe("VerifyingChecks", () => {
     checks = new VerifyingChecks(tracker, new InMemoryWatchdogQueue(), () => new Date(clock));
     service = new TicketService(tracker);
     project = await tracker.createProject({ name: "AI", key: "AI" });
+    project = await tracker.updateProject(project.id, { deployKind: "cloud-run" });
   });
 
   async function verifyingTicket(): Promise<Ticket> {

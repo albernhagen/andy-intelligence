@@ -55,11 +55,12 @@ export function groupByStage<T extends Ticket>(tickets: readonly T[]): Record<St
 /**
  * Moves the domain allows from `stage`, and every stage Andy can force to. Forced
  * includes the allowed ones too, so Andy can e.g. force Backlog → Ready past an unmet DoR.
- * Cancelled is never a move: it has its own action, which stops runs first.
+ * Cancelled is never a move: it has its own action, which stops runs first. Verifying is an
+ * allowed move only in a project that deploys (AI-181); elsewhere only a forced one.
  */
-export function moveOptions(stage: Stage): { allowed: Stage[]; forced: Stage[] } {
+export function moveOptions(stage: Stage, deploys = true): { allowed: Stage[]; forced: Stage[] } {
   return {
-    allowed: [...TRANSITIONS[stage]],
+    allowed: TRANSITIONS[stage].filter((s) => deploys || s !== "verifying"),
     forced: STAGES.filter((s) => s !== stage && s !== "cancelled"),
   };
 }
@@ -69,9 +70,13 @@ export function moveOptions(stage: Stage): { allowed: Stage[]; forced: Stage[] }
  * (Andy only; ADR-0057). `null` when dropped back on its own column, or on Cancelled: cancelling
  * stops runs first, so it is done from the ticket page.
  */
-export function dropMove(from: Stage, to: Stage): { to: Stage; force: boolean } | null {
+export function dropMove(
+  from: Stage,
+  to: Stage,
+  deploys = true,
+): { to: Stage; force: boolean } | null {
   if (from === to || to === "cancelled") return null;
-  return { to, force: !moveOptions(from).allowed.includes(to) };
+  return { to, force: !moveOptions(from, deploys).allowed.includes(to) };
 }
 
 /** Textarea ↔ list: one item per non-blank line. */

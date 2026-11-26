@@ -623,6 +623,13 @@ export class TicketService {
       if (!canTransition(ticket.stage, to)) {
         throw new DomainError("invalid_transition", `can't move from ${ticket.stage} to ${to}`);
       }
+      // ADR-0114: only projects that deploy verify; Andy can still force it.
+      if (to === "verifying" && (await this.requireProject(projectId)).deployKind === "none") {
+        throw new DomainError(
+          "invalid_transition",
+          `${ticket.key}'s project doesn't deploy, so it has no Verifying stage`,
+        );
+      }
       if (ticket.stage === "backlog" && to === "ready") {
         const dor = checkDor(ticket, await this.openQuestionCount(ticketId));
         if (!dor.met) {
