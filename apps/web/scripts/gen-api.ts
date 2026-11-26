@@ -8,6 +8,7 @@ import {
   InMemoryMilestoneStore,
   InMemoryEpicBreakdownStore,
   InMemoryNightLaunchStore,
+  InMemoryProjectLogoStore,
   InMemoryRoutingConfigStore,
   InMemoryReleaseNoteStore,
   InMemoryRunStore,
@@ -42,6 +43,7 @@ export async function apiDocument(): Promise<OpenAPI3> {
     milestones: new InMemoryMilestoneStore(),
     epicBreakdowns: new InMemoryEpicBreakdownStore(),
     digestSummaries: new InMemoryDigestSummaryStore(),
+    projectLogos: new InMemoryProjectLogoStore(),
     // Fakes only, so the GitHub setup routes are in the document.
     github: {
       publicUrl: "http://localhost",

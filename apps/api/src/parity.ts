@@ -168,6 +168,11 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["dashboard"],
   },
   {
+    action: "Upload, read or remove a project's logo (AI-393)",
+    routes: [`GET ${P}/logo`, `PUT ${P}/logo`, `DELETE ${P}/logo`],
+    tools: ["get_project_logo", "set_project_logo", "remove_project_logo"],
+  },
+  {
     action: "Project list and settings",
     routes: ["GET /api/projects", `GET ${P}`, `PATCH ${P}`],
     tools: [

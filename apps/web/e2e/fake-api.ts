@@ -6,6 +6,7 @@ import {
   InMemoryConfigChangeStore,
   InMemoryMilestoneStore,
   InMemoryNightLaunchStore,
+  InMemoryProjectLogoStore,
   InMemoryReleaseNoteStore,
   InMemoryRoutingConfigStore,
   InMemorySpendLedger,
@@ -20,6 +21,10 @@ import { E2E_TOKEN } from "./token";
 
 /** A fixed clock, so history timestamps (and the screenshots) never change. */
 const NOW = new Date("2026-11-04T15:00:00.000Z");
+
+/** AI-392's favicon, as a project would upload it (AI-393). */
+const AI_LOGO =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><style>.p{stroke:#1b1f29}.w{stroke:#5252d8}@media (prefers-color-scheme:dark){.p{stroke:#e9ebf1}.w{stroke:#6d74f5}}</style><path d="M3 22 L12 4.5 L21 22" fill="none" class="p" stroke-width="3"/><path d="M6.8 16.2 Q9.4 13.6 12 16.2 T17.2 16.2" fill="none" class="w" stroke-width="2.4" stroke-linecap="round"/></svg>';
 
 const ready = {
   acceptanceCriteria: ["When Andy opens the app, the system shall show the project picker."],
@@ -41,6 +46,16 @@ export async function createFakeApp() {
     repos: ["albernhagen/andy-intelligence"],
   });
   await tracker.createProject({ name: "Ops", key: "OPS" });
+  // AI-393: AI has its A-peak mark as an uploaded logo; OPS shows the default key tile.
+  const projectLogos = new InMemoryProjectLogoStore();
+  await projectLogos.put({
+    projectId: "ai",
+    format: "svg",
+    data: AI_LOGO,
+    updatedAt: NOW.toISOString(),
+    updatedBy: "user:andy",
+  });
+  await tracker.updateProject("ai", { logoUpdatedAt: NOW.toISOString() });
 
   const feature = (title: string, body = "") => ({ type: "feature" as const, title, body });
   const shell = await service.create(
@@ -229,6 +244,7 @@ export async function createFakeApp() {
     // ADR-0097: no findings, so a project inbox shows the empty "Config proposals" row.
     configChanges,
     nightLaunches: new InMemoryNightLaunchStore(),
+    projectLogos,
     // AI-243: Settings → Models reads the default routing.
     routing: new InMemoryRoutingConfigStore(),
     // AI-249: empty, so the settings page's Spend caps panel shows $0.00 spent.

@@ -21,6 +21,7 @@ import {
   type ProjectVersions,
   type SpendLedger,
   type ReleaseNoteStore,
+  type ProjectLogoStore,
   type SpendCapsStore,
   type SpendNoticeLedger,
 } from "@andy/contracts";
@@ -114,6 +115,8 @@ export interface AppDeps {
   spendLedger?: SpendLedger;
   /** The global spend caps (AI-276); without it the code defaults, read-only. */
   spendCapsStore?: SpendCapsStore;
+  /** Project logos (AI-393); absent: no logo routes or tools, every project shows its default mark. */
+  projectLogos?: ProjectLogoStore;
   /**
    * What the spend notices have sent (AI-257: M10.9): their dedupe and daily cap. Absent: the
    * gate sends no spend notices.

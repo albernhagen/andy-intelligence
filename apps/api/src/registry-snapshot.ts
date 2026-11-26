@@ -43,6 +43,7 @@ export function fullAppDeps(
     deployments: new contracts.InMemoryDeploymentStore(),
     digestSummaries: new contracts.InMemoryDigestSummaryStore(),
     projectVersions: new contracts.InMemoryProjectVersions(),
+    projectLogos: new contracts.InMemoryProjectLogoStore(),
     publicHost: "localhost",
     watchdog: {
       queue: new contracts.InMemoryWatchdogQueue(),

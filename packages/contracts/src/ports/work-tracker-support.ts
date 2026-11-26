@@ -49,6 +49,7 @@ export function buildProject(input: NewProject): Project {
     emailNotifications: true,
     projectPlan: null,
     setupMarks: {},
+    logoUpdatedAt: null,
   };
 }
 

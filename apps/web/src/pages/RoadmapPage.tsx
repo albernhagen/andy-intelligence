@@ -22,6 +22,7 @@ import { milestoneReorder } from "@andy/domain";
 import { MilestoneCaseView } from "@/components/MilestoneCase";
 import { MILESTONE_STATUS } from "@/components/MilestoneControls";
 import { PageHeader } from "@/components/PageHeader";
+import { ProjectMark } from "@/components/ProjectMark";
 import { ListSkeleton } from "@/components/PageSkeleton";
 import { QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Segmented } from "@/components/ui/segmented";
 import { unwrap, useApi } from "@/lib/api";
-import { useReorderMilestones, useSetMilestoneStatus } from "@/lib/queries";
+import { useProjects, useReorderMilestones, useSetMilestoneStatus } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import type { components } from "@/lib/api.gen";
 import { showsError, useLivePoll } from "@/lib/live";
@@ -149,16 +150,18 @@ function ProjectSection({
   const byKey = new Map(r.epics.map((e) => [e.key, e]));
   const loose = r.noMilestone.flatMap((k) => byKey.get(k) ?? []);
   const milestones = r.milestones.filter((m) => shows(m, show));
+  const logoUpdatedAt = useProjects().data?.find((p) => p.id === r.projectId)?.logoUpdatedAt;
   return (
     <section aria-label={r.projectName} className="space-y-2">
       {heading && (
         <h3 className="flex items-center gap-2 text-md font-semibold">
-          <span
-            aria-hidden
-            className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-foreground px-1 text-2xs font-semibold text-background"
-          >
-            {r.projectKey}
-          </span>
+          <ProjectMark
+            project={{
+              id: r.projectId,
+              key: r.projectKey,
+              logoUpdatedAt: logoUpdatedAt ?? null,
+            }}
+          />
           {r.projectName}
         </h3>
       )}

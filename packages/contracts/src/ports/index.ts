@@ -241,6 +241,8 @@ export const ProjectPatch = z.strictObject({
   deployKind: DeployKind.optional(),
   prSync: PrSync.optional(),
   spendCaps: ProjectSpendCaps.optional(),
+  /** Set only by the logo service (AI-393), never through ProjectSettings. */
+  logoUpdatedAt: Timestamp.nullable().optional(),
 });
 export type ProjectPatch = z.infer<typeof ProjectPatch>;
 

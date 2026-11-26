@@ -940,3 +940,36 @@ export function useRevertSettingsChange(projectId: string) {
     ),
   );
 }
+
+/**
+ * A project's logo (AI-393), fetched only while it has one and once per `logoUpdatedAt`: the
+ * stamp is in the key, so a new upload refetches and an unchanged one never does.
+ */
+export function useProjectLogo(projectId: string, logoUpdatedAt: string | null) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["project-logo", projectId, logoUpdatedAt],
+    enabled: logoUpdatedAt !== null,
+    staleTime: Infinity,
+    queryFn: async () =>
+      unwrap(await api.GET("/api/projects/{projectId}/logo", { params: { path: { projectId } } })),
+  });
+}
+
+/** Uploads a logo (AI-393); the API refuses a bad file with its reason. */
+export function useSetProjectLogo(projectId: string) {
+  const api = useApi();
+  return useWrite(async (body: { format: "svg" | "png"; data: string }) =>
+    unwrap(
+      await api.PUT("/api/projects/{projectId}/logo", { params: { path: { projectId } }, body }),
+    ),
+  );
+}
+
+/** Removes the logo (AI-393): the default mark shows again. */
+export function useRemoveProjectLogo(projectId: string) {
+  const api = useApi();
+  return useWrite(async () =>
+    unwrap(await api.DELETE("/api/projects/{projectId}/logo", { params: { path: { projectId } } })),
+  );
+}

@@ -43,6 +43,7 @@ import {
 } from "../project-access";
 import * as toolGroups from "./tool-groups";
 import type { OnboardingReader } from "../onboarding";
+import type { ProjectLogoService } from "../project-logos";
 
 /**
  * MCP tools: thin adapters over TicketService, RunService and the other domain services, the
@@ -105,6 +106,8 @@ export interface ToolDeps {
   whatsNew?: WhatsNewReader | null;
   /** Releases (AI-183: M6.9); absent or null: no `list_releases` tool. */
   releases?: ReleaseReader | null;
+  /** Project logos (AI-393); absent or null: no logo tools. */
+  logos?: ProjectLogoService | null;
   /** PRs waiting for Andy's merge (AI-218), in `list_needs_me`; absent or null: none listed. */
   waitingMerges?: WaitingMergesReader | null;
   /** AI-323: the digest's model-written summary; null where it isn't wired. */
