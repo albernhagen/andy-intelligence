@@ -428,6 +428,38 @@ async function seedEpic(service: TicketService, tracker: InMemoryWorkTracker) {
   await child("ready", { type: "chore", title: "Monthly restore drill" });
   await child("in_progress", { type: "feature", title: "Alert when a backup fails" });
   await child("done", { type: "chore", title: "Backups to a second region" });
+  // AI-400: Ideas grouped by milestone, then epic: an approved milestone's epic with two ideas,
+  // a parked milestone's epic with one idea (its group starts collapsed), and one with no epic.
+  await milestones.create({
+    id: "m1",
+    projectId: "ops",
+    name: "M1: Restore drills",
+    outcome: "Every service has a timed, rehearsed restore",
+    order: 1,
+    status: "approved",
+    createdAt: NOW.toISOString(),
+    updatedAt: NOW.toISOString(),
+  });
+  const drills = await service.create(
+    "ops",
+    { type: "epic", title: "Rehearsed restores", body: "" },
+    "andy",
+  );
+  await tracker.updateTicket("ops", drills.id, { fields: { milestoneId: "m1" } }, "andy");
+  for (const title of ["Restore runbook per service", "Time each restore"])
+    await service.create("ops", { type: "chore", title, parentId: drills.id }, "andy");
+  const archive = await service.create(
+    "ops",
+    { type: "epic", title: "Archive old backups", body: "" },
+    "andy",
+  );
+  await tracker.updateTicket("ops", archive.id, { fields: { milestoneId: "m2" } }, "andy");
+  await service.create(
+    "ops",
+    { type: "chore", title: "Restore test from the archive", parentId: archive.id },
+    "andy",
+  );
+  await service.create("ops", { type: "chore", title: "Rotate backup keys" }, "andy");
   return milestones;
 }
 

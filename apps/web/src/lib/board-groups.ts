@@ -84,3 +84,19 @@ export function saveGroupByEpic(on: boolean): void {
     // Not remembering is fine; the toggle still works for this visit.
   }
 }
+
+/**
+ * The board's filter box (AI-400): the ticket's key, title or its epic's title contains the text,
+ * ignoring case and surrounding spaces. Empty text matches every ticket.
+ */
+export function matchesText(
+  ticket: Ticket,
+  text: string | undefined,
+  byId: ReadonlyMap<string, Ticket>,
+): boolean {
+  const q = text?.trim().toLowerCase();
+  if (!q) return true;
+  return [ticket.key, ticket.title, epicOf(ticket, byId)?.title ?? ""].some((s) =>
+    s.toLowerCase().includes(q),
+  );
+}

@@ -42,6 +42,7 @@ v1.x screens:
 - Quick add atop Backlog. Up next above Ideas (ADR-0075). Done: a counted strip; Cancelled, archived behind a toggle.
 - Group by epic (AI-86, remembered): per lane, a header per epic (key, title, done of total), No epic last; rank stays per lane. Epic filter.
 - Work view chips (AI-187): All plus five views, counted; one at a time, `?view=`, with the epic filter.
+- Ideas (AI-400): by milestone, then epic; parked collapsed; 10 per group. Filter box (`?q=`).
 
 **Built in AI-29: Ticket panel (M3, ADR-0059):**
 - The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc closes.

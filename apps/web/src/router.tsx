@@ -36,15 +36,17 @@ const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/p/$projectId",
   component: BoardPage,
-  // The Ready lane's sort (AI-37) and filters (AI-343), and the work view chip (AI-187); unknown
-  // values read as unset.
+  // The Ready lane's sort (AI-37) and filters (AI-343), the work view chip (AI-187) and the filter
+  // box's text (AI-400); unknown values read as unset.
   validateSearch: (
     search: Record<string, unknown>,
-  ): { sort?: "score"; view?: WorkView } & ReadyFilters => {
+  ): { sort?: "score"; view?: WorkView; q?: string } & ReadyFilters => {
     const view = parseWorkView(search.view);
+    const q = typeof search.q === "string" && search.q.trim() ? search.q.slice(0, 200) : undefined;
     return {
       ...(search.sort === "score" && { sort: "score" }),
       ...(view && { view }),
+      ...(q && { q }),
       ...readySearch(search),
     };
   },

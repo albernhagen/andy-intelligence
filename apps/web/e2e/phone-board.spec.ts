@@ -78,3 +78,33 @@ test("GivenThePhoneBoard_WhenACardIsDragged_ThenItsCopyShowsUnderThePointer", as
   await expect(page).toHaveScreenshot("phone-board-drag.png");
   await cancelDrag(page);
 });
+
+/** AI-400: at 390 px, Ideas grouped by milestone and epic, the parked group collapsed. */
+test("GivenThePhoneBoard_WhenBacklogShowsIdeas_ThenTheyAreGroupedAndFit", async ({ page }) => {
+  await page.goto("/p/ops");
+  await stages(page)
+    .getByRole("button", { name: /^Backlog/ })
+    .click();
+  await expect(page.locator('[data-idea-group][data-label="M2: Backups"] button')).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expectTouchTargets(page.locator("section[data-stage]"));
+  await expectPageFits(page);
+  await expect(page).toHaveScreenshot("phone-board-ideas.png");
+});
+
+/** AI-400: on a phone the filter box sits under Options and narrows the lane as you type. */
+test("GivenThePhoneBoard_WhenTheFilterBoxHasText_ThenOnlyMatchesShow", async ({ page }) => {
+  await page.goto("/p/ops");
+  await stages(page)
+    .getByRole("button", { name: /^Backlog/ })
+    .click();
+  await page.getByRole("button", { name: "Options" }).click();
+  await page.getByRole("searchbox", { name: "Filter tickets" }).fill("restore");
+  await expect(page).toHaveURL(/q=restore/);
+  await expect(page.getByText("Rotate backup keys")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Options, 1 on" })).toBeVisible();
+  await expectPageFits(page);
+  await expect(page).toHaveScreenshot("phone-board-filter.png");
+});
