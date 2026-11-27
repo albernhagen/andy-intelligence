@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api";
 import { showsError } from "@/lib/live";
 import {
+  EpicAttachError,
   useCreateEpicInMilestone,
   useNeedsYou,
   useRankTicket,
@@ -395,7 +396,16 @@ function NewEpic({ projectId, milestone: m }: { projectId: string; milestone: Mi
     e.preventDefault();
     const t = title.trim();
     if (!t || create.isPending) return;
-    create.mutate({ title: t, milestoneId: m.id }, { onSuccess: () => setTitle("") });
+    create.mutate(
+      { title: t, milestoneId: m.id },
+      {
+        onSuccess: () => setTitle(""),
+        // The epic exists: a retry would create a second one, so the title clears (AI-405).
+        onError: (err) => {
+          if (err instanceof EpicAttachError) setTitle("");
+        },
+      },
+    );
   }
 
   return (

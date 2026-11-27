@@ -10,8 +10,8 @@ import { pick } from "@/test/pick";
 
 const AT = "2026-11-27T00:00:00.000Z";
 
-async function seeded(path: string) {
-  const harness = renderApp("/");
+async function seeded(path: string, opts: Parameters<typeof renderApp>[1] = {}) {
+  const harness = renderApp("/", opts);
   const { tracker, milestones } = harness;
   await tracker.createProject({ name: "Andy Intelligence", key: "AI" });
   await tracker.createProject({ name: "Ops", key: "OPS" });
@@ -120,6 +120,31 @@ describe("milestone page (AI-405)", () => {
       (t) => t.title === "Cost per ticket",
     );
     expect(created).toMatchObject({ type: "epic", milestoneId: "m1", parentId: null });
+  });
+
+  it("GivenAttachingIsRefused_WhenNewEpicIsUsed_ThenItSaysSoAndClearsTheTitleSoNoRetryDuplicates", async () => {
+    const { harness } = await seeded("/p/ai/m/m1", {
+      beforeFetch: async (request) => {
+        if (request.method === "PUT" && request.url.endsWith("/milestone"))
+          throw new Error("network down");
+      },
+    });
+
+    const title = await screen.findByRole(
+      "textbox",
+      { name: "New epic in M1: First flow" },
+      PAGE_LOAD,
+    );
+    await harness.user.type(title, "Cost per ticket");
+    await harness.user.click(screen.getByRole("button", { name: "New epic" }));
+
+    expect(await screen.findByText(/was created with no milestone/)).toBeTruthy();
+    expect((title as HTMLInputElement).value).toBe("");
+    const created = (await harness.tracker.listTickets("ai")).filter(
+      (t) => t.title === "Cost per ticket",
+    );
+    expect(created).toHaveLength(1);
+    expect(created[0]!.milestoneId).toBeNull();
   });
 
   it("GivenTheMilestonePage_WhenAndyApproves_ThenTheMilestoneIsApprovedAsOnTheRoadmap", async () => {
