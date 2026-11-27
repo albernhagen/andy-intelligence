@@ -152,6 +152,7 @@ export class InMemoryWorkTracker implements WorkTracker {
       .filter((t) => filter.archived === undefined || t.archived === filter.archived)
       .filter((t) => !filter.upNext || (t.stage === "backlog" && t.upNextRank !== null))
       .filter((t) => filter.parentId === undefined || t.parentId === filter.parentId)
+      .slice(0, filter.limit)
       .sort((a, b) => compareRanks(a.rank, b.rank))
       .map((t) => structuredClone(t));
   }

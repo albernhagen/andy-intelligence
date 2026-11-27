@@ -32,6 +32,7 @@ import { inboxCards, waitingCounts } from "./inbox-order";
 import {
   blockerKeys,
   blockerProblem,
+  needsCheckProblem,
   outcomeProblem,
   parentProblem,
   projectOfKey,
@@ -148,7 +149,7 @@ export class TicketService {
     { upNext = false }: { upNext?: boolean } = {},
   ): Promise<Ticket> {
     const parsed = NewTicket.parse(input);
-    const badOutcome = outcomeProblem(parsed);
+    const badOutcome = outcomeProblem(parsed) ?? needsCheckProblem(parsed);
     if (badOutcome) throw new DomainError("invalid_field", badOutcome);
     await this.checkMergeModeOverride(projectId, parsed.overrides?.mergeMode);
     const parentId = parsed.parentId && (await this.parentIdOf(projectId, parsed.parentId));
@@ -374,6 +375,10 @@ export class TicketService {
     ifUpdatedAt?: string,
   ): Promise<Ticket> {
     const current = await this.require(projectId, ticketId);
+    // ADR-0164: turning the check off closes a waiting epic, so only the owner changes it.
+    if (fields.needsCheck !== undefined && fields.needsCheck !== current.needsCheck) {
+      requireCan(actor, "epic_check", projectId);
+    }
     await this.checkMergeModeOverride(projectId, fields.overrides?.mergeMode);
     if (fields.parentId && fields.parentId !== current.parentId) {
       const chain = await parentChain(this.tracker, projectId, fields.parentId);
@@ -384,7 +389,7 @@ export class TicketService {
       fields = { ...fields, blockedBy: await this.checkedBlockers(current, fields.blockedBy) };
     }
     const merged = { ...current, ...stripUndefined(fields) };
-    const badOutcome = outcomeProblem(merged);
+    const badOutcome = outcomeProblem(merged) ?? needsCheckProblem(merged);
     if (badOutcome) throw new DomainError("invalid_field", badOutcome);
     const dor = checkDor(merged, await this.openQuestionCount(ticketId));
     const updated = await this.tracker.updateTicket(
@@ -1073,7 +1078,7 @@ function stripUndefined<T extends object>(value: T): Partial<T> {
 function checkEpicMove(epic: Ticket, to: Stage, actor: EventActor): void {
   if (epic.stage === "cancelled" && to === "backlog") return;
   if (epic.needsCheck && epic.stage === "ready_for_review" && to === "done") {
-    requireCan(actor, "close_epic", epic.projectId);
+    requireCan(actor, "epic_check", epic.projectId);
     return;
   }
   throw new DomainError(

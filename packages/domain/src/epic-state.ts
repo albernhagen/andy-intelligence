@@ -9,6 +9,13 @@ import { WorkTrackerError } from "@andy/contracts";
 
 /** How far up a chain of epics one write syncs (ADR-0131 nests one level; this bounds a cycle). */
 export const EPIC_SYNC_MAX_DEPTH = 5;
+/**
+ * Children one sync reads (ADR-0028). An epic with more is left as it is and logged; the fix-up
+ * reads the whole project and still puts it in step. Project AI's largest epic has about 40.
+ */
+export const EPIC_SYNC_MAX_CHILDREN = 200;
+/** Tries per epic when another write lands between its read and its write. */
+export const EPIC_SYNC_ATTEMPTS = 3;
 
 /** The fields whose change can change a parent epic's stage. */
 const SYNC_FIELDS = ["parentId", "archived", "type", "needsCheck"] as const;
@@ -64,7 +71,17 @@ export async function syncEpicStage(
 ): Promise<Ticket | null> {
   const epic = await tracker.getTicket(projectId, epicId);
   if (!epic || epic.type !== "epic" || epic.stage === "cancelled") return null;
-  const children = await tracker.listTickets(projectId, { parentId: epic.id });
+  const children = await tracker.listTickets(projectId, {
+    parentId: epic.id,
+    limit: EPIC_SYNC_MAX_CHILDREN + 1,
+  });
+  if (children.length > EPIC_SYNC_MAX_CHILDREN) {
+    log("ERROR", "epic has too many tickets to sync; run the fix-up", {
+      epic: epic.key,
+      cap: EPIC_SYNC_MAX_CHILDREN,
+    });
+    return null;
+  }
   const to = epicStage(epic, children);
   if (to === epic.stage) return null;
   const leavesDone = epic.archived && to !== "done";
@@ -82,18 +99,23 @@ export async function syncEpicStage(
   return updated;
 }
 
-/** Syncs an epic, then each epic above it whose child just changed stage. One retry on conflict. */
+/** Syncs one epic, re-reading it when another write lands first (`EPIC_SYNC_ATTEMPTS`). */
+async function syncWithRetries(tracker: WorkTracker, projectId: string, epicId: string) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await syncEpicStage(tracker, projectId, epicId);
+    } catch (err) {
+      const conflict = err instanceof WorkTrackerError && err.code === "conflict";
+      if (!conflict || attempt >= EPIC_SYNC_ATTEMPTS) throw err;
+    }
+  }
+}
+
+/** Syncs an epic, then each epic above it whose child just changed stage. */
 async function syncUp(tracker: WorkTracker, projectId: string, epicId: string): Promise<void> {
   let next: string | null = epicId;
   for (let depth = 0; next && depth < EPIC_SYNC_MAX_DEPTH; depth++) {
-    let synced: Ticket | null;
-    try {
-      synced = await syncEpicStage(tracker, projectId, next);
-    } catch (err) {
-      if (!(err instanceof WorkTrackerError && err.code === "conflict")) throw err;
-      synced = await syncEpicStage(tracker, projectId, next);
-    }
-    next = synced?.parentId ?? null;
+    next = (await syncWithRetries(tracker, projectId, next))?.parentId ?? null;
   }
 }
 

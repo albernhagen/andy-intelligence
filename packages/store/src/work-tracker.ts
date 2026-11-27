@@ -169,6 +169,7 @@ export class FirestoreWorkTracker implements WorkTracker {
     if (filter.archived === true) query = query.where("archived", "==", true);
     // ADR-0164: an epic's children. Equality filters only, so no composite index is needed.
     if (filter.parentId !== undefined) query = query.where("parentId", "==", filter.parentId);
+    if (filter.limit !== undefined) query = query.limit(filter.limit);
     const tickets = (await query.get()).docs
       .map((d) => d.data())
       .filter((t) => filter.archived !== false || !t.archived)

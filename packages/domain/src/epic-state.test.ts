@@ -1,7 +1,15 @@
-import { InMemoryWorkTracker, type Stage, type Ticket, type WorkTracker } from "@andy/contracts";
+import {
+  InMemoryWorkTracker,
+  WorkTrackerError,
+  type Stage,
+  type Ticket,
+  type WorkTracker,
+} from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DomainError } from "./errors";
 import {
+  EPIC_SYNC_ATTEMPTS,
+  EPIC_SYNC_MAX_CHILDREN,
   epicStage,
   epicStageFixes,
   epicStateOf,
@@ -204,6 +212,82 @@ describe("syncEpicStages (ADR-0164)", () => {
     await moveTo(await newTicket(epic.id), "done");
     await service.update("ai", epic.id, { needsCheck: false }, "andy");
     expect((await get(epic)).stage).toBe("done");
+  });
+
+  it("GivenAWaitingEpic_WhenAnAgentTurnsTheCheckOff_ThenItIsRefusedAndTheEpicStillWaits", async () => {
+    const epic = await newEpic("Checked", null, true);
+    await moveTo(await newTicket(epic.id), "done");
+    await expect(
+      service.update("ai", epic.id, { needsCheck: false }, "agent:run-1"),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect(await get(epic)).toMatchObject({ stage: "ready_for_review", needsCheck: true });
+  });
+
+  it("GivenANonEpic_WhenNeedsCheckIsSet_ThenItIsRefused", async () => {
+    const epic = await newEpic();
+    const child = await newTicket(epic.id);
+    await expect(service.update("ai", child.id, { needsCheck: true }, "andy")).rejects.toThrow(
+      "only an epic waits for the owner's check",
+    );
+    await expect(
+      service.create("ai", { type: "feature", title: "F", needsCheck: true }, "andy"),
+    ).rejects.toMatchObject({ code: "invalid_field" });
+  });
+
+  it("GivenAClosedEpic_WhenTheOwnerTurnsTheCheckOn_ThenItStaysDone", async () => {
+    const epic = await newEpic();
+    await moveTo(await newTicket(epic.id), "done");
+    await service.update("ai", epic.id, { needsCheck: true }, "andy");
+    expect((await get(epic)).stage).toBe("done");
+  });
+
+  it("GivenAFeatureWithDoneChildren_WhenItsTypeBecomesEpic_ThenItIsDoneAtOnce", async () => {
+    const feature = await service.create("ai", { type: "feature", title: "Later an epic" }, "andy");
+    const child = await raw.createTicket("ai", { title: "C", parentId: feature.id }, "andy");
+    await raw.updateTicket(
+      "ai",
+      child.id,
+      { stage: { to: "done", forced: true, reason: null } },
+      "andy",
+    );
+    const changed = await service.update("ai", feature.id, { type: "epic" }, "andy");
+    expect(changed.stage).toBe("done");
+    expect((await get(feature)).stage).toBe("done");
+  });
+
+  it("GivenADoneTicketUnderAnEpic_WhenItBecomesAnEmptyEpic_ThenItAndItsParentLeaveDone", async () => {
+    const parent = await newEpic("Parent");
+    const ticket = await newTicket(parent.id);
+    await moveTo(ticket, "done");
+    expect((await get(parent)).stage).toBe("done");
+    await service.update("ai", ticket.id, { type: "epic" }, "andy");
+    expect((await get(ticket)).stage).toBe("backlog");
+    expect((await get(parent)).stage).toBe("backlog");
+  });
+
+  it("GivenAnEpicOverTheChildCap_WhenATicketMoves_ThenTheEpicIsLeftAndTheSkipIsLogged", async () => {
+    const epic = await newEpic();
+    for (let i = 0; i <= EPIC_SYNC_MAX_CHILDREN; i++) {
+      await raw.createTicket("ai", { title: `T${i}`, parentId: epic.id }, "andy");
+    }
+    const [first] = await raw.listTickets("ai", { parentId: epic.id });
+    const log = vi.spyOn(console, "log");
+    await moveTo(first!, "done");
+    expect((await get(epic)).stage).toBe("backlog");
+    expect(log.mock.calls.some(([line]) => String(line).includes("too many tickets"))).toBe(true);
+  });
+
+  it("GivenOtherWritesLandOnTheEpic_WhenItSyncs_ThenItRetriesUpToTheAttemptCap", async () => {
+    const epic = await newEpic();
+    const child = await newTicket(epic.id);
+    const update = raw.updateTicket.bind(raw);
+    let conflicts = EPIC_SYNC_ATTEMPTS - 1;
+    vi.spyOn(raw, "updateTicket").mockImplementation(async (p, id, change, actor) => {
+      if (id === epic.id && conflicts-- > 0) throw new WorkTrackerError("conflict", "changed");
+      return update(p, id, change, actor);
+    });
+    await moveTo(child, "ready");
+    expect((await get(epic)).stage).toBe("in_progress");
   });
 
   it("GivenACancelledEpic_WhenItsTicketsChange_ThenItStaysCancelled", async () => {

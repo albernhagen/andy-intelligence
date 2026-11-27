@@ -30,6 +30,8 @@ async function main(args: string[]) {
   const tracker = new FirestoreWorkTracker(createFirestore(gcpProject));
   if (!(await tracker.getProject(projectId))) throw new Error(`project ${projectId} not found`);
 
+  // Check this line before `--apply`: the writes go to this GCP project's Firestore.
+  console.log(`GCP project ${gcpProject}, project ${projectId}`);
   const fixes = epicStageFixes(await tracker.listTickets(projectId));
   for (const f of fixes) console.log(`${f.key}: ${f.title} · ${f.from} → ${f.to} · ${f.reason}`);
   if (!apply) {

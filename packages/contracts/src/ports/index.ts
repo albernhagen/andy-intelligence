@@ -290,6 +290,11 @@ export const TicketFilter = z.object({
   upNext: z.literal(true).optional(),
   /** Only the children of this ticket (ADR-0164: an epic's stage is synced from them). */
   parentId: Id.optional(),
+  /**
+   * Read at most this many (ADR-0028), in no set order before the rank sort. Only with `parentId`
+   * alone: other filters may apply after the cut.
+   */
+  limit: z.number().int().positive().optional(),
 });
 export type TicketFilter = z.infer<typeof TicketFilter>;
 

@@ -304,6 +304,9 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect(await tracker.listTickets(project.id, { parentId: epic.id, stage: "done" })).toEqual([
         expect.objectContaining({ id: b.id }),
       ]);
+      expect(await tracker.listTickets(project.id, { parentId: epic.id, limit: 1 })).toHaveLength(
+        1,
+      );
     });
 
     it("GivenAnArchivedTicket_WhenListedByArchived_ThenOnlyMatchingTicketsAreReturned", async () => {
