@@ -6,6 +6,7 @@ import {
   notFound,
   type Digest,
   type DigestException,
+  type DigestHandover,
   type DigestInFlight,
   type DigestMerged,
   type DigestReview,
@@ -22,12 +23,16 @@ import {
 } from "@andy/contracts";
 import { ticketCost } from "./cost";
 import { ProjectTickets } from "./ticket-snapshots";
+import { isInFlight } from "./dispatch-caps";
+import { MilestoneHolds, type MilestoneReader } from "./milestone-holds";
 import {
-  MAX_ACTIVE_RUNS_AT_WARN,
-  MAX_ACTIVE_RUNS_GLOBAL,
-  MAX_PRS_WAITING_PER_PROJECT,
-  isInFlight,
-} from "./dispatch-caps";
+  idleText,
+  nextUp,
+  type DispatchFacts,
+  type DispatchFactsReader,
+  type DispatchProject,
+} from "./next-up";
+import { openPrs } from "./open-prs";
 import { quotaStatus } from "./quota";
 import { openBlockerKeys, runLabel, syncWaiting, ticketStatusLine } from "./status-line";
 import { resolveWorker } from "./worker";
@@ -66,6 +71,16 @@ export interface DigestData {
   quotaClears: readonly QuotaClear[];
   /** Repos whose merges are held while their default branch is red (AI-382); absent: none read. */
   mergeHolds?: readonly MergeHold[];
+  /**
+   * AI-385: what the handover's next-up dry run reads besides the above; absent: no handover.
+   * Only gathered for a window that reaches now.
+   */
+  handover?: {
+    project: DispatchProject;
+    /** Why a Ready ticket waits on its milestone, by ticket id. */
+    milestoneHolds: ReadonlyMap<string, string>;
+    facts: DispatchFacts;
+  };
   /** A read cap was reached (`MAX_DIGEST_TICKET_READS` tickets or `MAX_DIGEST_RUNS` runs). */
   truncated: boolean;
   now: Date;
@@ -125,6 +140,7 @@ export function buildDigest(window: DigestWindow, data: DigestData): Digest {
     : [];
   const readyForReview = live ? inReview(data) : [];
   const totals = totalsOf(data.endedRuns, merged.length);
+  const handover = live && data.handover ? handoverOf(data, data.handover) : null;
 
   const quiet =
     exceptions.length === 0 &&
@@ -143,6 +159,7 @@ export function buildDigest(window: DigestWindow, data: DigestData): Digest {
     totals,
     truncated: data.truncated,
     summary: null,
+    handover,
   };
   return { ...digest, text: renderDigestText(digest, live) };
 }
@@ -334,24 +351,12 @@ function waitingAndBlocked(data: DigestData): DigestException[] {
   return out;
 }
 
-const IDLE_REASONS: Record<DispatchIdleReason, (p: DigestData["project"]) => string> = {
-  paused: () => "Dispatch is paused",
-  project_cap: (p) =>
-    `Dispatch is at the project's dial (${plural(p.runsAtOnce, "agent task")} at once)`,
-  global_cap: () => `Dispatch is at the global cap (${MAX_ACTIVE_RUNS_GLOBAL} agent tasks at once)`,
-  prs_waiting_cap: () => `Dispatch is idle: ${MAX_PRS_WAITING_PER_PROJECT} PRs wait for Andy`,
-  quota_reserve: () => "Dispatch is idle: quota is at the reserve",
-  quota_warn: () =>
-    `Dispatch is at the warn cap (${plural(MAX_ACTIVE_RUNS_AT_WARN, "agent task")} at once while quota is at warn)`,
-  spend_cap: () => "Dispatch is idle: a paid agent task would pass a spend cap",
-};
-
 function dispatchIdle({ project }: DigestData): DigestException[] {
   const decision = project.paused ? "paused" : project.lastDispatch?.decision;
   const idle = DispatchIdleReason.safeParse(decision);
   if (!idle.success) return [];
   const at = project.lastDispatch?.decision === idle.data ? project.lastDispatch.at : null;
-  const reason = IDLE_REASONS[idle.data](project);
+  const reason = idleText(idle.data, project);
   return [{ kind: "dispatch_idle", ticketKey: null, title: null, prNumber: null, reason, at }];
 }
 
@@ -416,6 +421,33 @@ function mergedItem(p: PrInWindow, data: DigestData): DigestMerged {
       : null,
     costUsd: cost.estimatedCostUsd,
     unknownCostRuns: cost.unknownRuns,
+  };
+}
+
+/** Open PRs with why each waits, and what dispatch would take next (AI-385). */
+function handoverOf(data: DigestData, input: NonNullable<DigestData["handover"]>): DigestHandover {
+  const prs = openPrs({
+    tickets: data.tickets,
+    ticketEvents: data.ticketEvents,
+    ticketRuns: data.ticketRuns,
+    mergeHolds: data.mergeHolds ?? [],
+  });
+  const next = nextUp({
+    project: input.project,
+    tickets: data.tickets,
+    openQuestions: data.openQuestions,
+    activeRuns: data.activeRuns,
+    ticketRuns: data.ticketRuns,
+    milestoneHolds: input.milestoneHolds,
+    facts: input.facts,
+    now: data.now,
+  });
+  return {
+    openPrs: prs.openPrs,
+    openPrsTruncated: prs.truncated,
+    nextUp: next.items,
+    nextUpTruncated: next.truncated,
+    idle: next.idle,
   };
 }
 
@@ -498,7 +530,10 @@ function quotaText(delta: DigestTotals["quotaDelta"]): string | null {
 /** The digest as plain text: one line when quiet. Ticket titles are Andy's text. */
 export function renderDigestText(d: Omit<Digest, "text">, live: boolean): string {
   const head = `${d.projectKey} digest · ${windowText(d, live)}`;
-  if (d.quiet) return `${head}: nothing happened.`;
+  if (d.quiet) {
+    const handover = d.handover ? handoverText(d.handover) : [];
+    return [`${head}: nothing happened.`, ...handover].join("\n");
+  }
   const lines = [head];
   const section = (title: string, items: string[]) => {
     if (items.length) lines.push("", `${title} (${items.length})`, ...items.map((i) => `- ${i}`));
@@ -523,6 +558,7 @@ export function renderDigestText(d: Omit<Digest, "text">, live: boolean): string
       (r) => `Ready for review: ${who(r)}${r.prNumber ? ` · PR #${r.prNumber}` : ""}`,
     ),
   ]);
+  if (d.handover) lines.push(...handoverText(d.handover));
   const t = d.totals;
   const totals = [
     `${plural(t.runs, "agent task")}${t.failedRuns ? ` (${t.failedRuns} failed)` : ""}`,
@@ -535,6 +571,33 @@ export function renderDigestText(d: Omit<Digest, "text">, live: boolean): string
     lines.push("", "A read cap was reached: some tickets or agent tasks may be missing.");
   }
   return lines.join("\n");
+}
+
+const NEXT_UP_STATUS: Record<DigestHandover["nextUp"][number]["status"], string> = {
+  starts_now: "Starts now",
+  next: "Next",
+  skipped: "Skipped",
+};
+
+/** The handover's two sections as text lines, each starting with a blank line. */
+export function handoverText(h: DigestHandover): string[] {
+  const lines: string[] = [];
+  if (h.openPrs.length) {
+    lines.push("", `Open PRs (${h.openPrs.length})`);
+    for (const p of h.openPrs) {
+      lines.push(`- ${p.ticketKey}: ${p.title} · PR #${p.prNumber}`);
+      lines.push(...p.lines.map((l) => `  - ${l}`));
+    }
+    if (h.openPrsTruncated) lines.push("- List cut short: more open PRs than shown.");
+  }
+  lines.push("", `Next up (${h.nextUp.length})`);
+  for (const n of h.nextUp) {
+    const why = n.reason ? ` · ${n.reason}` : "";
+    lines.push(`- ${NEXT_UP_STATUS[n.status]}: ${n.ticketKey}: ${n.title}${why}`);
+  }
+  if (h.nextUpTruncated) lines.push("- List cut short: more Ready tickets than shown.");
+  lines.push(`- ${h.idle}`);
+  return lines;
 }
 
 // ── Reader ───────────────────────────────────────────────────────────────────
@@ -554,10 +617,20 @@ export class DigestReader {
     private readonly tickets: ProjectTickets = new ProjectTickets(tracker),
     /** AI-382: merge holds from the queue records; null: none shown. */
     private readonly holds: MergeHoldReader | null = null,
+    /** AI-385: the dispatcher's facts for the next-up dry run; null: no handover. */
+    private readonly dispatch: Pick<DispatchFactsReader, "facts"> | null = null,
+    /** AI-385: milestones, for why a Ready ticket waits (ADR-0131); null holds those with one. */
+    private readonly milestones: MilestoneReader | null = null,
   ) {}
 
   async digest(projectId: string, window: DigestWindow): Promise<Digest> {
-    const project = await this.tracker.getProject(projectId);
+    const now = this.now();
+    const handover = this.handoverWanted(window, now);
+    // AI-385: the handover counts agent tasks in every project, so it reads the list instead.
+    const projects = handover ? await this.tracker.listProjects() : null;
+    const project = projects
+      ? projects.find((p) => p.id === projectId)
+      : await this.tracker.getProject(projectId);
     if (!project) throw notFound("project", projectId);
     const from = window.from.toISOString();
     const to = window.to.toISOString();
@@ -582,9 +655,14 @@ export class DigestReader {
       if (!questionLines.has(q.ticketId)) questionLines.set(q.ticketId, q.text);
     }
 
+    // In review first (AI-385: their PRs are the handover's open PRs), then the latest changed.
+    const inReview = (t: Ticket) => t.stage === "ready_for_review" && !t.archived;
     const toRead = tickets
-      .filter((t) => t.updatedAt >= from || (t.stage === "ready_for_review" && !t.archived))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      .filter((t) => t.updatedAt >= from || inReview(t))
+      .sort(
+        (a, b) =>
+          Number(inReview(b)) - Number(inReview(a)) || b.updatedAt.localeCompare(a.updatedAt),
+      );
     const read = toRead.slice(0, MAX_DIGEST_TICKET_READS);
     const histories = await Promise.all(
       read.map(async (t) => {
@@ -595,6 +673,10 @@ export class DigestReader {
         return { id: t.id, events, runs };
       }),
     );
+
+    const handoverData = projects
+      ? await this.handoverInput(project, projects, tickets, activeRuns)
+      : undefined;
 
     return buildDigest(window, {
       project,
@@ -608,8 +690,52 @@ export class DigestReader {
       quota,
       quotaClears,
       mergeHolds,
+      ...(handoverData ? { handover: handoverData } : {}),
       truncated: toRead.length > read.length || !ended.complete,
-      now: this.now(),
+      now,
     });
+  }
+
+  /** The handover is gathered only for a window that reaches now, when dispatch is wired. */
+  private handoverWanted(window: DigestWindow, now: Date): boolean {
+    return this.dispatch !== null && window.to.getTime() >= now.getTime() - LIVE_SLACK_MS;
+  }
+
+  /**
+   * The next-up dry run's own reads: the dispatcher's facts (runner, routing, quota, the other
+   * projects' active tasks; none per ticket) and one read per milestone a Ready ticket is in.
+   */
+  private async handoverInput(
+    project: Project,
+    projects: readonly Project[],
+    tickets: readonly Ticket[],
+    active: readonly Run[],
+  ): Promise<DigestData["handover"] | undefined> {
+    const holds = new MilestoneHolds(this.milestones, project.id);
+    const ready = tickets.filter((t) => t.stage === "ready" && t.type !== "epic" && !t.archived);
+    let facts: DispatchFacts;
+    let reasons: (readonly [string, string | null])[];
+    try {
+      [facts, reasons] = await Promise.all([
+        this.dispatch!.facts(project.id, { projects, active }),
+        Promise.all(ready.map(async (t) => [t.id, await holds.reasonFor(t, tickets)] as const)),
+      ]);
+    } catch (err) {
+      // The rest of the digest still shows; the handover is left out and the failure logged.
+      console.error(
+        JSON.stringify({
+          severity: "ERROR",
+          message: "digest handover: dispatch facts unreadable",
+          component: "digest",
+          projectId: project.id,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return undefined;
+    }
+    const milestoneHolds = new Map(
+      reasons.filter((r): r is readonly [string, string] => r[1] !== null),
+    );
+    return { project, milestoneHolds, facts };
   }
 }

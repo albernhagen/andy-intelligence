@@ -15,6 +15,7 @@ import {
   ConfigProposals,
   ConfigRevert,
   DigestReader,
+  DispatchFactsReader,
   DigestSummaryResults,
   DigestSummaryService,
   subscriptionQuotaLevels,
@@ -520,6 +521,9 @@ export function createServices(raw: AppDeps): Services {
     now,
     tickets,
     mergeHolds,
+    // AI-385: the handover's next-up dry run asks what the dispatcher asks, and starts nothing.
+    new DispatchFactsReader(runs, deps.runs, deps.quota ?? null, now),
+    deps.milestones ?? null,
   );
   // AI-323 (ADR-0137): Andy's first digest read after a day ends starts its summary task.
   const digestSummaries =

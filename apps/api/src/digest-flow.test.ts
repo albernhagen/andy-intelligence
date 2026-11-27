@@ -114,6 +114,85 @@ describe("daily digest", () => {
     expect(mcp.digest.totals).toEqual(digest.totals);
   });
 
+  it("GivenAWaitingPrAndAReadyTicket_WhenReadOverApiAndMcp_ThenBothCarryTheSameHandover", async () => {
+    const { call, mcpDigest, tracker, runs, project } = await setup();
+    const review = await tracker.createTicket(
+      project.id,
+      { type: "feature", title: "Kept change" },
+      "andy",
+    );
+    const url = "https://github.com/o/r/pull/31";
+    const run = await runs.create({
+      projectId: project.id,
+      ticketId: review.id,
+      step: "build",
+      route: ROUTE,
+      tier: null,
+    });
+    await runs.update(
+      run.id,
+      {
+        status: "succeeded",
+        links: { pullRequest: url },
+        mergeMode: "low-risk",
+        mergeVerdict: "wait",
+        verdictReasons: ["kept_path"],
+      },
+      ["queued"],
+    );
+    await tracker.linkPullRequest(
+      project.id,
+      review.id,
+      { number: 31, url, state: "open" },
+      "system",
+    );
+    await tracker.updateTicket(
+      project.id,
+      review.id,
+      { stage: { to: "ready_for_review", forced: true, reason: null } },
+      "andy",
+    );
+    const next = await tracker.createTicket(
+      project.id,
+      {
+        type: "feature",
+        title: "Next one",
+        body: "Andy wants it.",
+        acceptanceCriteria: ["The system shall do it."],
+        size: "S",
+        sizeReason: "small",
+      },
+      "andy",
+    );
+    await tracker.updateTicket(
+      project.id,
+      next.id,
+      { stage: { to: "ready", forced: true, reason: null } },
+      "andy",
+    );
+
+    const digest = (await (await call("/api/projects/ai/digest")).json()) as Digest;
+    expect(digest.handover!.openPrs).toEqual([
+      expect.objectContaining({
+        ticketKey: review.key,
+        prNumber: 31,
+        state: "waiting",
+        reasons: ["kept_path"],
+        lines: ["Waits for Andy: it changes a path on his kept list, which only he merges"],
+      }),
+    ]);
+    expect(digest.handover!.nextUp).toEqual([
+      { ticketKey: next.key, title: "Next one", status: "next", reason: null },
+    ]);
+    expect(digest.handover!.idle).toMatch(/^Nothing starts on its own/);
+    expect(digest.text).toContain("Open PRs (1)");
+    expect(digest.text).toContain("Next up (1)");
+
+    const mcp = await mcpDigest({});
+    expect(mcp.digest.handover).toEqual(digest.handover);
+    expect(mcp.text).toBe(`${digest.text}${WHATS_NEW_LINK}`);
+  });
+
   it("GivenTheSameSeedAndAPastWindow_WhenRead_ThenOneLineNothingHappened", async () => {
     const { call, mcpDigest } = await setup();
     const until = "2026-01-01T00:00:00.000Z";
@@ -124,6 +203,7 @@ describe("daily digest", () => {
     expect(digest.text).toBe(
       "AI digest · 2025-12-31 00:00 UTC to 2026-01-01 00:00 UTC: nothing happened.",
     );
+    expect(digest.handover).toBeNull();
 
     expect((await mcpDigest({ until })).text).toBe(`${digest.text}${WHATS_NEW_LINK}`);
   });
