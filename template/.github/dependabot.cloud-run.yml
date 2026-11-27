@@ -1,0 +1,54 @@
+# Dependabot version updates (project baseline, ADR-0031), deploy kind `cloud-run`: the `none`
+# file (template/.github/dependabot.yml) plus the Terraform root the baseline seeds in infra/
+# (AI-399); keep the two in step (platform/baseline/baseline.test.mjs checks). Action pins are
+# commit SHAs with a version comment; Dependabot updates both. Caps: grouped, at most 5 open PRs
+# per ecosystem; npm weekly, Actions and Terraform monthly. Security updates are separate and do
+# not wait for this schedule. cooldown waits a few days after a release.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    # One PR for dev tooling, one for what ships; majors come one per package.
+    groups:
+      dev-minor-and-patch:
+        dependency-type: development
+        update-types: [minor, patch]
+        # Playwright gets a PR of its own: the screenshot job's browser image (pinned by digest in
+        # a workflow) must move with it, and the job fails naming the fix until it does (AI-394).
+        exclude-patterns: ["@playwright/test", "playwright", "playwright-core"]
+      prod-minor-and-patch:
+        dependency-type: production
+        update-types: [minor, patch]
+        exclude-patterns: ["@playwright/test", "playwright", "playwright-core"]
+    ignore:
+      # @types/node majors track the Node runtime in .nvmrc; bump both together by hand.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: terraform
+    # The root the baseline seeds for `cloud-run` (template/infra/cloud-run, AI-109).
+    directory: /infra
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      terraform:
+        patterns: ["*"]

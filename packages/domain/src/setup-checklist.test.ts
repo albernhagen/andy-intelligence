@@ -104,10 +104,15 @@ describe("setupChecklist", () => {
     const manifest = JSON.parse(
       readFileSync(new URL("../../../platform/baseline/manifest.json", import.meta.url), "utf8"),
     ) as { managed: { path: string; deployKind?: string }[] };
+    const kinds = new Set(["none", ...manifest.managed.flatMap((f) => f.deployKind ?? [])]);
+    const inEveryRepo = (path: string) =>
+      manifest.managed.some((f) => f.path === path && !f.deployKind) ||
+      [...kinds].every((k) => manifest.managed.some((f) => f.path === path && f.deployKind === k));
 
-    // Files for one deploy kind only (AI-206: M6.17) aren't in every repo, so they don't count.
-    expect([...BASELINE_FILES]).toEqual(
-      manifest.managed.filter((f) => !f.deployKind).map((f) => f.path),
-    );
+    // Files for one deploy kind only (AI-206: M6.17) aren't in every repo, so they don't count; a
+    // path every kind has, from its own source (AI-399: dependabot.yml), does.
+    expect([...BASELINE_FILES]).toEqual([
+      ...new Set(manifest.managed.filter((f) => inEveryRepo(f.path)).map((f) => f.path)),
+    ]);
   });
 });
