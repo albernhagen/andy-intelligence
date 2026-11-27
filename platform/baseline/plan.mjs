@@ -72,7 +72,8 @@ export function planBaselinePr(
       });
     } else if (read(f.path) === null) {
       files.push({ path: f.path, content: f.content });
-      applied.push({ path: f.path, note: "added (seed: the project's own from now on)" });
+      const own = f.ownAppNote && read("package.json") !== null ? `; ${f.ownAppNote}` : "";
+      applied.push({ path: f.path, note: `added (seed: the project's own from now on)${own}` });
     } else {
       skipped.push({ path: f.path, note: "already there (seed: the project's own)" });
     }

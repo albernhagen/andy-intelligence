@@ -535,6 +535,25 @@ describe("starter Dockerfile in the baseline", () => {
     expect(plan.files.map((f) => f.path)).not.toContain("Dockerfile");
   });
 
+  it.each([
+    ["has its own package.json", { "package.json": "{}" }, true],
+    ["is new (gets the starter)", {}, false],
+  ])(
+    "GivenARepoThat%s_WhenTheAppPlansTheBaselinePr_ThenTheDockerfileNoteSaysSoOnlyForAnOwnApp",
+    (_, files, warned) => {
+      const plan = planBaselinePr(render("cloud-run"), new Map(Object.entries(files)), {
+        source: manifest.source,
+        sha: SHA,
+        ref: "v1.0.0",
+        date: "2026-11-26",
+      });
+      const note = plan.applied.find((a) => a.path === "Dockerfile")?.note ?? "";
+      expect(note).toContain("added (seed");
+      if (warned) expect(note).toContain("edit the install step and `CMD` before the first deploy");
+      else expect(note).not.toContain("CMD");
+    },
+  );
+
   it("GivenANoneProject_WhenRendered_ThenNeitherADockerfileNorADockerEntry", () => {
     const rendered = render("none");
     const paths = [...rendered.seed, ...rendered.starter].map((f) => f.path);

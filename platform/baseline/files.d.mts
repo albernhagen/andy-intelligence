@@ -12,6 +12,7 @@ interface ManifestEntry {
   deployKind?: DeployKind;
   environments?: Environments;
   group?: string;
+  ownAppNote?: string;
 }
 export interface Manifest {
   source: string;
@@ -25,6 +26,8 @@ export interface RenderedFile {
   content: string;
   /** Seed group: written only all together (AI-109). */
   group?: string;
+  /** Seed only: warning shown when the repo has its own package.json (AI-401). */
+  ownAppNote?: string;
 }
 export interface Rendered {
   managed: RenderedFile[];

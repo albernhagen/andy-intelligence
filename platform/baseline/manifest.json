@@ -1,5 +1,5 @@
 {
-  "$comment": "Project baseline files (ADR-0031, ADR-0038). from = path in this repo at the pinned commit. pin = rewrite local ./platform/actions/ uses and ../infra/modules/ sources to the pinned remote ones. deployKind = written only for a project of that deploy kind (ADR-0114); environments = only for that environment policy (AI-109). group = seed files written only all together: none when any of them is already there. A new deploy kind adds its own entries; no code changes.",
+  "$comment": "Project baseline files (ADR-0031, ADR-0038). from = path in this repo at the pinned commit. pin = rewrite local ./platform/actions/ uses and ../infra/modules/ sources to the pinned remote ones. deployKind = written only for a project of that deploy kind (ADR-0114); environments = only for that environment policy (AI-109). group = seed files written only all together: none when any of them is already there. ownAppNote = a seed's warning in the baseline PR when the repo already has its own package.json (no starter). A new deploy kind adds its own entries; no code changes.",
   "source": "albernhagen/andy-intelligence",
   "managed": [
     { "path": ".github/workflows/ci.yml", "from": ".github/workflows/ci.yml", "pin": true },
@@ -80,7 +80,8 @@
       "path": "Dockerfile",
       "from": "template/docker/Dockerfile",
       "deployKind": "cloud-run",
-      "group": "docker"
+      "group": "docker",
+      "ownAppNote": "builds with pnpm (`pnpm-lock.yaml`, `pnpm build`) and runs `dist/main.js`; this repo has its own app, so edit the install step and `CMD` before the first deploy"
     },
     {
       "path": ".dockerignore",

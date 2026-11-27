@@ -127,6 +127,7 @@ export function renderFiles(
       path: f.path,
       content: content(f),
       ...(f.group ? { group: f.group } : {}),
+      ...(f.ownAppNote ? { ownAppNote: f.ownAppNote } : {}),
     })),
     starter: pick(manifest.starter).map((f) => ({ path: f.path, content: content(f) })),
   };
