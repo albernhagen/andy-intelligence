@@ -241,6 +241,8 @@ export function BoardPage() {
       )}
       {board.data && (
         <Lanes
+          // Per-project view state (Ideas collapse choices, "Show all") starts fresh on a switch.
+          key={projectId}
           tickets={tickets}
           showCancelled={showArchived}
           projectId={projectId}

@@ -802,6 +802,41 @@ describe("Ideas grouped by milestone and epic, and the filter box", () => {
     expect(ideaRowsShown()).toContain("AI-4");
   });
 
+  it("GivenAGroupCollapsedInOneProject_WhenAnotherProjectsBoardOpens_ThenItsChoicesStayApart", async () => {
+    const harness = await seeded(async ({ tracker, milestones, service }) => {
+      await tracker.createProject({ name: "Ops", key: "OPS" });
+      await milestones.create({
+        id: "m4",
+        projectId: "ops",
+        name: "M4: Ops",
+        outcome: "Ops works",
+        order: 4,
+        status: "approved",
+        createdAt: AT,
+        updatedAt: AT,
+      });
+      const epic = await service.create("ops", { type: "epic", title: "Ops epic" }, "andy");
+      await tracker.updateTicket("ops", epic.id, { fields: { milestoneId: "m4" } }, "andy");
+      await service.create("ops", { title: "Ops idea", parentId: epic.id }, "andy");
+    });
+    // Load OPS once so its board is cached, then come back to AI and collapse M4 there.
+    await harness.router.navigate({ to: "/p/ops" });
+    await screen.findByText("OPS-2");
+    await harness.router.navigate({ to: "/p/ai" });
+    await screen.findByText("AI-5");
+    await waitFor(() => expect(header("M4: Epics")).toBeTruthy());
+    await harness.user.click(toggle("M4: Epics"));
+
+    await harness.router.navigate({ to: "/p/ops" });
+    await screen.findByText("OPS-2");
+
+    // Both projects' milestone groups are keyed "m4": OPS keeps its own (open) state.
+    expect(toggle("M4: Ops").getAttribute("aria-expanded")).toBe("true");
+    expect(ideaRowsShown()).toContain("OPS-2");
+    const stored = JSON.parse(window.localStorage.getItem("andy.board.ideaGroups") ?? "{}");
+    expect(stored).toEqual({ ai: { m4: true } });
+  });
+
   it("GivenAGroupWithMoreThanTenIdeas_WhenTheBoardShows_ThenTenShowAndShowAllRevealsTheRest", async () => {
     const harness = await seeded(async ({ service }) => {
       for (let i = 1; i <= 11; i++) await service.create("ai", { title: `Idea ${i}` }, "andy");
