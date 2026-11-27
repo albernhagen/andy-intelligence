@@ -39,6 +39,7 @@ export function sectionFromPath(pathname: string): Section | null {
   if (/^\/(all|p\/[^/]+)\/dashboards\/?$/.test(pathname)) return "dashboards";
   if (/^\/(all|p\/[^/]+)\/work\/?$/.test(pathname)) return "work"; // AI-198
   if (/^\/(all|p\/[^/]+)\/roadmap\/?$/.test(pathname)) return "roadmap"; // AI-202
+  if (/^\/p\/[^/]+\/m\/[^/]+\/?$/.test(pathname)) return "roadmap"; // A milestone (AI-405)
   if (/^\/(all\/board|p\/[^/]+)(\/|$)/.test(pathname)) return "board";
   return null;
 }

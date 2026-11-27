@@ -29,6 +29,8 @@ describe("scope", () => {
     ["/p/ai/setup", null],
     // AI-189: M6.10: Releases sits under What's new, so Board isn't marked either.
     ["/p/ai/releases", null],
+    // AI-405: a milestone's page sits under the Roadmap.
+    ["/p/ai/m/9b238996-e316-4f1e-a522-52e155bfe6ed", "roadmap"],
   ])("GivenPath%s_WhenParsed_ThenSectionIs%s", (path, section) => {
     expect(sectionFromPath(path)).toBe(section);
   });
