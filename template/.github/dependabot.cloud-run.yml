@@ -1,9 +1,10 @@
 # Dependabot version updates (project baseline, ADR-0031), deploy kind `cloud-run`: the `none`
 # file (template/.github/dependabot.yml) plus the Terraform root the baseline seeds in infra/
-# (AI-399); keep the two in step (platform/baseline/baseline.test.mjs checks). Action pins are
-# commit SHAs with a version comment; Dependabot updates both. Caps: grouped, at most 5 open PRs
-# per ecosystem; npm weekly, Actions and Terraform monthly. Security updates are separate and do
-# not wait for this schedule. cooldown waits a few days after a release.
+# (AI-399) and the starter Dockerfile it seeds at the root (AI-401); keep the two in step
+# (platform/baseline/baseline.test.mjs checks). Action pins are commit SHAs with a version
+# comment; Dependabot updates both. Caps: grouped, at most 5 open PRs per ecosystem; npm weekly,
+# Actions, Terraform and Docker monthly. Security updates are separate and do not wait for this
+# schedule. cooldown waits a few days after a release.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -52,3 +53,20 @@ updates:
     groups:
       terraform:
         patterns: ["*"]
+
+  - package-ecosystem: docker
+    # The starter Dockerfile the baseline seeds at the root (template/docker, AI-401). Pinned
+    # tag@sha256; Dependabot moves the digest of the current tag.
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      docker:
+        patterns: ["*"]
+    ignore:
+      # Base image majors (node 24 → 26) move with .nvmrc by hand.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

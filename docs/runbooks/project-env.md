@@ -87,6 +87,6 @@ Module `infra/modules/project-alerts` (AI-209: M6.19), called by `project-env` w
 | `Prod down: <service> /health` | `/health` (`health_path`) fails from 2 of 3 US regions for 5 minutes           |
 | `Prod errors: <service> 5xx`   | More than 5 5xx responses in 5 minutes (`prod_error_threshold_per_5m`, ≤ 1000) |
 
-- Check after apply: Monitoring → Uptime checks shows `<service> /health` passing. The app must answer `/health` with 2xx.
+- Check after apply: Monitoring → Uptime checks shows `<service> /health` passing. The app must answer `/health` with 2xx; the seeded starter (`Dockerfile`, `src/server.ts`, AI-401) does, on `$PORT` (8080), as the non-root `node` user. Try it before the first deploy: `docker build -t app . && docker run --rm -p 8080:8080 app`, then `curl localhost:8080/health`.
 - When one fires: open the service's logs; if a release caused it, roll back from the Releases page or MCP (`deploy-and-rollback.md`).
 - With `allow_unauthenticated = false` there is no uptime check (it can't send a token); the 5xx alert stays.
