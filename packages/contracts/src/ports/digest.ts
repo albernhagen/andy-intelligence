@@ -35,6 +35,8 @@ export const DigestExceptionKind = z.enum([
   "sync_waiting",
   // Andy cleared a quota reading that held dispatch at the reserve (AI-74).
   "quota_cleared",
+  // Merges into a repo's default branch are held while it is red (AI-382, ADR-0154).
+  "merge_held",
 ]);
 export type DigestExceptionKind = z.infer<typeof DigestExceptionKind>;
 

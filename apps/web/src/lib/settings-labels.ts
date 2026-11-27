@@ -1,4 +1,6 @@
 import type {
+  DeployKind,
+  PrSync,
   EnvironmentPolicy,
   ExecutorKind,
   HarnessKey,
@@ -31,6 +33,8 @@ export const SETTING_LABELS: Record<keyof ProjectSettings, string> = {
   executor: "Default executor",
   emailNotifications: "Email notifications",
   environments: "Environments",
+  deployKind: "Deploy kind",
+  prSync: "Keep open PRs up to date",
   spendCaps: "Spend caps",
 };
 
@@ -95,6 +99,29 @@ export const ENVIRONMENT_OPTIONS: Record<EnvironmentPolicy, SettingOption> = {
   },
 };
 
+/** How a project ships (ADR-0114); not a Deployment record's kind (deploy, promote, rollback). */
+export const DEPLOY_KIND_OPTIONS: Record<DeployKind, SettingOption> = {
+  none: { label: "No deploys", description: "This project does not deploy; only PRs and merges." },
+  "cloud-run": {
+    label: "Cloud Run",
+    description: "Releases ship to Cloud Run on GCP, to the environments below.",
+  },
+};
+
+/** Which open PRs are synced with main (AI-388, ADR-0157). */
+export const PR_SYNC_OPTIONS: Record<PrSync, SettingOption> = {
+  queue: {
+    label: "Next in the queue",
+    description:
+      "Only the PR next in the merge queue is synced with main, so a merge reruns one PR's checks.",
+  },
+  all: {
+    label: "Every open PR",
+    description:
+      "After each merge, main is merged into every open PR and all their checks run again.",
+  },
+};
+
 /** Each picker setting's options, so the change log shows the same names as the page. */
 const OPTION_LABELS: Partial<Record<keyof ProjectSettings, Record<string, SettingOption>>> = {
   mergeMode: MERGE_MODE_OPTIONS,
@@ -102,6 +129,8 @@ const OPTION_LABELS: Partial<Record<keyof ProjectSettings, Record<string, Settin
   defaultWorker: WORKER_OPTIONS,
   executor: EXECUTOR_OPTIONS,
   environments: ENVIRONMENT_OPTIONS,
+  deployKind: DEPLOY_KIND_OPTIONS,
+  prSync: PR_SYNC_OPTIONS,
 };
 
 /**
@@ -160,6 +189,7 @@ export const STEP_LABELS: Record<RunStep, RoutingLabel> = {
   "plan-project": { name: "Plan project", description: "Turns a brief into milestones and epics" },
   ideate: { name: "Ideate", description: "Suggests new tickets for a project" },
   summarize: { name: "Summarize", description: "Writes the digest's summary" },
+  "plan-epic": { name: "Plan epic", description: "Drafts an epic's tickets for Andy's approval" },
 };
 
 /** Providers: who serves the model and how it is paid for. */

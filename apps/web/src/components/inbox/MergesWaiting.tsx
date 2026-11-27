@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { MergeWaitReason, WaitingMerge } from "@andy/contracts";
 import { Badge } from "@/components/ui/badge";
+import { MergeButton, repoOfPullRequest } from "./MergeButton";
 
 /** Why a clean PR is Andy's to merge, in words (ADR-0124). */
 export const MERGE_REASON_TEXT: Partial<Record<MergeWaitReason, string>> = {
@@ -19,9 +20,11 @@ export const mergeWhy = (m: WaitingMerge) =>
 /**
  * A clean PR the merge mode leaves for Andy (AI-218), picked in the inbox (AI-371): its ticket,
  * the PR, why it is his and its release note (the PR author's text, shown as text). Merging or
- * closing the PR drops it from the inbox.
+ * closing the PR drops it from the inbox. Merge puts it in the merge queue with Andy's click as
+ * his approval (AI-388).
  */
 export function MergeDetail({ merge: m }: { merge: WaitingMerge }) {
+  const repo = repoOfPullRequest(m.prUrl);
   return (
     <article aria-label={`${m.ticketKey}: ${m.ticketTitle}`} className="space-y-3 text-sm">
       <header className="flex flex-wrap items-center gap-2 text-muted-foreground">
@@ -55,6 +58,9 @@ export function MergeDetail({ merge: m }: { merge: WaitingMerge }) {
         </dl>
       ) : (
         <p className="text-xs text-muted-foreground">No release note read.</p>
+      )}
+      {repo && (
+        <MergeButton projectId={m.projectId} repo={repo} number={m.prNumber} queue={m.queue} />
       )}
     </article>
   );

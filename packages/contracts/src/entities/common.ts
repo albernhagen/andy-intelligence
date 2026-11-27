@@ -16,14 +16,16 @@ export const Timestamp = z.iso.datetime({ offset: true });
 
 /**
  * Workflow stages (ARCHITECTURE §4.1). Needs-you is a flag, not a stage. Done and Cancelled are
- * terminal; only Andy cancels, and a cancelled ticket reopens to Backlog. No stage between Ready
- * for review and Done until M6: Dev → prod releases adds one (ADR-0069).
+ * terminal; only Andy cancels, and a cancelled ticket reopens to Backlog. Verifying (AI-181,
+ * ADR-0114) sits between Ready for review and Done for projects that deploy; it is dormant until
+ * the verify task ships (`VERIFYING_SWITCH` in @andy/domain). Added value: no SCHEMA_VERSION bump.
  */
 export const Stage = z.enum([
   "backlog",
   "ready",
   "in_progress",
   "ready_for_review",
+  "verifying",
   "done",
   "cancelled",
 ]);
@@ -52,6 +54,7 @@ export type HarnessKey = z.infer<typeof HarnessKey>;
  * Agent-task steps. `plan-project` and `ideate` (AI-134) are project-level: their runs have no
  * ticket. The executor runs only the read-only steps it lists, build and sync, and refuses others.
  * `summarize` (AI-323, ADR-0137) writes the digest summary; its runs have no ticket either.
+ * `plan-epic` (AI-383, ADR-0155) drafts an epic's child tickets; its runs are on the epic.
  */
 export const RunStep = z.enum([
   "refine",
@@ -63,6 +66,7 @@ export const RunStep = z.enum([
   "sync",
   "plan-project",
   "ideate",
+  "plan-epic",
   "summarize",
 ]);
 export type RunStep = z.infer<typeof RunStep>;

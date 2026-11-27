@@ -19,10 +19,94 @@ const clean = (over: Partial<MergeFacts> = {}): MergeFacts => ({
   upToDate: true,
   openFindings: 0,
   readyForReview: true,
+  mainChecks: { state: "passed", failing: [] },
   ...over,
 });
 
 describe("mergeVerdict", () => {
+  it("GivenOwnerApproval_WhenACleanPrTouchesAKeptPathInManualModeWithAnAcceptedLabel_ThenItMerges", () => {
+    const v = mergeVerdict(
+      clean({
+        files: { items: [file(".github/workflows/ci.yml")], complete: true },
+        labels: ["review-accepted"],
+      }),
+      "manual",
+      { ownerApproval: true },
+    );
+    expect(v).toMatchObject({
+      verdict: "merge",
+      reasons: [],
+      keptFiles: [".github/workflows/ci.yml"],
+    });
+  });
+
+  it.each<MergeMode | null>([null, "epic", "low-risk"])(
+    "GivenOwnerApproval_WhenTheModeIs %s_ThenTheModeAndHighRiskPathsAreWaived",
+    (mode) => {
+      const v = mergeVerdict(
+        clean({ files: { items: [file("infra/control-plane/main.tf")], complete: true } }),
+        mode,
+        { ownerApproval: true },
+      );
+      expect(v.verdict).toBe("merge");
+    },
+  );
+
+  it("GivenOwnerApproval_WhenThePrIsNotCleanBehindOrMainIsRed_ThenItStillWaitsWithThoseReasons", () => {
+    const v = mergeVerdict(
+      clean({
+        gateClean: false,
+        upToDate: false,
+        openFindings: 1,
+        readyForReview: false,
+        files: { items: [file(".github/CODEOWNERS")], complete: false },
+        labels: null,
+        mainChecks: { state: "failed", failing: ["ci"] },
+      }),
+      "manual",
+      { ownerApproval: true },
+    );
+    expect(v.verdict).toBe("wait");
+    expect(v.reasons).toEqual([
+      "gate_not_clean",
+      "not_ready_for_review",
+      "files_incomplete",
+      "labels_unknown",
+      "behind_default_branch",
+      "open_review_findings",
+      "main_red",
+    ]);
+  });
+
+  it("GivenNoOwnerApproval_WhenACleanPrTouchesAKeptPath_ThenItStillWaitsForAndy", () => {
+    const v = mergeVerdict(
+      clean({ files: { items: [file(".github/CODEOWNERS")], complete: true } }),
+      "all-clean",
+      { ownerApproval: false },
+    );
+    expect(v).toMatchObject({ verdict: "wait", reasons: ["kept_path"] });
+  });
+
+  it("GivenARequiredCheckFailedOnMainsHead_WhenACleanPrIsJudged_ThenItWaitsWithMainRedNamingTheCheck", () => {
+    const v = mergeVerdict(
+      clean({ mainChecks: { state: "failed", failing: ["ci"] } }),
+      "all-clean",
+    );
+    expect(v).toMatchObject({ verdict: "wait", reasons: ["main_red"], mainRedChecks: ["ci"] });
+  });
+
+  it("GivenMainsChecksStillRunning_WhenACleanPrIsJudged_ThenItMerges", () => {
+    const v = mergeVerdict(clean({ mainChecks: { state: "running", failing: [] } }), "all-clean");
+    expect(v).toMatchObject({ verdict: "merge", reasons: [], mainRedChecks: [] });
+  });
+
+  it("GivenMainsChecksUnread_WhenACleanPrIsJudged_ThenItWaitsNeverCountedGreen", () => {
+    expect(mergeVerdict(clean({ mainChecks: null }), "all-clean")).toMatchObject({
+      verdict: "wait",
+      reasons: ["main_checks_unknown"],
+    });
+  });
+
   it.each<[MergeMode, "merge" | "wait"]>([
     ["all-clean", "merge"],
     ["low-risk", "merge"],

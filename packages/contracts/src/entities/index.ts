@@ -19,17 +19,21 @@ import {
 import { projectDispatchFields } from "./dispatch-caps";
 import { projectNotifyFields } from "./notify-email";
 import { projectPlanFields } from "./project-plan";
+import { projectOnboardingFields } from "./onboarding";
 import { configChangeProposalFields } from "./config-proposals";
 import { RunCostFields } from "./cost";
 import { runInFlightFields } from "./in-flight";
 import { runSyncFields } from "./sync";
 import { runLocalFields } from "./runner";
 import { runBaseFields } from "./build";
+import { PACKAGE_LIMITS, PackageName, PlanPackages } from "./packages";
 import { runIdeaFields } from "./ideate";
+import { runVerifyFields } from "./verify";
 import { runRouteFields } from "./routing";
 import { ProjectSpendCaps } from "./spend-caps";
 import { MilestoneId } from "./milestone";
 import { MergeMode } from "./merge-mode";
+import { siblingDependencyIssues } from "./sibling-dependencies";
 import { RefineScores, TicketScores } from "./scores";
 import {
   questionFormatFields,
@@ -66,6 +70,22 @@ export type AutoMerge = z.infer<typeof AutoMerge>;
  */
 export const EnvironmentPolicy = z.enum(["prod-only", "dev-and-prod"]);
 export type EnvironmentPolicy = z.infer<typeof EnvironmentPolicy>;
+
+/**
+ * How a project ships (ADR-0114, AI-387: M6.21): `none` (the default; it does not deploy) or
+ * `cloud-run`. `environments` is read only when it is `cloud-run`. Not a Deployment record's
+ * `kind` (deploy, promote or rollback). Nothing reads it for behaviour yet; M6 tickets do.
+ */
+export const DeployKind = z.enum(["none", "cloud-run"]);
+export type DeployKind = z.infer<typeof DeployKind>;
+
+/**
+ * Which open PRs are kept up to date with the default branch (AI-388, ADR-0157): `queue` (the
+ * default; only the PR next in the merge queue is synced, by the queue) or `all` (the re-sync
+ * workflow merges the default branch into every open PR after each merge, ADR-0111).
+ */
+export const PrSync = z.enum(["queue", "all"]);
+export type PrSync = z.infer<typeof PrSync>;
 
 export const Project = z.object({
   id: Id,
@@ -109,17 +129,27 @@ export const Project = z.object({
   ...projectDispatchFields,
   ...projectNotifyFields,
   ...projectPlanFields,
+  ...projectOnboardingFields,
   /** Who does a ticket's work when it has no pick of its own (ADR-0082). */
   defaultWorker: Worker.default("agent"),
   /** Where a ticket's runs execute when it has no pick of its own (ADR-0089). */
   executor: ExecutorKind.default("actions"),
   /** Release environments (AI-160); projects stored before it read as `prod-only`, unrewritten. */
   environments: EnvironmentPolicy.default("prod-only"),
+  /** How it ships (AI-387); projects stored before it read as `none`, unrewritten. */
+  deployKind: DeployKind.default("none"),
+  /** Which open PRs are synced (AI-388); projects stored before it read as `queue`, unrewritten. */
+  prSync: PrSync.default("queue"),
   /**
    * The project's own spend caps (AI-249: M10.8); each can only lower the global cap, and a
    * missing field takes the global value. Projects stored before it read as `{}`, unrewritten.
    */
   spendCaps: ProjectSpendCaps.default({}),
+  /**
+   * When the project's logo last changed (AI-393), null while it shows its default mark. The file
+   * itself lives in its own store; this stamp tells readers when to fetch it again.
+   */
+  logoUpdatedAt: Timestamp.nullable().default(null),
 });
 export type Project = z.infer<typeof Project>;
 
@@ -388,36 +418,6 @@ export const RefineChild = z.strictObject({
 });
 export type RefineChild = z.infer<typeof RefineChild>;
 
-/** Why `children`' sibling links are invalid: self, unknown or repeated indexes, or a cycle. */
-export function siblingDependencyIssues(children: readonly RefineChild[]): string[] {
-  const issues: string[] = [];
-  children.forEach((child, i) => {
-    if (new Set(child.blockedBy).size !== child.blockedBy.length) {
-      issues.push(`child ${i} names a sibling twice`);
-    }
-    for (const b of child.blockedBy) {
-      if (b === i) issues.push(`child ${i} is blocked by itself`);
-      else if (b >= children.length)
-        issues.push(`child ${i} is blocked by child ${b}, not in the output`);
-    }
-  });
-  if (issues.length > 0) return issues;
-  // Repeatedly settle children whose blockers are all settled; any left over are in a cycle.
-  const settled = new Set<number>();
-  let progressed = true;
-  while (progressed) {
-    progressed = false;
-    children.forEach((child, i) => {
-      if (!settled.has(i) && child.blockedBy.every((b) => settled.has(b))) {
-        settled.add(i);
-        progressed = true;
-      }
-    });
-  }
-  if (settled.size < children.length) issues.push("children block each other in a cycle");
-  return issues;
-}
-
 /** `ready`: use the gaps. `send_back`: too vague, needs `reason`. `split`: too big, needs `children`. */
 export const RefineOutcome = z.enum(["ready", "send_back", "split"]);
 export type RefineOutcome = z.infer<typeof RefineOutcome>;
@@ -476,6 +476,8 @@ export const BUILD_LIMITS = {
   maxChecks: 10,
   command: 200,
   checkOutput: 2000,
+  /** Packages one ticket's plan may name for the trusted install step (AI-386, ADR-0156). */
+  maxPackages: PACKAGE_LIMITS.maxPackages,
 } as const;
 
 export const BuildPlan = z.strictObject({
@@ -484,6 +486,8 @@ export const BuildPlan = z.strictObject({
   tests: z.array(capped(BUILD_LIMITS.item)).max(BUILD_LIMITS.maxTests),
   riskiestStep: capped(BUILD_LIMITS.item),
   rejectedAlternatives: z.array(capped(BUILD_LIMITS.item)).max(BUILD_LIMITS.maxAlternatives),
+  /** AI-386: packages to install before the build; absent on plans written before it. */
+  packages: PlanPackages.default([]),
 });
 export type BuildPlan = z.infer<typeof BuildPlan>;
 
@@ -502,6 +506,11 @@ export const BuildOutput = z.strictObject({
   verification: z.array(BuildCheck).min(1).max(BUILD_LIMITS.maxChecks),
   /** Bug tickets: the test files that fail before the fix; committed first (ADR-0063). */
   failingTestFiles: z.array(capped(BUILD_LIMITS.path)).max(BUILD_LIMITS.maxTests),
+  /**
+   * AI-386: packages the build needed that its plan didn't name; the build stops instead of
+   * working around them, and the next start writes a new plan that names them.
+   */
+  neededPackages: z.array(PackageName).max(PACKAGE_LIMITS.maxPackages).default([]),
 });
 export type BuildOutput = z.infer<typeof BuildOutput>;
 
@@ -574,6 +583,10 @@ export const MergeWaitReason = z.enum([
   "review_findings_unknown",
   "open_review_findings",
   "not_ready_for_review",
+  // A required check failed on the default branch's head (AI-382, ADR-0154): main is red.
+  "main_red",
+  // The default branch's checks couldn't be read: never counted as green.
+  "main_checks_unknown",
 ]);
 export type MergeWaitReason = z.infer<typeof MergeWaitReason>;
 export type GateReason = z.infer<typeof GateReason>;
@@ -658,6 +671,11 @@ export const Run = z.object({
   branch: z.string().max(200).nullable().default(null),
   /** Tooling or dependency files the build's change touches, flagged on its PR (ADR-0063). */
   toolingFiles: z.array(z.string().max(300)).max(50).default([]),
+  /**
+   * AI-386: packages a build needed that its approved plan didn't name; makes that plan stale,
+   * and the next plan run's prompt lists them.
+   */
+  neededPackages: z.array(PackageName).max(PACKAGE_LIMITS.maxPackages).default([]),
   /** When the run's one repo token was issued to its publish job; null until then. */
   pushGrantedAt: Timestamp.nullable().default(null),
   // Added in M1.8a: Plan approval (ADR-0050).
@@ -694,6 +712,7 @@ export const Run = z.object({
   ...runBaseFields,
   ...runIdeaFields,
   ...runRouteFields,
+  ...runVerifyFields,
 });
 export type Run = z.infer<typeof Run>;
 
@@ -915,6 +934,12 @@ export const PullRequest = z.object({
   headSha: z.string().min(1),
   baseRef: z.string().min(1),
   url: z.url(),
+  /** The commit a merge made on the base branch (AI-188); absent or null when not merged or unknown. */
+  mergeSha: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .nullable()
+    .optional(),
   /** Label names (AI-215, capped); absent when not read, which the merge verdict treats as unknown. */
   labels: z.array(z.string().max(100)).max(100).nullable().optional(),
 });
@@ -1071,6 +1096,23 @@ export const PullRequestCommit = z.object({
   author: z.string().nullable(),
 });
 export type PullRequestCommit = z.infer<typeof PullRequestCommit>;
+
+/** How `head` relates to `base`: what a compare of `base...head` reports (AI-169: M6.8). */
+export const CommitRangeStatus = z.enum(["ahead", "identical", "behind", "diverged"]);
+export type CommitRangeStatus = z.infer<typeof CommitRangeStatus>;
+
+/** A commit in a range; `title` is its message's first line, cut to 256 characters. */
+export const RangeCommit = z.object({
+  sha: z.string().regex(/^[0-9a-f]{40}$/),
+  title: z.string().max(256),
+});
+export type RangeCommit = z.infer<typeof RangeCommit>;
+
+/** The commits `head` has that `base` lacks, oldest first, capped (ADR-0028). */
+export interface CommitRange {
+  status: CommitRangeStatus;
+  commits: Listing<RangeCommit>;
+}
 
 /** A capped listing. `complete` false means more exist, so a caller must not assume none match. */
 export interface Listing<T> {

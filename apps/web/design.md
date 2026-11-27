@@ -16,7 +16,7 @@ Stack: React, Tailwind v4, shadcn/ui components in `src/components/ui/`, icons f
 
 ## Layout
 
-- One shell on every screen (`src/components/AppShell.tsx`, AI-370). Desktop: a sunken left sidebar (picker, destinations, projects, quota, palette, Settings menu); phone: header and bottom bar. Pages never draw their own navigation.
+- One shell on every screen (`src/components/AppShell.tsx`, AI-370). Desktop: a sunken left sidebar (brand row, picker, destinations, projects, quota, palette, Settings menu); phone: header (mark, picker) and bottom bar. Pages never draw their own navigation.
 - At most six destinations (Inbox, Board, Roadmap, Work, Dashboards, What's new); settings, theme and Sign out sit in the Settings menu. A new screen goes under a destination or replaces one (AI-335); `lib/shell-routes.ts` lists it (a test checks every route).
 - The picker is the global scope: project screens under `/p/<project>/…`, cross-project under `/all/…`. A new screen gets both, or says why not (the board needs one project).
 - Every page uses one of three [page templates](design-details.md#page-templates) beside the sidebar: list with detail, settings with section nav, reading page (AI-371 to AI-378). Padding `px-4 sm:px-6 py-4`.
@@ -43,6 +43,10 @@ Below `sm` (640px; `useIsPhone`):
 Inter (`font-sans`) and Geist Mono (`font-mono`, keys and aligned numbers), both served by the app; never load a font from another host (the build checks). Six sizes, 13 px body: [type scale](design-details.md#type).
 
 Counts, durations and ticket keys use `tabular-nums`. No sizes above `text-lg` (19 px), no bold beyond `font-semibold`.
+
+## Logo
+
+The mark (AI-392): an "A" drawn as a summit whose crossbar is a wave. `LogoMark` and `Brand` in `src/components/Logo.tsx`; geometry once in `src/lib/logo.ts`. Use and clear space: [logo](design-details.md#logo).
 
 ## Surfaces and colour
 

@@ -10,6 +10,7 @@ import {
   type BriefService,
   type IdeateService,
   type ProjectPlanService,
+  type EpicBreakdownService,
   type ConfigProposals,
   type ConfigRevert,
   type RoutingSettings,
@@ -25,8 +26,10 @@ import {
   type ProjectTickets,
   type DashboardReader,
   type DoraReader,
+  type ReleaseReader,
+  type ReleaseService,
 } from "@andy/domain";
-import type { RunnerService } from "@andy/domain";
+import type { MergeHoldReader, RunnerService } from "@andy/domain";
 import type { SetupChecklistReader } from "../setup";
 import type { SpendSettingsService } from "../spend";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -40,6 +43,8 @@ import {
   type ProjectAccess,
 } from "../project-access";
 import * as toolGroups from "./tool-groups";
+import type { OnboardingReader } from "../onboarding";
+import type { ProjectLogoService } from "../project-logos";
 
 /**
  * MCP tools: thin adapters over TicketService, RunService and the other domain services, the
@@ -65,6 +70,8 @@ export interface ToolDeps {
   ideate?: IdeateService;
   /** Project plans (AI-108); the app always passes it, unit tests may not. */
   plans?: ProjectPlanService;
+  /** Epic breakdowns (AI-383); absent or null: no breakdown tools, none in `list_needs_me`. */
+  breakdowns?: EpicBreakdownService | null;
   /** Config proposals from review findings (ADR-0097); absent or null: no config tools. */
   configProposals?: ConfigProposals | null;
   /** The settings change log and revert (M4.12); absent or null: no change-log tools. */
@@ -85,6 +92,8 @@ export interface ToolDeps {
   board?: BoardReader;
   /** A project's setup checklist (AI-287); the app always passes it, unit tests may not. */
   setup?: SetupChecklistReader;
+  /** A project's onboarding steps (AI-381), in `project_setup`; unit tests may not pass it. */
+  onboarding?: OnboardingReader;
   /** Spend caps settings (AI-249); the app always passes it, unit tests may not. */
   spend?: SpendSettingsService;
   /** The global spend caps (AI-276); the app always passes it, unit tests may not. */
@@ -96,6 +105,12 @@ export interface ToolDeps {
   now?: () => Date;
   /** What's new (AI-159); absent or null: no `whats_new` tool. */
   whatsNew?: WhatsNewReader | null;
+  /** Releases (AI-183: M6.9); absent or null: no `list_releases` tool. */
+  releases?: ReleaseReader | null;
+  /** Project logos (AI-393); absent or null: no logo tools. */
+  logos?: ProjectLogoService | null;
+  /** Promote and rollback (AI-199: M6.12); absent or null: no `promote`, `rollback`, `list_release_requests`. */
+  releaseRequests?: ReleaseService | null;
   /** PRs waiting for Andy's merge (AI-218), in `list_needs_me`; absent or null: none listed. */
   waitingMerges?: WaitingMergesReader | null;
   /** AI-323: the digest's model-written summary; null where it isn't wired. */
@@ -106,6 +121,8 @@ export interface ToolDeps {
   milestones?: MilestoneReader | null;
   /** A project's tickets through the ticket snapshot (AI-318); absent: a full read each call. */
   tickets?: ProjectTickets;
+  /** Merge holds while a default branch is red (AI-382), in `status`; absent or null: none. */
+  mergeHolds?: MergeHoldReader | null;
   /** MCP `merge_pr` (AI-220); absent or null: no `merge_pr` tool. */
   merges?: PullRequestMerger | null;
   /** Signed-in email, shown by `status` so it doubles as the connection check. */

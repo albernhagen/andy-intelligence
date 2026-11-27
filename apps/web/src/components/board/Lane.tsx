@@ -205,8 +205,9 @@ export function Lane({
 }) {
   const { setNodeRef } = useDroppable({ id: stage });
   const label = STAGE_LABELS[stage];
-  // Sunken lanes under raised cards (design-details.md); a lane under a dragged card lights up.
-  const surface = `border border-border ${highlight ? "bg-selected" : "bg-muted"}`;
+  // Sunken lanes under raised cards (design-details.md); the lane under a dragged card takes the
+  // selected state, edge and fill (AI-396).
+  const surface = `border ${highlight ? "border-selected-edge bg-selected" : "border-border bg-muted"}`;
 
   if (collapsed) {
     return (
@@ -214,6 +215,7 @@ export function Lane({
         ref={setNodeRef}
         aria-label={label}
         data-stage={stage}
+        data-drop-over={highlight || undefined}
         className={`w-10 shrink-0 rounded-lg ${surface}`}
       >
         <button
@@ -236,6 +238,7 @@ export function Lane({
       ref={setNodeRef}
       aria-label={label}
       data-stage={stage}
+      data-drop-over={highlight || undefined}
       className={`flex shrink-0 flex-col gap-1.5 rounded-lg p-2 ${fill ? "w-full" : "w-64 xl:w-auto xl:min-w-44 xl:flex-1 xl:shrink"} ${surface}`}
     >
       <h3

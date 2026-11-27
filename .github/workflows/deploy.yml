@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-control-plane
+  group: deploy-prod # shared with release.yml for prod (AI-190: M6.11)
   cancel-in-progress: false
 
 permissions: {}
@@ -66,6 +66,9 @@ jobs:
           control-plane-url: ${{ env.CONTROL_PLANE_URL }}
           phase: start
           image-digest: ${{ steps.build.outputs.digest }}
+          environment: prod
+          kind: deploy
+          url: ${{ env.CONTROL_PLANE_URL }}
 
       # No-traffic revision, smoke test, then traffic; rollback in the job summary (ADR-0076).
       - id: deploy
@@ -73,7 +76,18 @@ jobs:
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: ${{ vars.GCP_IMAGE_REPO }}/control-plane:${{ github.sha }}
+          # By digest: exactly the image just built, and what the keep tag names.
+          image: ${{ vars.GCP_IMAGE_REPO }}/control-plane@${{ steps.build.outputs.digest }}
+          # The API refuses every host but PUBLIC_URL's, except /health (ADR-0044): elsewhere
+          # /api/me is 404; on the public host it reaches real auth, 401.
+          smoke-checks: |
+            /health 200
+            /api/me 401
+          smoke-checks-other-hosts: |
+            /health 200
+            /api/me 404
+          # A release- tag so registry cleanup keeps what prod runs (AI-389: M6.23).
+          keep-tag-prefix: release-
 
       - if: always() && steps.report-start.outputs.deployment-id != ''
         uses: ./platform/actions/report-deployment

@@ -1,0 +1,102 @@
+name: Baseline — Cloud Run caller config
+description: >-
+  First step of a managed repo's deploy.yml and release.yml (`cloud-run` deploy kind; AI-206:
+  M6.17, ADR-0114). Before any cloud call or build: picks the environment (deploy: the first one,
+  dev when GCP_DEV_WIF_PROVIDER is set, else prod; release: the `environment` input), checks every
+  repo variable it needs and fails naming the missing ones, checks the release inputs and the smoke
+  checks, and outputs the values the later steps use. No credentials; reads only what it is given.
+
+inputs:
+  workflow:
+    description: "`deploy`, `release` or `preview` (PR previews: the first environment's preview service)."
+    required: true
+  vars:
+    description: "The repo variables: `${{ toJSON(vars) }}`. Not secret; only names reach the log."
+    required: true
+  action:
+    description: "`release`: `promote` or `rollback`."
+    required: false
+    default: ""
+  environment:
+    description: "`release`: `dev` or `prod`."
+    required: false
+    default: ""
+  digest:
+    description: "`release` promote: the image digest (`sha256:…`)."
+    required: false
+    default: ""
+  revision:
+    description: "`release` rollback: the revision to return to."
+    required: false
+    default: ""
+  request:
+    description: "`release`: the control plane's request id (empty when run by hand)."
+    required: false
+    default: ""
+
+outputs:
+  environment:
+    description: "`dev` or `prod`: where this run deploys."
+    value: ${{ steps.config.outputs.environment }}
+  project-id:
+    description: The environment's GCP project (GCP_PROJECT_ID or GCP_DEV_PROJECT_ID).
+    value: ${{ steps.config.outputs.project_id }}
+  region:
+    description: Cloud Run region (GCP_REGION or GCP_DEV_REGION).
+    value: ${{ steps.config.outputs.region }}
+  service:
+    description: Cloud Run service (GCP_SERVICE or GCP_DEV_SERVICE).
+    value: ${{ steps.config.outputs.service }}
+  service-url:
+    description: The service's URL, where verification runs (GCP_SERVICE_URL or GCP_DEV_SERVICE_URL).
+    value: ${{ steps.config.outputs.service_url }}
+  wif-provider:
+    description: Workload Identity provider (GCP_WIF_PROVIDER or GCP_DEV_WIF_PROVIDER).
+    value: ${{ steps.config.outputs.wif_provider }}
+  deployer-sa:
+    description: Main deployer identity (GCP_DEPLOYER_SA or GCP_DEV_DEPLOYER_SA).
+    value: ${{ steps.config.outputs.deployer_sa }}
+  image:
+    description: "The environment's image, without tag or digest: `<IMAGE_REPO>/<SERVICE>`."
+    value: ${{ steps.config.outputs.image }}
+  preview-service:
+    description: "`preview`: the preview service (GCP_PREVIEW_SERVICE or GCP_DEV_PREVIEW_SERVICE)."
+    value: ${{ steps.config.outputs.preview_service }}
+  preview-deployer-sa:
+    description: "`preview`: the preview deployer (GCP_PREVIEW_DEPLOYER_SA or GCP_DEV_PREVIEW_DEPLOYER_SA)."
+    value: ${{ steps.config.outputs.preview_deployer_sa }}
+  preview-image:
+    description: "`preview`: `<PREVIEW_IMAGE_REPO>/<PREVIEW_SERVICE>`, without tag or digest."
+    value: ${{ steps.config.outputs.preview_image }}
+  source-image:
+    description: "`release` promote: the first environment's image, which promote ships by digest."
+    value: ${{ steps.config.outputs.source_image }}
+  action:
+    description: "`release`: the checked `action`."
+    value: ${{ steps.config.outputs.action }}
+  digest:
+    description: "`release`: the checked `digest`."
+    value: ${{ steps.config.outputs.digest }}
+  revision:
+    description: "`release`: the checked `revision`."
+    value: ${{ steps.config.outputs.revision }}
+  request:
+    description: "`release`: the checked `request`."
+    value: ${{ steps.config.outputs.request }}
+
+runs:
+  using: composite
+  steps:
+    # Inputs reach the script through env, never interpolated into code: dispatch inputs are untrusted.
+    - name: Check the repo variables and inputs
+      id: config
+      shell: bash
+      env:
+        WORKFLOW: ${{ inputs.workflow }}
+        VARS: ${{ inputs.vars }}
+        ACTION: ${{ inputs.action }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        DIGEST: ${{ inputs.digest }}
+        REVISION: ${{ inputs.revision }}
+        REQUEST: ${{ inputs.request }}
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/cloud-run-caller.mjs"

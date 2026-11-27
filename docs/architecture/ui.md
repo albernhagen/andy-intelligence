@@ -38,7 +38,7 @@ v1.x screens:
 **Built in AI-28: Board v2 (M3, ADR-0059 row "Board"):**
 - One read, `GET /api/projects/:id/board`: tickets with questions, run in flight, latest PR (≤ 50 history reads, ADR-0028).
 - Cards: type icon, key, title, markers (size, worker (ADR-0082), questions, run step and minutes, PR, "Blocked by"). Ready is numbered; the first unblocked agent card says "Next".
-- Drag (mouse, touch, keyboard) within a lane sets `rank` (`rankBetween`); across lanes moves (forced if not allowed, not onto Cancelled), then ranks. Optimistic; a refusal rolls back with the reason. A drop never opens the ticket (AI-25).
+- Drag (mouse, touch, keyboard; card under pointer, AI-396) within a lane sets `rank`; across lanes moves (forced if not allowed, not onto Cancelled), then ranks. Optimistic; refusals roll back with the reason. A drop never opens the ticket (AI-25).
 - Quick add atop Backlog. Up next above Ideas (ADR-0075). Done: a counted strip; Cancelled, archived behind a toggle.
 - Group by epic (AI-86, remembered): per lane, a header per epic (key, title, done of total), No epic last; rank stays per lane. Epic filter.
 - Work view chips (AI-187): All plus five views, counted; one at a time, `?view=`, with the epic filter.

@@ -3,8 +3,11 @@ import {
   DEPLOYMENT_LIMITS,
   type Deployment,
   type DeploymentEnvironment,
+  type DeploymentVerification,
+  type DeploymentVerificationStatus,
   type NewDeployment,
 } from "../entities/deployment";
+import type { StoredRelease } from "../entities/release-entry";
 import type { DeploymentStore } from "../ports/deployments";
 
 /** `make` must return a store with nothing in it. */
@@ -32,6 +35,16 @@ export function deploymentStoreContract(
       actor: "system",
       previousDeploymentId: null,
       ...overrides,
+    });
+    const verification = (
+      status: DeploymentVerificationStatus,
+      runId: string | null = null,
+    ): DeploymentVerification => ({
+      status,
+      runId,
+      ticketKeys: ["AI-1"],
+      reason: status === "waiting" ? "the global cap is reached" : null,
+      updatedAt: at(4),
     });
     const startedAts = (list: Deployment[]) => list.map((d) => d.startedAt);
 
@@ -126,6 +139,75 @@ export function deploymentStoreContract(
       expect(page).toHaveLength(cap);
       expect(page[0]!.startedAt).toBe(at(cap));
       expect(await store.list("ai", "prod")).toHaveLength(DEPLOYMENT_LIMITS.defaultPage);
+    });
+
+    const stored = (
+      computedAt: string,
+      status: StoredRelease["status"] = "first",
+    ): StoredRelease => ({
+      status,
+      previous: null,
+      entries: [],
+      truncated: false,
+      computedAt,
+    });
+
+    test("GivenANewDeployment_WhenItsReleaseIsCached_ThenItIsStoredAndKeptByFinish", async () => {
+      const store = await make();
+      const recorded = await store.record(deployment());
+      expect(recorded.release).toBeNull();
+      const cached = await store.cacheRelease(recorded.id, stored(at(1)));
+      expect(cached.release).toEqual(stored(at(1)));
+      expect((await store.get(recorded.id))?.release).toEqual(stored(at(1)));
+      const done = await store.finish(recorded.id, { status: "succeeded", finishedAt: at(2) });
+      expect(done.release).toEqual(stored(at(1)));
+    });
+
+    test("GivenACachedRelease_WhenCachedAgain_ThenTheFirstIsKept", async () => {
+      const store = await make();
+      const recorded = await store.record(deployment());
+      await store.cacheRelease(recorded.id, stored(at(1)));
+      const again = await store.cacheRelease(recorded.id, stored(at(2), "same_commit"));
+      expect(again.release).toEqual(stored(at(1)));
+      expect((await store.get(recorded.id))?.release).toEqual(stored(at(1)));
+    });
+
+    test("GivenAnUnknownDeployment_WhenItsReleaseIsCached_ThenNotFound", async () => {
+      const store = await make();
+      await expect(store.cacheRelease("missing", stored(at(1)))).rejects.toMatchObject({
+        name: "WorkTrackerError",
+        code: "not_found",
+      });
+    });
+
+    test("GivenADeployment_WhenItsVerificationIsSetFromUnset_ThenItIsStoredAndKeptByFinish", async () => {
+      const store = await make();
+      const recorded = await store.record(deployment());
+      expect(recorded.verification).toBeNull();
+      const v = verification("waiting");
+      const set = await store.setVerification(recorded.id, v, [null]);
+      expect(set.verification).toEqual(v);
+      expect((await store.get(recorded.id))?.verification).toEqual(v);
+      const started = verification("started", "run-1");
+      await store.setVerification(recorded.id, started, ["waiting"]);
+      expect((await store.get(recorded.id))?.verification).toEqual(started);
+    });
+
+    test("GivenAVerificationInAnotherStatus_WhenSetFromTheWrongOne_ThenConflictAndNothingWritten", async () => {
+      const store = await make();
+      const recorded = await store.record(deployment());
+      await store.setVerification(recorded.id, verification("started", "run-1"), [null]);
+      await expect(
+        store.setVerification(recorded.id, verification("started", "run-2"), ["waiting"]),
+      ).rejects.toMatchObject({ name: "WorkTrackerError", code: "conflict" });
+      expect((await store.get(recorded.id))?.verification?.runId).toBe("run-1");
+    });
+
+    test("GivenAnUnknownDeployment_WhenItsVerificationIsSet_ThenNotFound", async () => {
+      const store = await make();
+      await expect(
+        store.setVerification("missing", verification("waiting"), [null]),
+      ).rejects.toMatchObject({ name: "WorkTrackerError", code: "not_found" });
     });
 
     test("GivenSucceededFailedAndStartedDeployments_WhenTheLatestGoodIsAsked_ThenTheNewestSucceeded", async () => {

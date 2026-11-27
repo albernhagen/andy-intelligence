@@ -34,6 +34,10 @@ export const createdApp: CreatedApp = {
 
 const verifier: TokenVerifier = {
   async verify(token) {
+    // A signed-in user who is not on the allow-list: every owner-only route answers 403.
+    if (token === "stranger") {
+      return { uid: "stranger", email: "stranger@example.com", emailVerified: true };
+    }
     if (token !== "andy") throw new Error("bad token");
     return { uid: "andy", email: "andy@example.com", emailVerified: true };
   },
@@ -51,7 +55,12 @@ export function githubApp(
     | "reviewFindings"
     | "configChanges"
     | "releaseNotes"
-  > = {},
+    | "milestones"
+    | "epicBreakdowns"
+    | "deployments"
+    | "releaseRequests"
+  > &
+    Partial<Pick<AppDeps, "projectAccess">> = {},
 ) {
   const connections = new InMemoryCodeHostConnectionStore();
   const host = new InMemoryCodeHost([repo()]);

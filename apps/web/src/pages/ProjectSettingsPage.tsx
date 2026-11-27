@@ -3,6 +3,8 @@ import { Link, useParams, useRouterState } from "@tanstack/react-router";
 import { MergeMode, type Project } from "@andy/contracts";
 import { suggestedMergeMode } from "@andy/domain";
 import { LayerOrderHint } from "@/components/RouteLayers";
+import { LogoSettings } from "@/components/LogoSettings";
+import { ProjectMark } from "@/components/ProjectMark";
 import { ClearQuotaIdle } from "@/components/ClearQuotaIdle";
 import { ConfigHistory } from "@/components/ConfigHistory";
 import { DispatchControls } from "@/components/DispatchControls";
@@ -28,6 +30,8 @@ import { showsError } from "@/lib/live";
 import { dateOnly } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
+  DEPLOY_KIND_OPTIONS,
+  PR_SYNC_OPTIONS,
   ENVIRONMENT_OPTIONS,
   MERGE_MODE_OPTIONS,
   PLAN_APPROVAL_OPTIONS,
@@ -45,6 +49,7 @@ import {
 
 const SECTIONS = [
   { id: "setup", title: "Setup", what: "Where this project's plan and setup stand." },
+  { id: "logo", title: "Logo", what: "The mark shown wherever this project is named." },
   { id: "automation", title: "Automation", what: "What runs on its own, and what waits for you." },
   { id: "limits", title: "Limits", what: "How much this project may do at once, ask and spend." },
   { id: "defaults", title: "Defaults", what: "What a ticket gets when it has no pick of its own." },
@@ -103,8 +108,11 @@ function SectionNav({ project, current }: { project: Project; current: SectionId
   const left = setup && !setup.complete ? setup.items.filter((i) => i.status !== "done").length : 0;
   return (
     <div className="min-w-0 space-y-2 md:border-r md:border-border md:py-4 md:pr-2">
-      <h2 className="px-2 text-xs text-muted-foreground">
-        {project.key}: {project.name} settings
+      <h2 className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
+        <ProjectMark project={project} />
+        <span>
+          {project.key}: {project.name} settings
+        </span>
       </h2>
       <nav aria-label="Settings sections" className="relative overflow-x-auto">
         <ul className="flex gap-0.5 md:flex-col">
@@ -149,10 +157,13 @@ function Section({ id, project }: { id: SectionId; project: Project }) {
           <SetupChecklist projectId={project.id} />
         </section>
       );
+    case "logo":
+      return <LogoSettings project={project} />;
     case "automation":
       return (
         <Rows label="Automation">
           <MergeModePicker project={project} />
+          <PrSyncPicker project={project} />
           <PlanApprovalPicker project={project} />
           <AutoRefineSwitch project={project} />
           <BuildsSwitch project={project} />
@@ -179,6 +190,7 @@ function Section({ id, project }: { id: SectionId; project: Project }) {
           </div>
           <DefaultWorkerSelect project={project} />
           <DefaultExecutorSelect project={project} />
+          <DeployKindPicker project={project} />
           <EnvironmentsPicker project={project} />
         </Rows>
       );
@@ -306,13 +318,55 @@ function PlanApprovalPicker({ project }: { project: Project }) {
   );
 }
 
-/** Where the project's releases go (ADR-0050, AI-160: M6.2); later M6 tickets read it. */
+/**
+ * Which open PRs are kept up to date with main (AI-388, ADR-0157): only the merge queue's next
+ * one, or every open PR after each merge (the re-sync workflow, ADR-0111).
+ */
+function PrSyncPicker({ project }: { project: Project }) {
+  const update = useUpdateProject(project.id);
+  return (
+    <PickerRow
+      label={SETTING_LABELS.prSync}
+      description="Which open PRs get main merged in when it moves. The repo variable RESYNC_PRS still pauses it."
+      value={project.prSync}
+      options={PR_SYNC_OPTIONS}
+      disabled={update.isPending}
+      onValueChange={(prSync) => update.mutate({ prSync })}
+      state={update}
+    />
+  );
+}
+
+/** How the project ships (ADR-0114, AI-387: M6.21); later M6 tickets read it. */
+function DeployKindPicker({ project }: { project: Project }) {
+  const update = useUpdateProject(project.id);
+  return (
+    <PickerRow
+      label={SETTING_LABELS.deployKind}
+      description="How this project ships. Nothing deploys from it yet."
+      value={project.deployKind}
+      options={DEPLOY_KIND_OPTIONS}
+      disabled={update.isPending}
+      onValueChange={(deployKind) => update.mutate({ deployKind })}
+      state={update}
+    />
+  );
+}
+
+/**
+ * Where the project's releases go (ADR-0050, AI-160: M6.2); read only when the deploy kind is
+ * Cloud Run (ADR-0114), so with no deploys it says it is not in use. Still editable either way.
+ */
 function EnvironmentsPicker({ project }: { project: Project }) {
   const update = useUpdateProject(project.id);
   return (
     <PickerRow
       label={SETTING_LABELS.environments}
-      description="Where releases go. Nothing deploys from it yet."
+      description={
+        project.deployKind === "none"
+          ? "Not in use: this project does not deploy. Set Deploy kind to Cloud Run to use it."
+          : "Where releases go. Nothing deploys from it yet."
+      }
       value={project.environments}
       options={ENVIRONMENT_OPTIONS}
       disabled={update.isPending}

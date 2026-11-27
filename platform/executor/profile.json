@@ -74,6 +74,15 @@
       "allow": ["Read", "Glob", "Grep"],
       "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
     },
+    "plan-epic": {
+      "allow": ["Read", "Glob", "Grep"],
+      "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
+    },
+    "verify": {
+      "$comment": "AI-188, ADR-0159: the verify task reads the repo at the deployed commit and fetches pages of the deployed app, nothing else. ${VERIFY_HOST} is the deployment URL's host, checked by the workflow's context job; scripts/executor-profile.mjs refuses this step without one. No Bash: no writes, no other network, and no request but WebFetch's GET, so prod stays read-only.",
+      "allow": ["Read", "Glob", "Grep", "WebFetch(domain:${VERIFY_HOST})"],
+      "deny": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebSearch", "Task"]
+    },
     "summarize": {
       "$comment": "AI-323, ADR-0137: the digest summary. Its whole input is in the prompt, so no tool at all, not even Read.",
       "allow": [],

@@ -108,3 +108,41 @@ describe("pullRequestPath", () => {
     expect(pullRequestPath("ready_for_review", "ready_for_review")).toEqual([]);
   });
 });
+
+describe("Verifying stage (AI-181, ADR-0114)", () => {
+  it("GivenVerifying_WhenMovingOut_ThenOnlyDoneOrInProgress", () => {
+    expect(TRANSITIONS.verifying).toEqual(["done", "in_progress"]);
+    expect(canTransition("verifying", "ready_for_review")).toBe(false);
+    expect(canTransition("verifying", "ready")).toBe(false);
+  });
+
+  it("GivenReadyForReview_WhenMovingToVerifying_ThenAllowedAndForward", () => {
+    expect(canTransition("ready_for_review", "verifying")).toBe(true);
+    expect(isForwardMove("ready_for_review", "verifying")).toBe(true);
+    expect(isForwardMove("verifying", "done")).toBe(true);
+  });
+
+  it("GivenReviewToDone_WhenVerifyingExists_ThenStillOneForwardStep", () => {
+    expect(isForwardMove("ready_for_review", "done")).toBe(true);
+    expect(isForwardMove("in_progress", "verifying")).toBe(false);
+    expect(isForwardMove("verifying", "in_progress")).toBe(false);
+  });
+
+  it("GivenAnyStageBeforeReview_WhenAPullRequestMergesIntoVerifying_ThenEveryStepToVerifying", () => {
+    expect(pullRequestPath("backlog", "verifying")).toEqual([
+      "ready",
+      "in_progress",
+      "ready_for_review",
+      "verifying",
+    ]);
+    expect(pullRequestPath("ready_for_review", "verifying")).toEqual(["verifying"]);
+  });
+
+  it("GivenVerifying_WhenAPullRequestMerges_ThenDoneOrNoMove", () => {
+    expect(pullRequestPath("verifying", "done")).toEqual(["done"]);
+    expect(pullRequestPath("verifying", "verifying")).toEqual([]);
+    expect(pullRequestPath("verifying", "ready_for_review")).toEqual([]);
+    expect(pullRequestPath("done", "verifying")).toEqual([]);
+    expect(pullRequestPath("cancelled", "verifying")).toEqual([]);
+  });
+});

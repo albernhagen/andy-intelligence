@@ -1,6 +1,6 @@
 ---
 title: Merge queue per repo, leased in the store; both merge entry points go through it
-status: accepted (Andy, 2026-11-23)
+status: accepted (Andy, 2026-11-23); amended by 0157 (proposed: the queue syncs session PRs itself)
 date: 2026-11-23
 amends: 0124 (merges serialised per repo), 0144 (the queue is the guard it names)
 ---

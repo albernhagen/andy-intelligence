@@ -6,12 +6,12 @@ import type {
   OAuthClientInformationMixed,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
 import { parseAllowList, type TokenVerifier } from "../auth";
 import { ClientMetadataResolver } from "./client-metadata";
 import { LOOKUPS_PER_MINUTE } from "./index";
-import { REFRESH_GRACE_S } from "./oauth";
+import { REFRESH_TTL_S, ROTATE_WITHIN_S } from "./oauth";
 import { hashToken, newToken } from "./tokens";
 import { ownerOnlyAccess } from "../project-access";
 
@@ -211,6 +211,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "set_daily_question_cap",
       "set_default_executor",
       "set_default_worker",
+      "set_deploy_kind",
       "set_email_notifications",
       "set_environments",
       "set_executor",
@@ -218,6 +219,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
       "set_merge_mode",
       "set_paused",
       "set_plan_approval",
+      "set_pr_sync",
       "set_runs_at_once",
       "set_spend_caps",
       "set_ticket_parent",
@@ -255,7 +257,7 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
     expect(res.status).toBe(401);
   });
 
-  it("GivenAnExpiredAccessToken_WhenTheClientRefreshes_ThenTheRefreshTokenRotates", async () => {
+  it("GivenAnExpiredAccessToken_WhenTheClientRefreshes_ThenANewAccessTokenAndTheSameRefreshToken", async () => {
     const ctx = setup();
     const provider = await authorize(ctx);
     const first = provider.tokens()!;
@@ -265,22 +267,8 @@ describe("MCP OAuth flow (MCP SDK client)", () => {
     await client.callTool({ name: "status", arguments: {} });
     const second = provider.tokens()!;
     expect(second.access_token).not.toBe(first.access_token);
-    expect(second.refresh_token).not.toBe(first.refresh_token);
-
-    // The used refresh token dies when its grace window ends: replaying it then fails.
-    ctx.advance((REFRESH_GRACE_S + 1) * 1000);
-    expect(await ctx.grants.get(hashToken(first.refresh_token!))).toBeNull();
-    const replay = await ctx.appFetch(`${PUBLIC_URL}/oauth/token`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: first.refresh_token!,
-        client_id: CLIENT_ID,
-      }),
-    });
-    expect(replay.status).toBe(400);
-    expect(await replay.json()).toMatchObject({ error: "invalid_grant" });
+    // Far from its limit, the refresh token is handed back unchanged (ADR-0158).
+    expect(second.refresh_token).toBe(first.refresh_token);
   });
 });
 
@@ -318,15 +306,17 @@ describe("MCP OAuth refresh checks", () => {
   });
 });
 
-describe("MCP OAuth refresh grace window (ADR-0105)", () => {
-  const refresh = (ctx: ReturnType<typeof setup>, token: string) =>
+describe("MCP OAuth refresh near expiry (ADR-0158)", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const SESSIONS = 8;
+  const refresh = (ctx: ReturnType<typeof setup>, token: string, clientId = CLIENT_ID) =>
     ctx.appFetch(`${PUBLIC_URL}/oauth/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: token,
-        client_id: CLIENT_ID,
+        client_id: clientId,
       }),
     });
   const callMcp = (ctx: ReturnType<typeof setup>, token: string) =>
@@ -335,58 +325,99 @@ describe("MCP OAuth refresh grace window (ADR-0105)", () => {
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: "{}",
     });
+  /** Every session refreshes with the same stored token at the same moment. */
+  async function refreshAll(ctx: ReturnType<typeof setup>, token: string) {
+    const responses = await Promise.all(
+      Array.from({ length: SESSIONS }, () => refresh(ctx, token)),
+    );
+    for (const res of responses) expect(res.status).toBe(200);
+    return Promise.all(responses.map(async (res) => (await res.json()) as OAuthTokens));
+  }
+  /** 401 would mean the access token is unknown; anything else got past the token check. */
+  async function expectWorking(ctx: ReturnType<typeof setup>, pair: OAuthTokens) {
+    expect((await callMcp(ctx, pair.access_token)).status).not.toBe(401);
+    expect((await refresh(ctx, pair.refresh_token!)).status).toBe(200);
+  }
+  const logLines = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls.map((call) => JSON.parse(String(call[0])) as Record<string, unknown>);
 
-  it("GivenTwoSessionsSharingARefreshToken_WhenBothRefreshWithinTheWindow_ThenBothGetAWorkingPair", async () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("GivenManySessionsSharingARefreshToken_WhenAllRefreshAtOnce_ThenEachGetsAWorkingPair", async () => {
     const ctx = setup();
     const shared = (await authorize(ctx)).tokens()!.refresh_token!;
+    ctx.advance(61 * 60 * 1000);
 
-    const first = await refresh(ctx, shared);
-    ctx.advance((REFRESH_GRACE_S - 1) * 1000);
-    const second = await refresh(ctx, shared);
+    const pairs = await refreshAll(ctx, shared);
 
-    expect(first.status).toBe(200);
-    expect(second.status).toBe(200);
-    const pairs = [(await first.json()) as OAuthTokens, (await second.json()) as OAuthTokens];
-    expect(pairs[0]!.refresh_token).not.toBe(pairs[1]!.refresh_token);
+    expect(new Set(pairs.map((p) => p.access_token)).size).toBe(SESSIONS);
     for (const pair of pairs) {
-      // 401 would mean the access token is unknown; anything else got past the token check.
-      expect((await callMcp(ctx, pair.access_token)).status).not.toBe(401);
-      expect((await refresh(ctx, pair.refresh_token!)).status).toBe(200);
+      expect(pair.refresh_token).toBe(shared);
+      await expectWorking(ctx, pair);
     }
   });
 
-  it("GivenAUsedRefreshToken_WhenReplayedAfterTheWindow_ThenInvalidGrant", async () => {
+  it("GivenManySessionsSharingARefreshTokenNearItsLimit_WhenAllRefreshAtOnce_ThenEachGetsANewWorkingPair", async () => {
     const ctx = setup();
-    const used = (await authorize(ctx)).tokens()!.refresh_token!;
-    expect((await refresh(ctx, used)).status).toBe(200);
+    const shared = (await authorize(ctx)).tokens()!.refresh_token!;
+    ctx.advance(REFRESH_TTL_S * 1000 - ROTATE_WITHIN_S * 1000 + DAY_MS);
 
-    ctx.advance((REFRESH_GRACE_S + 1) * 1000);
-    const replay = await refresh(ctx, used);
+    const pairs = await refreshAll(ctx, shared);
 
-    expect(replay.status).toBe(400);
-    expect(await replay.json()).toMatchObject({ error: "invalid_grant" });
+    expect(new Set(pairs.map((p) => p.refresh_token)).size).toBe(SESSIONS);
+    for (const pair of pairs) {
+      expect(pair.refresh_token).not.toBe(shared);
+      await expectWorking(ctx, pair);
+    }
+    // The rotated-out token still works until its own limit, for a session that missed it.
+    expect((await refresh(ctx, shared)).status).toBe(200);
   });
 
-  it("GivenARefreshTokenReusedInsideTheWindow_WhenTheWindowEnds_ThenReuseDidNotExtendIt", async () => {
+  it("GivenASessionHoldingARotatedOutToken_WhenItRefreshesDaysLater_ThenItStillWorks", async () => {
     const ctx = setup();
-    const used = (await authorize(ctx)).tokens()!.refresh_token!;
-    expect((await refresh(ctx, used)).status).toBe(200);
-    ctx.advance((REFRESH_GRACE_S - 10) * 1000);
-    expect((await refresh(ctx, used)).status).toBe(200);
+    const old = (await authorize(ctx)).tokens()!.refresh_token!;
+    ctx.advance(25 * DAY_MS);
+    const rotated = (await (await refresh(ctx, old)).json()) as OAuthTokens;
+    expect(rotated.refresh_token).not.toBe(old);
 
-    ctx.advance(11 * 1000);
+    ctx.advance(4 * DAY_MS);
 
-    expect((await refresh(ctx, used)).status).toBe(400);
+    expect((await refresh(ctx, old)).status).toBe(200);
   });
 
-  it("GivenAUserRemovedFromTheAllowList_WhenReusingATokenInsideTheWindow_ThenInvalidGrant", async () => {
+  it("GivenARefreshTokenPastItsLimit_WhenRefreshing_ThenInvalidGrantAndTheReasonIsLogged", async () => {
     const ctx = setup();
-    const used = (await authorize(ctx)).tokens()!.refresh_token!;
-    expect((await refresh(ctx, used)).status).toBe(200);
+    const token = (await authorize(ctx)).tokens()!.refresh_token!;
+    // Used every day: use never extends the token's fixed limit.
+    for (let day = 1; day < REFRESH_TTL_S / 86400; day++) {
+      ctx.advance(DAY_MS);
+      await refresh(ctx, token);
+    }
+    ctx.advance(DAY_MS + 1000);
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    (ctx.allowedEmails as Set<string>).clear();
+    const res = await refresh(ctx, token);
 
-    expect((await refresh(ctx, used)).status).toBe(400);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_grant" });
+    const refused = logLines(spy).find((l) => l.message === "oauth refresh refused");
+    expect(refused).toMatchObject({ reason: "unknown_or_expired", tokenAgeS: null });
+  });
+
+  it("GivenARefusedRefresh_WhenLogged_ThenTheReasonAndAgeAreLoggedAndNoTokenValue", async () => {
+    const ctx = setup();
+    const token = (await authorize(ctx)).tokens()!.refresh_token!;
+    ctx.advance(2 * 60 * 60 * 1000);
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const res = await refresh(ctx, token, "https://claude.ai/other-client");
+
+    expect(res.status).toBe(400);
+    const refused = logLines(spy).find((l) => l.message === "oauth refresh refused");
+    expect(refused).toMatchObject({ reason: "client_mismatch", tokenAgeS: 2 * 60 * 60 });
+    const all = spy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(all).not.toContain(token);
+    expect(all).not.toContain(hashToken(token));
   });
 });
 
@@ -405,6 +436,47 @@ describe("MCP lookup cap (ADR-0028)", () => {
     const res = await callMcp(ctx, newToken());
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("60");
+  });
+
+  const rateLimitLogs = (spy: { mock: { calls: unknown[][] } }, message: string) =>
+    spy.mock.calls.filter((call) => String(call[0]).includes(`"message":"${message}"`));
+
+  it("GivenTheCapIsSpent_WhenMoreMcpCallsArrive_ThenEach429sAndOneRateLimitLineIsLogged", async () => {
+    const ctx = setup();
+    for (let i = 0; i < LOOKUPS_PER_MINUTE; i++) await callMcp(ctx, newToken());
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const statuses = [];
+    for (let i = 0; i < 3; i++) statuses.push((await callMcp(ctx, newToken())).status);
+
+    expect(statuses).toEqual([429, 429, 429]);
+    expect(rateLimitLogs(spy, "mcp request rate limited")).toHaveLength(1);
+    spy.mockRestore();
+  });
+
+  it("GivenTheCapIsSpent_WhenMoreRefreshesArrive_ThenEach429sAndOneRateLimitLineIsLogged", async () => {
+    const ctx = setup();
+    const refresh = () =>
+      ctx.appFetch(`${PUBLIC_URL}/oauth/token`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: newToken(),
+          client_id: CLIENT_ID,
+        }),
+      });
+    const quiet = vi.spyOn(console, "log").mockImplementation(() => {});
+    for (let i = 0; i < LOOKUPS_PER_MINUTE; i++) await refresh();
+    quiet.mockRestore();
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const statuses = [];
+    for (let i = 0; i < 3; i++) statuses.push((await refresh()).status);
+
+    expect(statuses).toEqual([429, 429, 429]);
+    expect(rateLimitLogs(spy, "oauth request rate limited")).toHaveLength(1);
+    spy.mockRestore();
   });
 
   it("GivenMalformedTokens_WhenCallingMcpOrTheTokenEndpoint_ThenNoLookupIsSpent", async () => {

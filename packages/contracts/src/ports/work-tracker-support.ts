@@ -38,6 +38,8 @@ export function buildProject(input: NewProject): Project {
     defaultWorker: "agent",
     executor: "actions",
     environments: "prod-only",
+    deployKind: "none",
+    prSync: "queue",
     spendCaps: {},
     autoMerge: "s-and-m",
     mergeMode: "low-risk",
@@ -46,6 +48,8 @@ export function buildProject(input: NewProject): Project {
     lastDispatch: null,
     emailNotifications: true,
     projectPlan: null,
+    setupMarks: {},
+    logoUpdatedAt: null,
   };
 }
 

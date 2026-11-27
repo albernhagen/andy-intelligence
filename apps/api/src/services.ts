@@ -4,6 +4,7 @@ import {
   MilestoneService,
   BuildDispatcher,
   SyncRuns,
+  MergeHoldReader,
   MergeQueue,
   ProjectService,
   RefineDispatcher,
@@ -23,10 +24,13 @@ import {
   BriefService,
   IdeateService,
   ProjectPlanService,
+  EpicBreakdownService,
   ProjectTaskResults,
   TicketService,
   WaitingMergesReader,
   WhatsNewReader,
+  ReleaseReader,
+  ReleaseService,
   EmailNotifications,
   wakeAfterRunEnd,
   notifyOnNeedsYou,
@@ -37,6 +41,10 @@ import {
   MorningSteps,
   ProjectReadCache,
   TicketSnapshots,
+  VerifyingChecks,
+  VerificationService,
+  VerifyResults,
+  type VerifyTickets,
   ProjectTickets,
   RoutingSettings,
   GlobalSpendCaps,
@@ -72,7 +80,9 @@ import { runnerCredentials } from "./runners";
 import { OpenRouterGateway } from "./openrouter";
 import { PullRequestMerger } from "./merge";
 import { SetupChecklistReader } from "./setup";
+import { OnboardingReader } from "./onboarding";
 import { SpendSettingsService } from "./spend";
+import { ProjectLogoService } from "./project-logos";
 
 /**
  * The domain services every route module and MCP tool share, built once per app (one
@@ -101,6 +111,10 @@ export interface Services extends Required<ToolServices> {
   /** Single-call steps on a `direct` route (AI-258); null without a spend ledger. */
   direct: DirectExecutor | null;
   snapshots: TicketSnapshots | null;
+  /** The 2-hour Verifying check (AI-181), delivered by the watchdog queue. */
+  verifying: VerifyingChecks;
+  /** AI-188: starts verify tasks on deploys and retries waiting ones; null without deployments. */
+  verification: VerificationService | null;
 }
 
 /** A module's routes: registered from its own file and listed once in `public-routes.ts` or `api-routes.ts`. */
@@ -141,9 +155,11 @@ export const METERED_READS = {
   quota: ["latest", "clearsSince"],
   nightLaunches: ["get", "listForProject", "findActive"],
   deployments: ["get", "list", "latestGood"],
+  releaseRequests: ["get", "list"],
   routing: ["getGlobal", "getProject"],
   spendLedger: ["get", "totals", "totalsByProvider"],
   spendCapsStore: ["getGlobal"],
+  projectLogos: ["get"],
   spendNotices: ["get"],
   projectVersions: ["get"],
   mergeQueues: ["get"],
@@ -216,11 +232,29 @@ export function createServices(raw: AppDeps): Services {
     submitFromRun: (run, output) => ideate.submitFromRun(run, output),
   };
   const projectTasks: ProjectTaskResults = new ProjectTaskResults(plansLater, ideasLater);
+  // AI-383: plan-epic tasks are checked, prompted and stored by the breakdown service, built
+  // below with the ticket and milestone services; null without a breakdown or milestone store.
+  const epicTasks: Pick<EpicBreakdownService, "prepareTask" | "applyRun"> | null =
+    deps.epicBreakdowns && deps.milestones
+      ? {
+          prepareTask: (project, epicRef, repo) => breakdowns!.prepareTask(project, epicRef, repo),
+          applyRun: (run, output) => breakdowns!.applyRun(run, output),
+        }
+      : null;
   // AI-323: stores and fails digest summaries from summarize runs' reports and ends.
   const summaryResults =
     deps.digestSummaries && deps.releaseNotes
       ? new DigestSummaryResults(deps.digestSummaries, now)
       : null;
+  // AI-188: verify verdicts move their tickets through the ticket service, built further down.
+  const verifyTickets: VerifyTickets = {
+    move: (projectId, ticketId, to, actor, opts): Promise<Ticket> =>
+      service.move(projectId, ticketId, to, actor, opts),
+    flag: (projectId, ticketId, actor): Promise<Ticket> => service.flag(projectId, ticketId, actor),
+  };
+  const verifyResults: VerifyResults | null = deps.deployments
+    ? new VerifyResults(deps.tracker, verifyTickets, deps.deployments, now)
+    : null;
   // AI-257: spend notices (80% of a cap, a stop) go to the Needs-you email when it is on, else
   // to the logs; their dedupe and daily cap live in the stored notice ledger.
   const spendAlerts = deps.spendNotices
@@ -285,6 +319,8 @@ export function createServices(raw: AppDeps): Services {
     projectTasks,
     summaryResults,
     epicMode,
+    epicTasks,
+    verifyResults,
   );
   const refiner = new RefineDispatcher(deps.tracker, deps.runs, runs, now, deps.milestones ?? null);
   // AI-124/AI-125: when a launch ends, its morning PR opens (or an empty epic branch goes),
@@ -338,13 +374,12 @@ export function createServices(raw: AppDeps): Services {
   );
   // AI-110 (ADR-0150): one queue per process over the shared store, so every merge into a
   // default branch (the gate's and merge_pr's) is serialised per repo across instances.
+  const mergeQueues = deps.mergeQueues ?? new InMemoryMergeQueueStore();
   const mergeQueue = connection
-    ? new MergeQueue(
-        deps.mergeQueues ?? new InMemoryMergeQueueStore(),
-        new ConnectedCodeHost(connection),
-        now,
-      )
+    ? new MergeQueue(mergeQueues, new ConnectedCodeHost(connection), now)
     : null;
+  // AI-382: repos held while their default branch is red, for the digest and MCP `status`.
+  const mergeHolds = new MergeHoldReader(mergeQueues);
   const dispatchOnce = async (projectId: string, wakeWaiters: boolean) => {
     // AI-75 (ADR-0087): held gaps are asked first, as the question caps allow; no run needed.
     await refiner.askHeld(projectId);
@@ -367,6 +402,8 @@ export function createServices(raw: AppDeps): Services {
     return value;
   };
   const runEnded = async (projectId: string) => {
+    // AI-188: a freed slot may let a waiting verification start; it never throws.
+    if (verification) await verification.retryWaiting();
     await wakeAfterRunEnd({
       freedBy: projectId,
       listProjects: () => deps.tracker.listProjects(),
@@ -387,6 +424,8 @@ export function createServices(raw: AppDeps): Services {
         ),
     });
   };
+  // AI-181: a ticket entering Verifying queues its 2-hour Needs-you check on the watchdog queue.
+  const verifying = new VerifyingChecks(deps.tracker, deps.watchdog?.queue ?? null, now);
   const service = new TicketService(
     deps.tracker,
     runs,
@@ -395,7 +434,22 @@ export function createServices(raw: AppDeps): Services {
     runnerPresence,
     deps.routing ?? null,
     tickets,
+    (ticket) => verifying.entered(ticket),
   );
+  // AI-188: a deploy to a project's first environment starts its verify task (ADR-0159).
+  const verification =
+    deps.deployments && connection
+      ? new VerificationService({
+          tracker: deps.tracker,
+          deployments: deps.deployments,
+          codeHost: new ConnectedCodeHost(connection),
+          starter: runs,
+          tickets: service,
+          quotaLevels: async (projectId) =>
+            subscriptionQuotaLevels(deps.quota ?? null, await runs.routingOf(projectId), now()),
+          now,
+        })
+      : null;
   const claims = runners
     ? new LocalClaims(
         deps.tracker,
@@ -458,7 +512,14 @@ export function createServices(raw: AppDeps): Services {
       return lowestThresholds("claude-sub", routings, CLAUDE_SUB_THRESHOLDS);
     },
   );
-  const digest = new DigestReader(deps.tracker, deps.runs, deps.quota ?? null, now, tickets);
+  const digest = new DigestReader(
+    deps.tracker,
+    deps.runs,
+    deps.quota ?? null,
+    now,
+    tickets,
+    mergeHolds,
+  );
   // AI-323 (ADR-0137): Andy's first digest read after a day ends starts its summary task.
   const digestSummaries =
     deps.digestSummaries && deps.releaseNotes
@@ -498,6 +559,10 @@ export function createServices(raw: AppDeps): Services {
     email ? (id, plan) => email.planNeedsYou(id, plan.proposal.milestones.length) : undefined,
     milestoneService,
   );
+  const breakdowns: EpicBreakdownService | null =
+    deps.epicBreakdowns && milestoneService
+      ? new EpicBreakdownService(deps.tracker, deps.epicBreakdowns, service, milestoneService, now)
+      : null;
   const configProposals = deps.configChanges
     ? new ConfigProposals(
         deps.tracker,
@@ -510,6 +575,32 @@ export function createServices(raw: AppDeps): Services {
   const whatsNew = deps.releaseNotes
     ? new WhatsNewReader(deps.tracker, deps.releaseNotes, tickets)
     : null;
+  // AI-183: M6.9: releases; absent without a deployment or release-note store (route and tool
+  // both). Before GitHub is connected, every compare answers "unknown", so nothing is cached.
+  const releases =
+    deps.deployments && deps.releaseNotes
+      ? new ReleaseReader(
+          deps.deployments,
+          connection ? new ConnectedCodeHost(connection) : { listCommitsBetween: async () => null },
+          deps.releaseNotes,
+          deps.tracker,
+          tickets,
+          now,
+        )
+      : null;
+  // AI-199: M6.12: promote and rollback; absent without a deployment or release-request store
+  // (routes and tools both). The code host is read per call, so connecting GitHub later works.
+  const releaseRequests =
+    deps.deployments && deps.releaseRequests
+      ? new ReleaseService({
+          tracker: deps.tracker,
+          deployments: deps.deployments,
+          requests: deps.releaseRequests,
+          codeHost: async () => (connection ? connection.codeHost() : null),
+          queue: deps.watchdog?.queue ?? null,
+          now,
+        })
+      : null;
   // AI-239: routing settings; each save is logged when the change log is configured.
   const routing = deps.routing
     ? new RoutingSettings(deps.routing, deps.tracker, deps.configChanges ?? null, now)
@@ -544,6 +635,7 @@ export function createServices(raw: AppDeps): Services {
     brief,
     ideate,
     plans,
+    breakdowns,
     configProposals,
     configRevert,
     routing,
@@ -552,10 +644,23 @@ export function createServices(raw: AppDeps): Services {
     readCache,
     direct,
     snapshots,
+    verifying,
+    verification,
     tickets,
     setup: new SetupChecklistReader(
       deps.tracker,
       connection ? new ConnectedCodeHost(connection) : null,
+    ),
+    onboarding: new OnboardingReader(
+      deps.tracker,
+      deps.runs,
+      connection ? new ConnectedCodeHost(connection) : null,
+      async () => {
+        const slug = (await connection?.get())?.slug;
+        return slug ? `https://github.com/apps/${slug}/installations/new` : null;
+      },
+      now,
+      deps.deployments ?? null,
     ),
     spend: new SpendSettingsService(
       projects,
@@ -571,6 +676,10 @@ export function createServices(raw: AppDeps): Services {
     work: new WorkReader(deps.tracker, board),
     roadmap: new RoadmapReader(deps.tracker, board, deps.milestones ?? null),
     whatsNew,
+    releases,
+    // AI-393: project logos; absent without a logo store (routes and tools both).
+    logos: deps.projectLogos ? new ProjectLogoService(deps.tracker, deps.projectLogos, now) : null,
+    releaseRequests,
     // AI-218: PRs the merge mode leaves for Andy; release notes read from the connected host.
     waitingMerges: new WaitingMergesReader(
       deps.tracker,
@@ -578,6 +687,8 @@ export function createServices(raw: AppDeps): Services {
       connection ? new ConnectedCodeHost(connection) : null,
       tickets,
       now,
+      // AI-388: each listed PR's place in its repo's merge queue.
+      mergeQueue,
     ),
     digestSummaries,
     // AI-220: MCP `merge_pr`, through the connected host with the gate's findings source.
@@ -589,6 +700,7 @@ export function createServices(raw: AppDeps): Services {
       mergeQueue,
     ),
     milestones: deps.milestones ?? null,
+    mergeHolds,
     // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
     dashboard: new DashboardReader(deps.tracker, deps.runs, tickets),
     dora: new DoraReader(deps.tracker, deps.deployments ?? null, now),

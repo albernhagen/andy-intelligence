@@ -1,6 +1,6 @@
 ---
 title: "Refresh-token grace window: a used MCP refresh token works 60 s more"
-status: accepted
+status: superseded by 0158 (rotate MCP refresh tokens only near expiry)
 date: 2026-11-20
 amends: 0039 (refresh-token rotation)
 ---

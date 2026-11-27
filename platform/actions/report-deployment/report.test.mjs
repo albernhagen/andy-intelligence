@@ -177,4 +177,113 @@ describe("report-deployment", () => {
     expect(r.summary).toContain("Deployment abc-123 recorded as succeeded");
     expect(r.summary).not.toContain("not recorded");
   });
+
+  it("GivenAReleaseStart_WhenReported_ThenEnvironmentKindUrlAndRequestAreSent", async () => {
+    const cp = await stub(() => ({ status: 201, text: JSON.stringify({ deploymentId: "r-1" }) }));
+    const r = await report({
+      ...withOidc(cp.origin),
+      PHASE: "start",
+      IMAGE_DIGEST: DIGEST,
+      ENVIRONMENT: "prod",
+      KIND: "rollback",
+      URL: "https://ai.example.com",
+      REQUEST: "req-1",
+    });
+    expect(r.code).toBe(0);
+    expect(r.output).toContain("deployment_id=r-1");
+    expect(JSON.parse(cp.requests[0].body)).toEqual({
+      imageDigest: DIGEST,
+      environment: "prod",
+      kind: "rollback",
+      url: "https://ai.example.com",
+      request: "req-1",
+    });
+  });
+
+  it("GivenABadOptionalStartField_WhenReported_ThenExit0AndNoRequestIsSent", async () => {
+    const cp = await stub(() => ({ status: 201, text: "{}" }));
+    for (const extra of [
+      { ENVIRONMENT: "preview" },
+      { KIND: "redeploy" },
+      { URL: "http://ai.example.com" },
+      { URL: "https://user@ai.example.com" },
+      { REQUEST: "a b" },
+    ]) {
+      const r = await report({
+        ...withOidc(cp.origin),
+        PHASE: "start",
+        IMAGE_DIGEST: DIGEST,
+        ...extra,
+      });
+      expect(r.code, JSON.stringify(extra)).toBe(0);
+      expect(r.summary, JSON.stringify(extra)).toContain("Deployment not recorded");
+    }
+    expect(cp.requests).toEqual([]);
+  });
+
+  it("GivenARollbackThatNamesItsRevision_WhenFinished_ThenThatRevisionIsSent", async () => {
+    const cp = await stub(() => ({ status: 200, text: "{}" }));
+    const r = await report({
+      ...withOidc(cp.origin),
+      PHASE: "finish",
+      DEPLOYMENT_ID: "r-1",
+      STATUS: "succeeded",
+      REVISION: "control-plane-00041-old",
+      // The named revision wins: the service is not described.
+      SERVICE: "control-plane",
+      REGION: "us-central1",
+    });
+    expect(r.code).toBe(0);
+    expect(cp.requests[0].body).toBe(
+      JSON.stringify({ status: "succeeded", revision: "control-plane-00041-old" }),
+    );
+  });
+
+  it("GivenAMalformedRevision_WhenFinished_ThenTheStatusLandsWithoutIt", async () => {
+    const cp = await stub(() => ({ status: 200, text: "{}" }));
+    const r = await report({
+      ...withOidc(cp.origin),
+      PHASE: "finish",
+      DEPLOYMENT_ID: "r-1",
+      STATUS: "succeeded",
+      REVISION: "Bad Revision; rm",
+    });
+    expect(r.code).toBe(0);
+    expect(cp.requests[0].body).toBe(JSON.stringify({ status: "succeeded" }));
+  });
+
+  it("GivenARefusedStart_WhenTheControlPlaneAnswers422_ThenRefusedIsAnOutputAndExit0", async () => {
+    const cp = await stub(() => ({ status: 422, text: "{}" }));
+    const r = await report({ ...withOidc(cp.origin), PHASE: "start", IMAGE_DIGEST: DIGEST });
+    expect(r.code).toBe(0);
+    expect(r.output).toBe("refused=true\n");
+    expect(r.summary).toContain("refused it (HTTP 422)");
+  });
+
+  it("GivenAnUnreachableControlPlane_WhenStarted_ThenItIsNotMarkedRefused", async () => {
+    const r = await report({
+      ACTIONS_ID_TOKEN_REQUEST_URL: "http://127.0.0.1:9/oidc?x=1",
+      ACTIONS_ID_TOKEN_REQUEST_TOKEN: "t",
+      CONTROL_PLANE_URL: "http://127.0.0.1:9",
+      PHASE: "start",
+      IMAGE_DIGEST: DIGEST,
+    });
+    expect(r.code).toBe(0);
+    expect(r.output).toBe("");
+  });
+
+  it("GivenTrafficMovedButACheckFailed_WhenFinishedAsFailedWithARevision_ThenTheRevisionIsSent", async () => {
+    const cp = await stub(() => ({ status: 200, text: "{}" }));
+    const r = await report({
+      ...withOidc(cp.origin),
+      PHASE: "finish",
+      DEPLOYMENT_ID: "r-1",
+      STATUS: "failed",
+      REVISION: "control-plane-00041-old",
+    });
+    expect(r.code).toBe(0);
+    expect(cp.requests[0].body).toBe(
+      JSON.stringify({ status: "failed", revision: "control-plane-00041-old" }),
+    );
+  });
 });

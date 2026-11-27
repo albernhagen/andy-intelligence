@@ -5,6 +5,9 @@ import {
   mergeLines,
   normalizePins,
   pinActions,
+  pinModules,
+  presentGroups,
+  recordedDeployKind,
   renderFiles,
   seedsToWrite,
 } from "./files.mjs";
@@ -100,8 +103,57 @@ describe("baselineRecord", () => {
       version: SHA,
       ref: "v1.0.0",
       updated: "2026-11-02",
+      deployKind: "none",
     });
     expect(text.endsWith("}\n")).toBe(true);
+  });
+
+  it("GivenACloudRunProject_WhenRecorded_ThenTheKindIsKept", () => {
+    const text = baselineRecord({
+      source: SOURCE,
+      sha: SHA,
+      ref: "v1.0.0",
+      date: "2026-11-02",
+      deployKind: "cloud-run",
+    });
+    expect(recordedDeployKind(JSON.parse(text))).toBe("cloud-run");
+  });
+
+  it("GivenARecordFromBeforeTheField_WhenRead_ThenNone", () => {
+    expect(recordedDeployKind({ source: SOURCE, version: SHA })).toBe("none");
+  });
+
+  it("GivenAnUnknownRecordedKind_WhenRead_ThenThrows", () => {
+    expect(() => recordedDeployKind({ deployKind: "static" })).toThrow("deploy kind");
+  });
+});
+
+describe("renderFiles with deploy kinds", () => {
+  const kinded = {
+    ...manifest,
+    managed: [
+      ...manifest.managed,
+      { path: ".github/workflows/deploy.yml", from: "wf", pin: true, deployKind: "cloud-run" },
+    ],
+  };
+  const paths = (deployKind) =>
+    renderFiles(kinded, read, { sha: SHA, ref: "v1.0.0", deployKind }).managed.map((f) => f.path);
+
+  it("GivenDeployKindNone_WhenRendered_ThenNoCloudRunFile", () => {
+    expect(paths("none")).not.toContain(".github/workflows/deploy.yml");
+    expect(paths(undefined)).not.toContain(".github/workflows/deploy.yml");
+  });
+
+  it("GivenDeployKindCloudRun_WhenRendered_ThenTheCloudRunFileAndEveryOther", () => {
+    expect(paths("cloud-run")).toEqual([
+      ".github/workflows/ci.yml",
+      "lefthook.yml",
+      ".github/workflows/deploy.yml",
+    ]);
+  });
+
+  it("GivenAnUnknownDeployKind_WhenRendered_ThenThrows", () => {
+    expect(() => paths("static")).toThrow("deploy kind must be one of none, cloud-run");
   });
 });
 
@@ -165,5 +217,102 @@ describe("seedsToWrite", () => {
   it("GivenAnExistingDesignFile_WhenSeeded_ThenItIsNeverOverwritten", () => {
     const out = seedsToWrite(seed, (p) => p === "design.md");
     expect(out.map((f) => f.path)).toEqual(["AGENTS.md"]);
+  });
+});
+
+describe("pinModules", () => {
+  const tf = [
+    'module "prod" {',
+    '  source = "../../../../infra/modules/project-env"',
+    "}",
+    'module "other" {',
+    '  source = "terraform-google-modules/network/google"',
+    "}",
+    "",
+  ].join("\n");
+
+  it("GivenALocalModuleSource_WhenPinned_ThenTheRemoteModuleAtTheSha", () => {
+    const out = pinModules(tf, { source: SOURCE, sha: SHA, ref: "v1.0.0" });
+    expect(out).toContain(
+      `  source = "git::https://github.com/${SOURCE}.git//infra/modules/project-env?ref=${SHA}" # v1.0.0\n`,
+    );
+    expect(out).not.toContain("../");
+  });
+
+  it("GivenARegistryModuleSource_WhenPinned_ThenUnchanged", () => {
+    const out = pinModules(tf, { source: SOURCE, sha: SHA, ref: "v1.0.0" });
+    expect(out).toContain('  source = "terraform-google-modules/network/google"\n');
+  });
+});
+
+describe("renderFiles with environments", () => {
+  const seeded = {
+    ...manifest,
+    seed: [
+      { path: "AGENTS.md", from: "agents" },
+      {
+        path: "infra/main.tf",
+        from: "one",
+        pin: true,
+        deployKind: "cloud-run",
+        environments: "prod-only",
+      },
+      { path: "infra/main.tf", from: "two", deployKind: "cloud-run", environments: "dev-and-prod" },
+    ],
+  };
+  const texts = { ...Object.fromEntries([["agents", "rules"]]), one: "one", two: "two" };
+  const seedFor = (deployKind, environments) =>
+    renderFiles(seeded, (from) => texts[from] ?? read(from), {
+      sha: SHA,
+      ref: "v1.0.0",
+      deployKind,
+      environments,
+    }).seed.map((f) => `${f.path}=${f.content}`);
+
+  it("GivenDeployKindNone_WhenRendered_ThenNoEnvironmentSeed", () => {
+    expect(seedFor("none", "dev-and-prod")).toEqual(["AGENTS.md=rules"]);
+  });
+
+  it("GivenCloudRunProdOnly_WhenRendered_ThenTheProdOnlySeed", () => {
+    expect(seedFor("cloud-run", undefined)).toEqual(["AGENTS.md=rules", "infra/main.tf=one"]);
+  });
+
+  it("GivenCloudRunDevAndProd_WhenRendered_ThenTheDevAndProdSeed", () => {
+    expect(seedFor("cloud-run", "dev-and-prod")).toEqual(["AGENTS.md=rules", "infra/main.tf=two"]);
+  });
+
+  it("GivenAnUnknownPolicy_WhenRendered_ThenThrows", () => {
+    expect(() => seedFor("cloud-run", "staging")).toThrow("environments must be one of");
+  });
+});
+
+describe("seed groups", () => {
+  const seed = [
+    { path: "AGENTS.md", content: "a" },
+    { path: "infra/main.tf", content: "m", group: "infra" },
+    { path: "infra/outputs.tf", content: "o", group: "infra" },
+  ];
+
+  it("GivenNoFileOfTheGroup_WhenSeeded_ThenTheWholeGroupIsWritten", () => {
+    expect(seedsToWrite(seed, () => false).map((f) => f.path)).toEqual([
+      "AGENTS.md",
+      "infra/main.tf",
+      "infra/outputs.tf",
+    ]);
+  });
+
+  it("GivenOneFileOfTheGroup_WhenSeeded_ThenNoneOfItIsWritten", () => {
+    const exists = (p) => p === "infra/main.tf";
+    expect(presentGroups(seed, exists)).toEqual(new Set(["infra"]));
+    expect(seedsToWrite(seed, exists).map((f) => f.path)).toEqual(["AGENTS.md"]);
+  });
+
+  it("GivenAGroupPartlyThere_WhenChecked_ThenItsMissingFilesAreNotDrift", () => {
+    const rendered = { managed: [], lines: [], seed };
+    const drift = fileDrift(rendered, (p) => (p === "infra/main.tf" ? "ours" : null), {
+      source: SOURCE,
+      version: SHA,
+    });
+    expect(drift).toEqual([{ path: "AGENTS.md", issue: "missing (seed file)" }]);
   });
 });

@@ -5,6 +5,11 @@
 //
 //   baseline.mjs onboard <owner/repo> --ref <tag|branch|sha>   files + apply
 //   baseline.mjs files   <owner/repo> --ref <tag|branch|sha>   write baseline files (push or PR)
+//                        [--deploy-kind none|cloud-run] the project's `deployKind` (ADR-0114):
+//                        `cloud-run` adds deploy.yml and release.yml. Default: what the repo's
+//                        .andy/baseline.json records, else `none` (also for onboard and finish)
+//                        [--environments prod-only|dev-and-prod] for `cloud-run`: which
+//                        template Terraform root to seed in infra/ (AI-109). Default prod-only
 //   baseline.mjs apply   <owner/repo> [--dry-run]              GitHub config
 //   baseline.mjs check   <owner/repo> [--only a,b]             drift report; exit 1 on drift
 //   baseline.mjs finish  <owner/repo> --ref <sha> --branch <baseline/x>
@@ -16,7 +21,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applySections, checkSections, configFor, parseConfig, SECTIONS } from "./github.mjs";
-import { baselineRecord, fileDrift, mergeLines, renderFiles, seedsToWrite } from "./files.mjs";
+import {
+  baselineRecord,
+  checkDeployKind,
+  checkEnvironments,
+  fileDrift,
+  mergeLines,
+  recordedDeployKind,
+  renderFiles,
+  seedsToWrite,
+} from "./files.mjs";
 import { heldToAdd } from "./plan.mjs";
 import { cleanGitEnv } from "../../scripts/git-env.mjs";
 
@@ -95,6 +109,25 @@ function readRemote(repo, file) {
   return Buffer.from(res.data.content, "base64").toString("utf8");
 }
 
+/**
+ * The deploy kind to render: the flag, else what the clone's `.andy/baseline.json` records, else
+ * `none`. Andy's `gh` login can't read the control plane's project setting, so the flag carries it
+ * (the App's baseline PR report prints it); the record keeps it for later runs and `check`.
+ */
+export function deployKindFor(flag, recordText) {
+  if (flag) return checkDeployKind(flag);
+  if (recordText === null || recordText === undefined) return "none";
+  let record;
+  try {
+    record = JSON.parse(recordText);
+  } catch {
+    throw new Error(".andy/baseline.json isn't JSON; pass --deploy-kind");
+  }
+  return recordedDeployKind(record);
+}
+
+const readIfExists = (file) => (existsSync(file) ? readFileSync(file, "utf8") : null);
+
 function writeFile(dir, file, content) {
   const target = path.join(dir, file);
   mkdirSync(path.dirname(target), { recursive: true });
@@ -118,13 +151,15 @@ function repoEnv() {
 }
 
 /** Clones the repo, writes the baseline files, and pushes (empty repo) or opens a PR. */
-function filesCommand(repo, ref) {
+function filesCommand(repo, ref, kindFlag, environments = "prod-only") {
   const m = manifest();
   const sha = resolveRef(ref, m.source);
-  const rendered = renderFiles(m, readAt(sha), { sha, ref });
   const dir = mkdtempSync(path.join(tmpdir(), "baseline-"));
   const env = repoEnv();
   run("gh", ["repo", "clone", repo, dir, "--", "--quiet"], { env });
+  const deployKind = deployKindFor(kindFlag, readIfExists(path.join(dir, ".andy/baseline.json")));
+  console.log(`${repo}: deploy kind ${deployKind}`);
+  const rendered = renderFiles(m, readAt(sha), { sha, ref, deployKind, environments });
   const empty =
     run("git", ["-C", dir, "rev-parse", "--verify", "HEAD"], { allowFail: true, env }).status !== 0;
   const starter = !existsSync(path.join(dir, "package.json"));
@@ -145,7 +180,11 @@ function filesCommand(repo, ref) {
     writeFile(dir, f.path, f.content);
   if (starter) for (const f of rendered.starter) writeFile(dir, f.path, f.content);
   const date = new Date().toISOString().slice(0, 10);
-  writeFile(dir, ".andy/baseline.json", baselineRecord({ source: m.source, sha, ref, date }));
+  writeFile(
+    dir,
+    ".andy/baseline.json",
+    baselineRecord({ source: m.source, sha, ref, date, deployKind }),
+  );
   // Creates pnpm-lock.yaml for a starter repo (CI installs with --frozen-lockfile) and installs hooks.
   if (existsSync(path.join(dir, "package.json")))
     run("pnpm", ["install"], { cwd: dir, stdio: "inherit", env });
@@ -182,13 +221,15 @@ function filesCommand(repo, ref) {
  * baseline PR branch, with Andy's `gh` login: only the missing ones, so a differing file stays
  * for review (AI-113).
  */
-function finishCommand(repo, ref, branch) {
+function finishCommand(repo, ref, branch, kindFlag) {
   const m = manifest();
   const sha = resolveRef(ref, m.source);
-  const rendered = renderFiles(m, readAt(sha), { sha, ref });
   const dir = mkdtempSync(path.join(tmpdir(), "baseline-finish-"));
   const env = repoEnv();
   run("gh", ["repo", "clone", repo, dir, "--", "--quiet", "--branch", branch], { env });
+  const deployKind = deployKindFor(kindFlag, readIfExists(path.join(dir, ".andy/baseline.json")));
+  console.log(`${repo}: deploy kind ${deployKind}`);
+  const rendered = renderFiles(m, readAt(sha), { sha, ref, deployKind });
   for (const key of ["user.name", "user.email"]) {
     const value = run("git", ["-C", SOURCE_ROOT, "config", key], { allowFail: true }).stdout.trim();
     if (value) run("git", ["-C", dir, "config", key, value], { env });
@@ -262,13 +303,14 @@ async function checkCommand(repo, only) {
         failed = true;
       } else {
         const { version, ref } = JSON.parse(record);
-        const rendered = renderFiles(m, readAt(version), { sha: version, ref });
+        const deployKind = deployKindFor(undefined, record);
+        const rendered = renderFiles(m, readAt(version), { sha: version, ref, deployKind });
         const drift = fileDrift(rendered, (f) => readRemote(repo, f), {
           source: m.source,
           version,
         });
         console.log(
-          `files: ${drift.length ? "drift" : "ok"} (baseline ${ref}, ${version.slice(0, 7)})`,
+          `files: ${drift.length ? "drift" : "ok"} (baseline ${ref}, ${version.slice(0, 7)}, deploy kind ${deployKind})`,
         );
         for (const d of drift) console.log(`  ${d.path}: ${d.issue}`);
         failed ||= drift.length > 0;
@@ -278,15 +320,26 @@ async function checkCommand(repo, only) {
   return failed ? 1 : 0;
 }
 
-/** Parses argv into { command, repo, ref, branch, dryRun, only }. */
+/** Parses argv into { command, repo, ref, branch, dryRun, only, deployKind, environments }. */
 export function parseArgs(argv) {
   const [command, repo, ...rest] = argv;
-  const opts = { command, repo, ref: undefined, branch: undefined, dryRun: false, only: undefined };
+  const opts = {
+    command,
+    repo,
+    ref: undefined,
+    branch: undefined,
+    dryRun: false,
+    only: undefined,
+    deployKind: undefined,
+    environments: undefined,
+  };
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === "--ref") opts.ref = rest[++i];
     else if (rest[i] === "--branch") opts.branch = rest[++i];
     else if (rest[i] === "--dry-run") opts.dryRun = true;
     else if (rest[i] === "--only") opts.only = rest[++i].split(",");
+    else if (rest[i] === "--deploy-kind") opts.deployKind = checkDeployKind(rest[++i]);
+    else if (rest[i] === "--environments") opts.environments = checkEnvironments(rest[++i]);
     else throw new Error(`unknown option ${rest[i]}`);
   }
   if (!["onboard", "files", "apply", "check", "finish"].includes(command))
@@ -296,6 +349,10 @@ export function parseArgs(argv) {
     throw new Error(`${command} needs --ref`);
   if (command === "finish" && !/^baseline\/[a-z0-9-]{1,60}$/.test(opts.branch ?? ""))
     throw new Error("finish needs --branch baseline/<name> (the App's baseline PR branch)");
+  if (opts.deployKind && !["onboard", "files", "finish"].includes(command))
+    throw new Error(`${command} takes no --deploy-kind (it reads .andy/baseline.json)`);
+  if (opts.environments && !["onboard", "files"].includes(command))
+    throw new Error(`${command} takes no --environments (only onboard and files seed infra/)`);
   const unknown = (opts.only ?? []).filter((n) => !ALL.includes(n));
   if (unknown.length > 0) throw new Error(`unknown --only section(s): ${unknown.join(", ")}`);
   return opts;
@@ -304,16 +361,16 @@ export function parseArgs(argv) {
 async function main(argv) {
   const o = parseArgs(argv);
   if (o.command === "files") {
-    filesCommand(o.repo, o.ref);
+    filesCommand(o.repo, o.ref, o.deployKind, o.environments);
     return 0;
   }
   if (o.command === "apply") return applyCommand(o.repo, o.dryRun);
   if (o.command === "check") return checkCommand(o.repo, o.only);
   if (o.command === "finish") {
-    finishCommand(o.repo, o.ref, o.branch);
+    finishCommand(o.repo, o.ref, o.branch, o.deployKind);
     return 0;
   }
-  filesCommand(o.repo, o.ref);
+  filesCommand(o.repo, o.ref, o.deployKind, o.environments);
   const status = await applyCommand(o.repo, false);
   console.log(
     status === 0 ? "onboarded; run `check` to confirm no drift" : "apply left drift; see above",

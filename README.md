@@ -16,9 +16,9 @@ What is built on `main` now. Target design: [ARCHITECTURE.md](docs/architecture/
  Agent tasks ◀─▶ agent-run.yml → claude-executor.yml (GitHub Actions; dispatched by the App, call back with OIDC)
 ```
 
-**Working** (full list: [`docs/how-it-works.md`](docs/how-it-works.md)): a board and Needs-you inbox, the Claude connector (MCP), Refine and Build agent tasks on GitHub Actions or a local runner, PR checks and review agents, the merge gate and MCP `merge_pr` for coordinator sessions through a merge queue per repo, dispatch under quota and spend caps, product discovery before the brief (`/discover`), epics and the roadmap (a case per milestone; the `epic` merge mode merges child tickets into the epic's branch), digest, What's new, dashboards and Needs-you email. Each feature: [`docs/features/`](docs/features/). New detail goes in `docs/how-it-works.md`, so this section stays one screen.
+**Working** (full list: [`docs/how-it-works.md`](docs/how-it-works.md)): a board and Needs-you inbox, the Claude connector (MCP), Refine and Build agent tasks on GitHub Actions or a local runner (a build gets the packages its approved plan names, added outside the sandbox), PR checks and review agents, the merge gate, MCP `merge_pr` for coordinator sessions and Andy's Merge button (Needs-you, ticket panel) through a merge queue per repo that syncs only the next PR (held while `main` is red; syncing every open PR is a project setting), dispatch under quota and spend caps, product discovery before the brief (`/discover`), a setup path that walks a new managed repo through every onboarding step, epics and the roadmap (a case per milestone; an agent drafts an epic's tickets for Andy's approval on its panel; the `epic` merge mode merges child tickets into the epic's branch), digest, What's new, releases (a page and MCP) with promote and rollback, a verify agent task after each deploy that moves Verifying tickets, dashboards, project logos and Needs-you email. Each feature: [`docs/features/`](docs/features/). New detail goes in `docs/how-it-works.md`, so this section stays one screen.
 
-**Not built yet:** Needs you has no push notification (M7); one task at a time per ticket; the digest is not sent anywhere.
+**Not built yet:** releases: each project stores a deploy kind (`none` or `cloud-run`) and its environments, but nothing deploys from them; Needs you has no push notification (M7); one task at a time per ticket; the digest is not sent anywhere.
 
 ## Docs
 
@@ -93,7 +93,7 @@ Design rules: [`apps/web/design.md`](apps/web/design.md). One shell on every scr
 | `/p/:projectId/dashboards`, `/all/dashboards` | Dashboards: weekly delivery and cost charts                                                                                             |
 | `/p/:projectId/settings`                      | Project settings (Settings menu): section links, every option with what it does; MCP `get_project_settings` reads them                  |
 | `/projects`, `/projects/new`                  | Open the current project's settings; add a project (picker → Add project), which opens its setup path                                   |
-| `/p/:projectId/setup`                         | A new project's setup: brief, plan, approve milestones, baseline and first build (AI-373)                                               |
+| `/p/:projectId/setup`                         | A new project's setup: every onboarding step (commands, live checks, Mark done), brief, plan, approve, proving refine, builds (AI-381)  |
 | `/settings/github`                            | Connect the GitHub App, install link, installed repos                                                                                   |
 | `/p/:projectId`                               | Board: lanes with status on cards, quick add, drag to reorder or move                                                                   |
 | `/p/:projectId/t/:ticketRef`                  | Ticket detail (ref = key, e.g. `AI-2`): edit, Definition of Ready, moves, agent tasks, questions, history                               |
@@ -106,31 +106,33 @@ Design rules: [`apps/web/design.md`](apps/web/design.md). One shell on every scr
 pnpm --filter @andy/web screenshots:update   # in Docker: write changed images, then commit them
 pnpm --filter @andy/web screenshots          # local run (macOS renders differ)
 pnpm screenshots:table --write               # after a push: before-and-after table into the PR description
+pnpm --filter @andy/web icons                # rebuild favicon and app icons from the mark and tokens
 ```
 
 ## Layout
 
-| Path                  | What                                                                |
-| --------------------- | ------------------------------------------------------------------- |
-| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA           |
-| `apps/web`            | React + Vite + shadcn UI; design rules in `design.md`               |
-| `apps/local-runner`   | Local runner CLI: claims agent tasks, runs them on Andy's Mac       |
-| `packages/contracts`  | Zod entities, ports, fakes, contract suites                         |
-| `packages/domain`     | Ticket and project rules: stages, DoR, Needs-you, repo registration |
-| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`                |
-| `packages/github`     | GitHub App adapter: `GitHubCodeHost`, webhook HMAC + mapping        |
-| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)                  |
-| `infra/control-plane` | Control-plane GCP resources                                         |
-| `infra/billing`       | Billing budget, alerts, opt-in kill switch (local plans only)       |
-| `infra/dns`           | Cloudflare records for `ai.andybernhagen.com` (local plans only)    |
-| `scripts`             | Repo tooling: format hook, review gate, coordinator tools           |
-| `platform/actions`    | Composite actions behind every required check (baseline)            |
-| `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`               |
-| `platform/executor`   | Permission profile for headless agent tasks (ADR-0051)              |
-| `platform/procedures` | Agent procedures and their output schemas                           |
-| `context-budget.json` | Size budgets for agent-loaded docs (`pnpm context:check`, ADR-0046) |
-| `template`            | Files copied into managed repos (managed, seed, starter)            |
-| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                  |
-| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                 |
+| Path                  | What                                                                     |
+| --------------------- | ------------------------------------------------------------------------ |
+| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA                |
+| `apps/web`            | React + Vite + shadcn UI; design rules in `design.md`                    |
+| `apps/local-runner`   | Local runner CLI: claims agent tasks, runs them on Andy's Mac            |
+| `packages/contracts`  | Zod entities, ports, fakes, contract suites                              |
+| `packages/domain`     | Ticket and project rules: stages, DoR, Needs-you, repo registration      |
+| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`                     |
+| `packages/github`     | GitHub App adapter: `GitHubCodeHost`, webhook HMAC + mapping             |
+| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)                       |
+| `infra/control-plane` | Control-plane GCP resources                                              |
+| `infra/billing`       | Budgets (control plane + managed projects), opt-in kill switches         |
+| `infra/dns`           | Cloudflare records for `ai.andybernhagen.com` (local plans only)         |
+| `infra/modules`       | Terraform modules, managed projects: `project-env`, `-budget`, `-alerts` |
+| `scripts`             | Repo tooling: format hook, review gate, coordinator tools                |
+| `platform/actions`    | Composite actions behind every required check (baseline)                 |
+| `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs`                    |
+| `platform/executor`   | Permission profile for headless agent tasks (ADR-0051)                   |
+| `platform/procedures` | Agent procedures and their output schemas                                |
+| `context-budget.json` | Size budgets for agent-loaded docs (`pnpm context:check`, ADR-0046)      |
+| `template`            | Files copied into managed repos (managed, seed, starter)                 |
+| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                       |
+| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                      |
 
-Runbooks for every manual step: [`docs/runbooks/`](docs/runbooks/). Deploys and going back to an earlier revision: [`deploy-and-rollback.md`](docs/runbooks/deploy-and-rollback.md).
+Runbooks for every manual step: [`docs/runbooks/`](docs/runbooks/). Deploys (`deploy.yml`), and promote or rollback (`release.yml`, `workflow_dispatch` on `main`): [`deploy-and-rollback.md`](docs/runbooks/deploy-and-rollback.md).

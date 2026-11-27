@@ -38,9 +38,13 @@ export function fullAppDeps(
     nightLaunches: new contracts.InMemoryNightLaunchStore(),
     routing: new contracts.InMemoryRoutingConfigStore(),
     milestones: new contracts.InMemoryMilestoneStore(),
+    epicBreakdowns: new contracts.InMemoryEpicBreakdownStore(),
     releaseNotes: new contracts.InMemoryReleaseNoteStore(),
+    deployments: new contracts.InMemoryDeploymentStore(),
+    releaseRequests: new contracts.InMemoryReleaseRequestStore(),
     digestSummaries: new contracts.InMemoryDigestSummaryStore(),
     projectVersions: new contracts.InMemoryProjectVersions(),
+    projectLogos: new contracts.InMemoryProjectLogoStore(),
     publicHost: "localhost",
     watchdog: {
       queue: new contracts.InMemoryWatchdogQueue(),

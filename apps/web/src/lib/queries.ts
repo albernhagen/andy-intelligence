@@ -11,7 +11,9 @@ import type {
   MergeMode,
   MilestoneCase,
   MilestoneStatus,
+  DeployKind,
   EnvironmentPolicy,
+  PrSync,
   ExecutorKind,
   PlanApproval,
   Run,
@@ -433,6 +435,22 @@ function useWrite<V, R>(
   });
 }
 
+/**
+ * Andy's Merge (AI-388, ADR-0157): puts the PR in its repo's merge queue with his click as the
+ * owner's approval. Answers merged, queued with its place, or waiting with every reason.
+ */
+export function useMergePr(projectId: string) {
+  const api = useApi();
+  return useWrite(async (body: { repo: string; number: number }) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/merges", {
+        params: { path: { projectId } },
+        body,
+      }),
+    ),
+  );
+}
+
 /** Andy's clear of a quota idle (AI-74): discards the reading holding dispatch at the reserve. */
 export function useClearQuotaIdle() {
   const api = useApi();
@@ -553,6 +571,8 @@ export function useUpdateProject(projectId: string) {
       executor?: ExecutorKind;
       emailNotifications?: boolean;
       environments?: EnvironmentPolicy;
+      deployKind?: DeployKind;
+      prSync?: PrSync;
     }) =>
       unwrap(
         await api.PATCH("/api/projects/{projectId}", { params: { path: { projectId } }, body }),
@@ -918,5 +938,118 @@ export function useRevertSettingsChange(projectId: string) {
         params: { path: { projectId, changeId } },
       }),
     ),
+  );
+}
+
+/**
+ * One environment's deployments, newest first, each with its release notes (AI-189: M6.10, over
+ * AI-183: M6.9's listing). Polled slowly, so a deploy that finishes shows up.
+ */
+export function useReleases(projectId: string, env: "prod" | "dev") {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["releases", projectId, env],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/releases", {
+          params: { path: { projectId }, query: { env } },
+        }),
+      ),
+  });
+}
+
+/**
+ * What promote and rollback would ship by default (AI-199: M6.12): the newest prod and dev
+ * deployments from the releases listing, which the component reads with the domain's rules.
+ */
+export function useReleaseTargets(projectId: string, withDev: boolean) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["release-targets", projectId, withDev],
+    queryFn: async () => {
+      const read = async (env: "prod" | "dev") =>
+        unwrap(
+          await api.GET("/api/projects/{projectId}/releases", {
+            params: { path: { projectId }, query: { env, limit: 20 } },
+          }),
+        ).items.map((i) => i.deployment);
+      return { prod: await read("prod"), dev: withDev ? await read("dev") : [] };
+    },
+  });
+}
+
+/** A project's recent promote and rollback requests, newest first (AI-199: M6.12). */
+export function useReleaseRequests(projectId: string) {
+  const api = useApi();
+  return useQuery({
+    ...useLivePoll("slow"),
+    queryKey: ["release-requests", projectId],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/releases/requests", {
+          params: { path: { projectId }, query: { limit: 5 } },
+        }),
+      ).requests,
+  });
+}
+
+/** Andy's promote to prod (AI-199: M6.12): records a request and starts release.yml. */
+export function usePromote(projectId: string) {
+  const api = useApi();
+  return useWrite(async (body: { digest?: string }) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/releases/promote", {
+        params: { path: { projectId } },
+        body,
+      }),
+    ),
+  );
+}
+
+/** Andy's rollback (AI-199: M6.12): records a request and starts release.yml. */
+export function useRollback(projectId: string) {
+  const api = useApi();
+  return useWrite(async (body: { environment?: "prod" | "dev"; revision?: string }) =>
+    unwrap(
+      await api.POST("/api/projects/{projectId}/releases/rollback", {
+        params: { path: { projectId } },
+        body,
+      }),
+    ),
+  );
+}
+
+/**
+ * A project's logo (AI-393), fetched only while it has one and once per `logoUpdatedAt`: the
+ * stamp is in the key, so a new upload refetches and an unchanged one never does.
+ */
+export function useProjectLogo(projectId: string, logoUpdatedAt: string | null) {
+  const api = useApi();
+  return useQuery({
+    queryKey: ["project-logo", projectId, logoUpdatedAt],
+    enabled: logoUpdatedAt !== null,
+    staleTime: Infinity,
+    queryFn: async () =>
+      unwrap(await api.GET("/api/projects/{projectId}/logo", { params: { path: { projectId } } })),
+  });
+}
+
+/** Uploads a logo (AI-393); the API refuses a bad file with its reason. */
+export function useSetProjectLogo(projectId: string) {
+  const api = useApi();
+  return useWrite(async (body: { format: "svg" | "png"; data: string }) =>
+    unwrap(
+      await api.PUT("/api/projects/{projectId}/logo", { params: { path: { projectId } }, body }),
+    ),
+  );
+}
+
+/** Removes the logo (AI-393): the default mark shows again. */
+export function useRemoveProjectLogo(projectId: string) {
+  const api = useApi();
+  return useWrite(async () =>
+    unwrap(await api.DELETE("/api/projects/{projectId}/logo", { params: { path: { projectId } } })),
   );
 }

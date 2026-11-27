@@ -9,6 +9,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -19,9 +20,11 @@ import {
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, GripVertical } from "lucide-react";
 import { MilestoneStatus } from "@andy/contracts";
 import { milestoneReorder } from "@andy/domain";
+import { DRAG_PREVIEW_CLASS, DragPreview, verticalOnly } from "@/components/DragPreview";
 import { MilestoneCaseView } from "@/components/MilestoneCase";
 import { MILESTONE_STATUS } from "@/components/MilestoneControls";
 import { PageHeader } from "@/components/PageHeader";
+import { ProjectMark } from "@/components/ProjectMark";
 import { ListSkeleton } from "@/components/PageSkeleton";
 import { QueryError } from "@/components/Status";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +32,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Segmented } from "@/components/ui/segmented";
 import { unwrap, useApi } from "@/lib/api";
-import { useReorderMilestones, useSetMilestoneStatus } from "@/lib/queries";
+import { useProjects, useReorderMilestones, useSetMilestoneStatus } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import type { components } from "@/lib/api.gen";
 import { showsError, useLivePoll } from "@/lib/live";
@@ -149,16 +152,18 @@ function ProjectSection({
   const byKey = new Map(r.epics.map((e) => [e.key, e]));
   const loose = r.noMilestone.flatMap((k) => byKey.get(k) ?? []);
   const milestones = r.milestones.filter((m) => shows(m, show));
+  const logoUpdatedAt = useProjects().data?.find((p) => p.id === r.projectId)?.logoUpdatedAt;
   return (
     <section aria-label={r.projectName} className="space-y-2">
       {heading && (
         <h3 className="flex items-center gap-2 text-md font-semibold">
-          <span
-            aria-hidden
-            className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm bg-foreground px-1 text-2xs font-semibold text-background"
-          >
-            {r.projectKey}
-          </span>
+          <ProjectMark
+            project={{
+              id: r.projectId,
+              key: r.projectKey,
+              logoUpdatedAt: logoUpdatedAt ?? null,
+            }}
+          />
           {r.projectName}
         </h3>
       )}
@@ -246,6 +251,9 @@ function MilestoneList({
 }) {
   const reorder = useReorderMilestones(projectId);
   const [pending, setPending] = useState<string[] | null>(null);
+  // The row being dragged, drawn under the pointer (AI-396), and whether it is over the list.
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [overList, setOverList] = useState(false);
   const byId = new Map(milestones.map((m) => [m.id, m]));
   const shown = pending ? pending.flatMap((id) => byId.get(id) ?? []) : milestones;
   const sensors = useSensors(
@@ -253,6 +261,7 @@ function MilestoneList({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const canMove = milestones.length > 1;
+  const dragged = activeId ? byId.get(activeId) : undefined;
 
   function move(id: string, to: number) {
     const writes = milestoneReorder(shown, id, to);
@@ -264,7 +273,13 @@ function MilestoneList({
     reorder.mutate(writes, { onSettled: () => setPending(null) });
   }
 
+  function endDrag() {
+    setActiveId(null);
+    setOverList(false);
+  }
+
   function onDragEnd({ active, over }: DragEndEvent) {
+    endDrag();
     if (!over || active.id === over.id) return;
     move(
       String(active.id),
@@ -274,9 +289,23 @@ function MilestoneList({
 
   return (
     <div className="space-y-2">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={({ active }: DragStartEvent) => setActiveId(String(active.id))}
+        onDragOver={({ over }) => setOverList(over !== null)}
+        onDragCancel={endDrag}
+        onDragEnd={onDragEnd}
+      >
         <SortableContext items={shown.map((m) => m.id)} strategy={verticalListSortingStrategy}>
-          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised">
+          {/* The list a dragged row is over takes the selected edge and fill (AI-396). */}
+          <ul
+            data-drop-over={overList || undefined}
+            className={cn(
+              "divide-y divide-border overflow-hidden rounded-lg border",
+              overList ? "border-selected-edge bg-selected" : "border-border bg-raised",
+            )}
+          >
             {shown.map((m, i) => (
               <MilestoneRow
                 key={m.id}
@@ -296,6 +325,21 @@ function MilestoneList({
             ))}
           </ul>
         </SortableContext>
+        <DragPreview modifiers={[verticalOnly]}>
+          {dragged ? (
+            <div
+              aria-hidden
+              data-drag-overlay
+              className={cn(
+                "flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-raised px-3 py-2 text-sm",
+                DRAG_PREVIEW_CLASS,
+              )}
+            >
+              <GripVertical className="size-4 shrink-0 text-muted-foreground" />
+              <MilestoneSummary milestone={dragged} />
+            </div>
+          ) : null}
+        </DragPreview>
       </DndContext>
       {reorder.error && <QueryError error={reorder.error} />}
     </div>
@@ -318,10 +362,16 @@ function MilestoneRow({
   reorder: { up: (() => void) | null; down: (() => void) | null; busy: boolean } | null;
 }) {
   const [open, setOpen] = useState(false);
-  const status = MILESTONE_STATUS[m.done ? "done" : m.status];
   const Chevron = open ? ChevronDown : ChevronRight;
-  const { setNodeRef, setActivatorNodeRef, attributes, listeners, transform, transition } =
-    useSortable({ id: m.id, disabled: !reorder || reorder.busy });
+  const {
+    setNodeRef,
+    setActivatorNodeRef,
+    attributes,
+    listeners,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: m.id, disabled: !reorder || reorder.busy });
   const style = {
     transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
     transition,
@@ -332,7 +382,13 @@ function MilestoneRow({
       style={style}
       data-milestone={m.id}
       data-status={m.done ? "done" : m.status}
-      className={m.status === "parked" ? "opacity-60" : undefined}
+      data-dragging={isDragging || undefined}
+      // While dragged, the row stays as a sunken placeholder of its size, its content hidden but
+      // still read out; the copy under the pointer is the list's DragPreview.
+      className={cn(
+        m.status === "parked" && "opacity-60",
+        isDragging && "bg-muted [&>*]:opacity-0",
+      )}
     >
       <div className="flex flex-wrap items-start">
         {reorder && (
@@ -379,13 +435,7 @@ function MilestoneRow({
           className="flex min-h-11 min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left text-sm hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring"
         >
           <Chevron className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 flex-1 basis-48">
-            <span className="block font-medium">{m.name}</span>
-            {!m.done && <span className="block text-muted-foreground">{m.outcome}</span>}
-          </span>
-          {m.done && <Badge variant={status.variant}>{status.label}</Badge>}
-          <Progress done={m.progress.done} total={m.progress.total} />
-          {!m.done && <CountChips counts={m.counts} />}
+          <MilestoneSummary milestone={m} />
         </button>
         {!m.done && (
           <div className="shrink-0 py-1.5 pr-2 max-sm:basis-full max-sm:pb-2 max-sm:pl-9">
@@ -410,6 +460,22 @@ function MilestoneRow({
         </div>
       )}
     </li>
+  );
+}
+
+/** A milestone's name, outcome, progress and counts: its row, and the row's dragged copy. */
+function MilestoneSummary({ milestone: m }: { milestone: Milestone }) {
+  const status = MILESTONE_STATUS[m.done ? "done" : m.status];
+  return (
+    <>
+      <span className="min-w-0 flex-1 basis-48">
+        <span className="block font-medium">{m.name}</span>
+        {!m.done && <span className="block text-muted-foreground">{m.outcome}</span>}
+      </span>
+      {m.done && <Badge variant={status.variant}>{status.label}</Badge>}
+      <Progress done={m.progress.done} total={m.progress.total} />
+      {!m.done && <CountChips counts={m.counts} />}
+    </>
   );
 }
 

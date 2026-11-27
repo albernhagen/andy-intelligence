@@ -7,6 +7,9 @@ import {
   RUNNER_LIMITS,
   PLAN_REASON_MAX,
   PlanOutput,
+  PACKAGE_LIMITS,
+  PlanPackages,
+  type PlanPackage,
   PR_SYNC_EMPTY,
   RUN_PROMPT_MAX,
   RUN_SUMMARY_MAX,
@@ -27,6 +30,9 @@ import {
   type RunUsage,
   type ProviderKey,
   type QuotaLevel,
+  type Deployment,
+  type VerifyTarget,
+  VERIFY_LIMITS,
   type RouteSkip,
   type Question,
   type Route,
@@ -46,6 +52,7 @@ import {
   type WorkTracker,
   type NightLaunchStore,
   type BaseBranch,
+  BREAKDOWN_LIMITS,
 } from "@andy/contracts";
 import { buildBaseBranch } from "./night-branch";
 import type { EpicMode } from "./epic-mode";
@@ -71,6 +78,7 @@ import {
   planPrompt,
   planRequired,
   planState,
+  packagesNeeded,
   renderPlan,
   type PlanState,
 } from "./plans";
@@ -80,6 +88,7 @@ import { briefContext } from "./brief-context";
 import type { NightUnattended } from "./night-unattended";
 import { RefineGate } from "./refine-gate";
 import { DomainError } from "./errors";
+import type { EpicBreakdownService } from "./epic-breakdown";
 import { ticketByRef } from "./ticket-reads";
 import { requireCan } from "./permissions";
 import { TIER_ROUTES } from "./tiers";
@@ -91,6 +100,7 @@ import {
   type ResolvedRoute,
 } from "./route-resolver";
 import { DIGEST_SUMMARY_RUN, type DigestSummaryResults } from "./digest-summary";
+import { VERIFY_RUN, type VerifyResults } from "./verify-dispatch";
 import { afterFailure, deadlineAction, MAX_RUN_ATTEMPTS } from "./watchdog";
 import { syncPrompt, type SyncTarget } from "./sync-runs";
 import { winsNightSlot, type NightSlot } from "./night-budget";
@@ -173,6 +183,9 @@ export const SYNC_RUN_LIMITS = { maxTurns: 80, timeoutMinutes: 105 } as const;
 
 /** Runs that count against a project's dial: every step but sync (ADR-0083). */
 const countsForDial = (r: Run) => r.step !== "sync";
+
+/** A plan-epic task's caps (ADR-0028), read-only like plan-project: turns and deadline. */
+export const EPIC_TASK_LIMITS = { maxTurns: 40, timeoutMinutes: 45 } as const;
 
 /**
  * Refine runs per ticket, counting every run that reached the executor (ADR-0028: each one
@@ -293,6 +306,13 @@ export class RunService {
     private readonly digestSummaries: DigestSummaryResults | null = null,
     /** The `epic` merge mode (AI-216): a child ticket builds on its epic's branch; null: off. */
     private readonly epicMode: Pick<EpicMode, "baseBranch"> | null = null,
+    /** Epic breakdowns (AI-383): checks and prompts plan-epic tasks, stores results; null: off. */
+    private readonly epicTasks: Pick<
+      EpicBreakdownService,
+      "prepareTask" | "applyRun"
+    > | null = null,
+    /** Applies verify verdicts (AI-188: M6.7); null: verify tasks can't start. */
+    private readonly verifyResults: Pick<VerifyResults, "apply" | "target" | "ended"> | null = null,
   ) {}
 
   /** The refine gate with this service's tracker, clock and night launches. */
@@ -464,6 +484,90 @@ export class RunService {
   }
 
   /**
+   * A plan-epic agent task the owner asks for (AI-383, ADR-0155): drafts one top-level epic's
+   * child tickets as a proposal. A run on the epic, read-only on the cloud executor, never
+   * retried. Refused (with the reason) when the epic can't take one (`prepareTask`), while one is
+   * in flight for the epic, after BREAKDOWN_LIMITS.draftsPerEpic dispatched ones, at the project's
+   * dial or the global cap; the oldest wins a race, as for `requestProjectTask`.
+   */
+  async requestEpicTask(projectId: string, epicRef: string, actor: EventActor): Promise<Run> {
+    requireCan(actor, "start_run", projectId);
+    if (!this.executor || !this.epicTasks) {
+      throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
+    }
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
+    const repo = project.repos[0];
+    if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
+    const { epic, prompt } = await this.epicTasks.prepareTask(project, epicRef, repo);
+    const drafts = (await this.runs.listForTicket(projectId, epic.id)).filter(
+      (r) => r.step === "plan-epic",
+    );
+    if (drafts.some((r) => isInFlight(r, this.now()))) {
+      throw new DomainError("run_limit", `a plan-epic task for ${epic.key} is in flight`);
+    }
+    if (drafts.filter(wasDispatched).length >= BREAKDOWN_LIMITS.draftsPerEpic) {
+      throw new DomainError(
+        "run_limit",
+        `${epic.key} has used its ${BREAKDOWN_LIMITS.draftsPerEpic} drafting tasks: write the tickets by hand or submit them over MCP (submit_epic_breakdown)`,
+        [`limit: ${BREAKDOWN_LIMITS.draftsPerEpic}`],
+      );
+    }
+    const everywhere = await this.inFlightEverywhere();
+    const active = everywhere.filter((r) => r.projectId === projectId);
+    if (active.filter(countsForDial).length >= project.runsAtOnce) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} is at its agent-tasks-at-once dial`,
+        [`limit: ${project.runsAtOnce}`],
+      );
+    }
+    if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
+      throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached", [
+        `limit: ${MAX_ACTIVE_RUNS_GLOBAL}`,
+      ]);
+    }
+    const run = await this.runs.create({
+      projectId,
+      ticketId: epic.id,
+      step: "plan-epic",
+      route: TIER_ROUTES.strong,
+      tier: "strong",
+      deadline: new Date(
+        this.now().getTime() + EPIC_TASK_LIMITS.timeoutMinutes * 60_000,
+      ).toISOString(),
+      prompt,
+      maxTurns: EPIC_TASK_LIMITS.maxTurns,
+    });
+    const after = await this.inFlightEverywhere();
+    const inProject = after.filter((r) => r.projectId === projectId);
+    const won =
+      after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
+      inProject
+        .filter(countsForDial)
+        .slice(0, project.runsAtOnce)
+        .some((r) => r.id === run.id) &&
+      inProject.find((r) => r.ticketId === epic.id && r.step === "plan-epic")?.id === run.id;
+    if (!won) {
+      await this.fail(run.id, "another agent task started at the same time");
+      throw new DomainError("run_limit", `project ${project.key} has no free agent task slot`);
+    }
+    const budget = await this.reserveSpend(run);
+    try {
+      return await this.dispatchRun(
+        run,
+        epic,
+        repo,
+        `Started a plan-epic task (${run.route.model})`,
+        budget,
+      );
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
+  }
+
+  /**
    * The digest summary's agent task (AI-323, ADR-0137), started by `DigestSummaryService`: no
    * ticket, no tools, the `summarize` step's route. Refused while paused, at the quota reserve
    * (`quota`: the subscriptions' levels), at a run cap or with a summarize task in flight; the
@@ -556,6 +660,112 @@ export class RunService {
   }
 
   /**
+   * A deployment's verify task (AI-188: M6.7, ADR-0159), started by `VerificationService`: no
+   * ticket, read-only, the `verify` step's route (fast tier), `VERIFY_RUN`'s turns and deadline.
+   * Refused while paused, at the quota reserve, at the project's dial or the global cap, with a
+   * verify task in flight in the project, or when builds are off; the service then leaves the
+   * deployment waiting. One per project in flight; the oldest wins a race (ADR-0079).
+   */
+  async requestVerify(
+    projectId: string,
+    input: {
+      deployment: Deployment;
+      ticketIds: string[];
+      prompt: string;
+      quota: Partial<Record<string, QuotaLevel>>;
+    },
+  ): Promise<Run> {
+    if (!this.executor || !this.verifyResults) {
+      throw new DomainError("executor_unavailable", "no executor: connect GitHub first");
+    }
+    const project = await this.tracker.getProject(projectId);
+    if (!project) throw notFound("project", projectId);
+    const repo = project.repos[0];
+    if (!repo) throw new DomainError("invalid_repo", `project ${project.key} has no repo`);
+    if (project.paused) throw new DomainError("paused", `dispatch is paused for ${project.key}`);
+    if (!project.buildEnabled) {
+      throw new DomainError("not_buildable", `builds are off for project ${project.key}`);
+    }
+    if (input.ticketIds.length === 0 || input.ticketIds.length > VERIFY_LIMITS.tickets) {
+      throw new DomainError("invalid_field", "a verify task takes 1 to 50 tickets");
+    }
+    const resolved = resolveRoute("verify", "fast", await this.routingOf(projectId));
+    if (!resolved.route || resolved.route.harness !== "claude-code") {
+      const why = resolved.route
+        ? `its route is ${resolved.route.harness}; verify runs only on claude-code`
+        : skippedText(resolved.skipped);
+      throw new DomainError(
+        "no_route",
+        `no usable verify route in the ${resolved.tier} tier: ${why}`,
+      );
+    }
+    const route = resolved.route;
+    if (
+      PROVIDER_BILLING[route.provider] === "subscription" &&
+      input.quota[route.provider] === "pause"
+    ) {
+      throw new DomainError("quota_reserve", `${route.provider} is at its quota reserve`);
+    }
+    const sameStep = (r: Run) => r.ticketId === null && r.step === "verify";
+    const everywhere = await this.inFlightEverywhere();
+    const active = everywhere.filter((r) => r.projectId === projectId);
+    if (active.some(sameStep)) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} already has a verify task in flight`,
+      );
+    }
+    if (active.filter(countsForDial).length >= project.runsAtOnce) {
+      throw new DomainError(
+        "run_limit",
+        `project ${project.key} is at its agent-tasks-at-once dial`,
+      );
+    }
+    if (everywhere.length >= MAX_ACTIVE_RUNS_GLOBAL) {
+      throw new DomainError("run_limit", "the cap on agent tasks across all projects is reached");
+    }
+    const run = await this.runs.create({
+      projectId,
+      ticketId: null,
+      step: "verify",
+      route,
+      routeSkips: routeSkips(resolved),
+      tier: resolved.tier,
+      deadline: new Date(this.now().getTime() + VERIFY_RUN.timeoutMinutes * 60_000).toISOString(),
+      prompt: input.prompt,
+      maxTurns: VERIFY_RUN.maxTurns,
+      deploymentId: input.deployment.id,
+      verifyTicketIds: input.ticketIds,
+    });
+    const after = await this.inFlightEverywhere();
+    const inProject = after.filter((r) => r.projectId === projectId);
+    const won =
+      after.slice(0, MAX_ACTIVE_RUNS_GLOBAL).some((r) => r.id === run.id) &&
+      inProject
+        .filter(countsForDial)
+        .slice(0, project.runsAtOnce)
+        .some((r) => r.id === run.id) &&
+      inProject.find(sameStep)?.id === run.id;
+    if (!won) {
+      await this.fail(run.id, "another agent task started at the same time");
+      throw new DomainError("run_limit", `project ${project.key} has no free agent task slot`);
+    }
+    const budget = await this.reserveSpend(run);
+    try {
+      return await this.dispatchRun(
+        run,
+        null,
+        repo,
+        `Started a verify task (${route.model})`,
+        budget,
+      );
+    } catch (err) {
+      await this.closeSpend(run);
+      throw err;
+    }
+  }
+
+  /**
    * `retryOf`: the failed run this one retries (the watchdog's automatic retry). A build start
    * on a ticket that needs an approved plan (ADR-0050) starts a plan run instead and returns it.
    * `avoidOverlap` (the dispatcher's starts, ADR-0080): a build whose touches overlap an older
@@ -609,9 +819,14 @@ export class RunService {
       await this.checkBuildable(await this.withEpic(ticket), project);
       const plan = await this.planStateOf(ticket, questions, project.planApproval);
       if (startable === "build") {
-        const gate = buildGate(planRequired(project.planApproval, ticket), plan, ticket, retryOf);
+        // AI-386: a build that stopped for packages its plan didn't name gets a plan first,
+        // whatever the policy, so Andy sees every package before it is installed.
+        const needed = packagesNeeded(await this.runs.listForTicket(projectId, ticketId));
+        const required = planRequired(project.planApproval, ticket) || needed.length > 0;
+        const gate = buildGate(required, plan, ticket, retryOf);
         approved = gate.approved;
         startable = gate.step;
+        if (startable === "build") checkPlanPackages(ticket, approved, !!opts.runner);
       }
       if (startable === "plan") await this.checkPlannable(ticket, plan);
     }
@@ -1117,7 +1332,30 @@ export class RunService {
       baseBranch: run.step === "build" ? run.baseBranch : null,
       billingType,
       maxBudgetUsd,
+      packages: await this.packagesFor(run),
+      verify: await this.verifyTargetOf(run),
     };
+  }
+
+  /** A verify task's deployed URL and commit (AI-188), from its deployment; null otherwise. */
+  private async verifyTargetOf(run: Run): Promise<VerifyTarget | null> {
+    if (run.step !== "verify") return null;
+    const target = this.verifyResults ? await this.verifyResults.target(run) : null;
+    if (!target) {
+      throw new DomainError("run_finished", `run ${run.id}'s deployment has no URL to verify`);
+    }
+    return target;
+  }
+
+  /**
+   * AI-386: a build's packages, from the approved plan its prompt carries (ADR-0156); the
+   * executor's trusted `deps` job installs them before the agent. Empty for other runs.
+   */
+  private async packagesFor(run: Run): Promise<PlanPackage[]> {
+    if (run.step !== "build" || !run.planRunId) return [];
+    const plan = await this.runs.get(run.planRunId);
+    if (plan?.projectId !== run.projectId || plan.planDecision?.decision !== "approved") return [];
+    return plan.plan?.packages ?? [];
   }
 
   /** How the run's route is billed; null for an unknown run. */
@@ -1206,6 +1444,19 @@ export class RunService {
         summary = applied.summary.slice(0, RUN_SUMMARY_MAX);
       }
     }
+    // AI-383: stored as a breakdown waiting for Andy, or the rejected result fails the run.
+    if (run.step === "plan-epic" && status === "succeeded") {
+      const applied = this.epicTasks
+        ? await this.epicTasks.applyRun(run, result.output)
+        : { error: "epic breakdowns aren't wired on this instance" };
+      if ("error" in applied) {
+        status = "failed";
+        error = applied.error;
+        log("WARNING", "plan-epic result rejected", { runId: run.id, error });
+      } else {
+        summary = applied.summary.slice(0, RUN_SUMMARY_MAX);
+      }
+    }
     // AI-323: the day's summary is stored, or the rejected answer fails the run and the summary.
     if (run.step === "summarize" && status === "succeeded") {
       const applied = this.digestSummaries
@@ -1216,6 +1467,19 @@ export class RunService {
         error = applied.error;
       } else {
         summary = applied.summary;
+      }
+    }
+    // AI-188: the verdict moves its tickets, or the rejected answer fails the run (none move).
+    if (run.step === "verify" && status === "succeeded") {
+      const applied = this.verifyResults
+        ? await this.verifyResults.apply(run, result.output)
+        : { error: "verify tasks aren't wired on this instance" };
+      if ("error" in applied) {
+        status = "failed";
+        error = applied.error;
+        log("WARNING", "verify result rejected", { runId: run.id, error });
+      } else {
+        summary = applied.summary.slice(0, RUN_SUMMARY_MAX);
       }
     }
     if (run.step === "build") {
@@ -1260,6 +1524,7 @@ export class RunService {
                 branch: built.branch,
                 toolingFiles: built.toolingFiles,
                 verification: built.verification,
+                neededPackages: built.neededPackages,
                 links: { ...run.links, pullRequest: built.pullRequest ?? undefined },
               }
             : {}),
@@ -1288,6 +1553,10 @@ export class RunService {
           ? `\n\nChanges tooling or dependency files (review before running the branch locally): ${built.toolingFiles.join(", ")}`
           : "";
       const kept = status === "failed" && built?.branch ? `\n\nBranch kept: ${built.branch}` : "";
+      const needs =
+        built && built.neededPackages.length > 0
+          ? `\n\nNeeds you: the build needs packages its plan didn't name: ${built.neededPackages.join(", ")}. Start the build again: a new plan names them, and the build installs them once you approve it.`
+          : "";
       const decide = planned
         ? "\n\nNeeds you: approve or reject this plan in the ticket's Activity (or MCP approve_plan / reject_plan). The build starts when you approve."
         : "";
@@ -1299,7 +1568,7 @@ export class RunService {
         ? `${syncComment(done, synced, status, error, summary)}${syncTooling}`
         : status === "succeeded"
           ? `${summary ?? "The agent task finished without a summary."}${asks}${lateRefine}${pr}${tooling}${decide}`
-          : `The ${done.step} task failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}`;
+          : `The ${done.step} task failed.${error ? ` ${error}` : ""}${summary ? `\n\n${summary}` : ""}${kept}${needs}`;
       await this.tracker.addComment(done.projectId, done.ticketId, body, `agent:${run.id}`);
     }
     // A reported failure gets the watchdog policy (one retry, then Needs-you); a refine result
@@ -1308,6 +1577,8 @@ export class RunService {
     else if (result.status === "failed") await this.retryOrFlag(done, "reported a failure");
     else if (done.step === "sync" && status === "failed") await this.flagTicket(done);
     else if (done.step === "refine" && status === "failed") await this.flagFailedRefine(done);
+    // AI-383: a rejected draft flags the epic, so Andy sees it was lost (the comment says why).
+    else if (done.step === "plan-epic" && status === "failed") await this.flagTicket(done);
     else if (done.step === "build" && status === "failed") {
       await this.flagTicket(done);
       await this.stopForTheNight(done, `its build was rejected: ${error ?? "no reason recorded"}`);
@@ -1346,6 +1617,9 @@ export class RunService {
   private async runEnded(run: Run): Promise<void> {
     // AI-323: a summarize run that ended without storing its summary fails it (no-op otherwise).
     if (run.step === "summarize" && this.digestSummaries) await this.digestSummaries.ended(run);
+    // AI-188: a verify task that ended without a verdict leaves its deployment waiting again, so
+    // the retry below starts another (each ticket in at most MAX_VERIFY_TASKS_PER_TICKET).
+    if (run.step === "verify" && this.verifyResults) await this.verifyResults.ended(run);
     if (!this.onRunEnded) return;
     await this.onRunEnded(run.projectId).catch((err: unknown) =>
       log("ERROR", "next run after a run ended failed", { runId: run.id, error: String(err) }),
@@ -1740,9 +2014,23 @@ export class RunService {
       error =
         "It finished without opening a pull request (no changes, or the PR couldn't be opened).";
     }
+    const neededPackages = parsed.success ? parsed.data.neededPackages : [];
+    // AI-386: the build stopped for packages its plan didn't name; that, not a missing PR, is why.
+    if (neededPackages.length > 0) {
+      error = `It stopped: it needs packages its plan didn't name (${neededPackages.join(", ")}).`;
+    }
     const toolingFiles = toolingOf(result);
     const verification = parsed.success ? parsed.data.verification : [];
-    return { plan, branch, pullRequest, summary, error, toolingFiles, verification };
+    return {
+      plan,
+      branch,
+      pullRequest,
+      summary,
+      error,
+      toolingFiles,
+      verification,
+      neededPackages,
+    };
   }
 
   /**
@@ -1797,7 +2085,7 @@ export class RunService {
   private async checkRefinable(ticket: Ticket): Promise<void> {
     if (ticket.stage !== "backlog") {
       throw new DomainError("not_refinable", `${ticket.key} is in ${ticket.stage}`, [
-        "refine runs on Backlog tickets; move it back to Backlog to re-refine",
+        "refine runs on Up next tickets; move it back to Backlog, then into Up next, to re-refine",
       ]);
     }
     if (ticket.archived) {
@@ -2059,7 +2347,10 @@ export class RunService {
   private async retryOrFlag(run: Run, reason: string): Promise<"retried" | "flagged"> {
     if (!run.ticketId) return "flagged";
     let why = `The ${run.step} task ${reason}`;
-    if (run.step === "sync") {
+    if (run.step === "plan-epic") {
+      // AI-383: each drafting task counts against the epic's cap; Andy decides whether to retry.
+      why += "; drafting tasks aren't retried";
+    } else if (run.step === "sync") {
       // No automatic retry (ADR-0083): the next move of main, or a run ending, queues another.
       why += "; sync tasks aren't retried";
     } else if (run.localRun) {
@@ -2335,6 +2626,37 @@ export function buildGate(
   return { step: "plan", approved: null };
 }
 
+/**
+ * AI-386: refuses a build whose approved plan's packages can't be installed: over the cap (a
+ * plan stored before a cap change), or on the local runner, which has no trusted install step.
+ */
+export function checkPlanPackages(
+  ticket: Pick<Ticket, "key">,
+  approved: Run | null,
+  local: boolean,
+): void {
+  const packages = approved?.plan?.packages ?? [];
+  if (packages.length === 0) return;
+  const parsed = PlanPackages.safeParse(packages);
+  if (!parsed.success) {
+    throw new DomainError(
+      "not_buildable",
+      `${ticket.key}'s plan names packages the build can't install`,
+      [
+        issuesOf(parsed.error),
+        `limit: ${PACKAGE_LIMITS.maxPackages} per ticket; reject the plan with a reason`,
+      ],
+    );
+  }
+  if (local) {
+    throw new DomainError(
+      "not_buildable",
+      `${ticket.key}'s plan names packages, and the local runner can't install them`,
+      ["run this build on GitHub Actions (set its executor to actions)"],
+    );
+  }
+}
+
 /** Up to five schema issues, one line. */
 function issuesOf(error: { issues: readonly { path: PropertyKey[]; message: string }[] }): string {
   return error.issues
@@ -2438,6 +2760,8 @@ interface BuildRecord {
   error: string | null;
   toolingFiles: string[];
   verification: Run["verification"];
+  /** AI-386: packages the build needed that its plan didn't name. */
+  neededPackages: string[];
 }
 
 /** The executor handle a dispatched run was recorded with; null if it never got one. */

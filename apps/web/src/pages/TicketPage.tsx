@@ -13,10 +13,12 @@ import {
 import { Activity } from "@/components/Activity";
 import { AskQuestionForm } from "@/components/AskQuestionForm";
 import { CancelArchiveControls } from "@/components/CancelArchiveControls";
+import { EpicBreakdownPanel } from "@/components/EpicBreakdown";
 import { EpicChildren } from "@/components/EpicChildren";
 import { OverridesEditor } from "@/components/OverridesEditor";
 import { RouteLayers } from "@/components/RouteLayers";
 import { PullRequestLink, waitingPullRequest } from "@/components/PullRequestLink";
+import { MergeButton, repoOfPullRequest } from "@/components/inbox/MergeButton";
 import {
   EditableList,
   InlineText,
@@ -244,7 +246,8 @@ function StatusLine({ ticket }: { ticket: Ticket }) {
 
 /**
  * Led by the decision (AI-336): the next move, open questions and the PR first; then the title.
- * An epic then shows its outcome, tickets, milestone and night plan before its fields.
+ * An epic then shows its outcome, breakdown (AI-383), tickets, milestone and night plan before
+ * its fields.
  */
 function Story({ ticket: t }: { ticket: Ticket }) {
   const title = useTicketSave(t, "Title");
@@ -278,6 +281,7 @@ function Story({ ticket: t }: { ticket: Ticket }) {
       {isEpic && (
         <>
           <Outcome ticket={t} />
+          <EpicBreakdownPanel ticket={t} />
           <EpicChildren
             {...pathOf(t)}
             milestone={
@@ -314,6 +318,9 @@ function Story({ ticket: t }: { ticket: Ticket }) {
 function Next({ ticket: t }: { ticket: Ticket }) {
   const events = useEvents(pathOf(t)).data ?? [];
   const repos = useProjects().data?.find((p) => p.id === t.projectId)?.repos ?? [];
+  // AI-388: in Ready for review, its open PR can be merged from here, through the merge queue.
+  const pr = t.stage === "ready_for_review" ? waitingPullRequest(events, repos) : null;
+  const repo = pr ? repoOfPullRequest(pr.url) : null;
   return (
     <section aria-label="Next" className="space-y-2">
       <MoveControls
@@ -321,6 +328,14 @@ function Next({ ticket: t }: { ticket: Ticket }) {
         aside={
           <>
             <PullRequestLink events={events} repos={repos} />
+            {pr && repo && (
+              <MergeButton
+                projectId={t.projectId}
+                repo={repo}
+                number={pr.number}
+                variant="outline"
+              />
+            )}
             <Readiness {...pathOf(t)} />
           </>
         }

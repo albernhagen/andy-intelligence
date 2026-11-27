@@ -1,6 +1,6 @@
 ---
 title: "Features: one file each, index on demand"
-status: proposed (AI-141; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-20
 amends: 0022 (features record), 0053 (features record), 0078 (low-risk docs paths)
 ---

@@ -35,6 +35,12 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["list_needs_me", "answer_question"],
   },
   {
+    action: "Merge a PR through the repo's merge queue (AI-220, AI-388)",
+    routes: [`POST ${P}/merges`],
+    tools: ["merge_pr"],
+    note: "Only the web route carries Andy's approval, which waives what the merge mode keeps for him (ADR-0157); merge_pr follows the mode, since coordinator sessions call it with Andy's MCP grant.",
+  },
+  {
     action: "Approve or reject an agent's plan",
     routes: [`POST ${T}/runs/:runId/plan-decision`],
     tools: ["approve_plan", "reject_plan"],
@@ -49,6 +55,24 @@ export const PARITY: readonly ParityEntry[] = [
     ],
     tools: ["submit_project_plan", "list_needs_me", "approve_project_plan", "reject_project_plan"],
     note: "A Claude session writes the plan (plan-project.md); the web shows and decides it.",
+  },
+  {
+    action: "Epic breakdown: start, submit, read, decide (AI-383)",
+    routes: [
+      `POST ${T}/breakdown/agent-task`,
+      `POST ${T}/breakdown`,
+      `GET ${T}/breakdown`,
+      "GET /api/epic-breakdowns/waiting",
+      `POST ${T}/breakdown/decision`,
+    ],
+    tools: [
+      "start_epic_breakdown",
+      "submit_epic_breakdown",
+      "list_needs_me",
+      "approve_epic_breakdown",
+      "reject_epic_breakdown",
+    ],
+    note: "One service (`EpicBreakdownService`, `RunService.requestEpicTask`), same caps and refusals. The web panel and inbox section come in a follow-up PR; a Claude session can draft by hand (plan-epic.md).",
   },
   {
     action: "Project brief: submit",
@@ -144,6 +168,11 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["dashboard"],
   },
   {
+    action: "Upload, read or remove a project's logo (AI-393)",
+    routes: [`GET ${P}/logo`, `PUT ${P}/logo`, `DELETE ${P}/logo`],
+    tools: ["get_project_logo", "set_project_logo", "remove_project_logo"],
+  },
+  {
     action: "Project list and settings",
     routes: ["GET /api/projects", `GET ${P}`, `PATCH ${P}`],
     tools: [
@@ -154,9 +183,11 @@ export const PARITY: readonly ParityEntry[] = [
       "set_daily_question_cap",
       "set_default_executor",
       "set_default_worker",
+      "set_deploy_kind",
       "set_email_notifications",
       "set_environments",
       "set_merge_mode",
+      "set_pr_sync",
       "set_paused",
       "set_plan_approval",
       "set_runs_at_once",
@@ -167,6 +198,12 @@ export const PARITY: readonly ParityEntry[] = [
     action: "Project setup checklist",
     routes: [`GET ${P}/setup`],
     tools: ["project_setup"],
+  },
+  {
+    action: "Onboarding steps: read, mark a hand step done (AI-381)",
+    routes: [`GET ${P}/onboarding`, `POST ${P}/onboarding/marks`],
+    tools: ["project_setup"],
+    note: "`project_setup` returns the steps as `onboarding` and marks with `mark`.",
   },
   {
     action: "Create a project",
@@ -264,6 +301,20 @@ export const PARITY: readonly ParityEntry[] = [
     tools: ["whats_new"],
   },
   {
+    action: "Releases: deployments with their tickets and release notes (AI-183: M6.9)",
+    routes: [`GET ${P}/releases`],
+    tools: ["list_releases"],
+  },
+  {
+    action: "Promote and rollback, and their requests (AI-199: M6.12)",
+    routes: [
+      `POST ${P}/releases/promote`,
+      `POST ${P}/releases/rollback`,
+      `GET ${P}/releases/requests`,
+    ],
+    tools: ["promote", "rollback", "list_release_requests"],
+  },
+  {
     action: "Ideate",
     routes: [`POST ${P}/ideate`],
     tools: ["ideate"],
@@ -323,13 +374,7 @@ export const PARITY: readonly ParityEntry[] = [
     tools: [],
     oneSide: "GitHub's manifest flow needs a browser.",
   },
-  {
-    action: "Merge a session PR by the merge mode",
-    routes: [],
-    tools: ["merge_pr"],
-    oneSide:
-      "For coordinator sessions (AI-220, ADR-0124); Andy merges in GitHub, which shows the same PR.",
-  },
+
   // ── Open gaps, each with its ticket ─────────────────────────────────────────
   {
     action: "The board, every stage",

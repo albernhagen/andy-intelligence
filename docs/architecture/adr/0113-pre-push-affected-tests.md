@@ -1,6 +1,6 @@
 ---
 title: "Pre-push runs only affected tests; CI keeps the full suite"
-status: proposed (AI-149; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-20
 amends: 0027
 ---

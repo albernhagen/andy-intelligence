@@ -11,4 +11,15 @@ describe("FixedWindowLimiter", () => {
     now = 1000;
     expect(limiter.tryTake()).toBe(true);
   });
+
+  it("GivenRepeatedRefusals_WhenAskingForTheFirst_ThenOnlyTheFirstInEachWindowCounts", () => {
+    let now = 0;
+    const limiter = new FixedWindowLimiter(1, 1000, () => now);
+    limiter.tryTake();
+    const firsts = [1, 2, 3].map(() => !limiter.tryTake() && limiter.firstRefusalInWindow());
+    expect(firsts).toEqual([true, false, false]);
+    now = 1000;
+    limiter.tryTake();
+    expect(!limiter.tryTake() && limiter.firstRefusalInWindow()).toBe(true);
+  });
 });

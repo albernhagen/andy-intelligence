@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { cancelDrag, holdMidDrag } from "./drag";
 import { expectPageFits, expectTouchTargets } from "./phone";
 
 /**
@@ -66,4 +67,14 @@ test("GivenThePhoneBoard_WhenAViewIsPicked_ThenTheUrlKeepsItAndOptionsHoldTheRes
   await page.getByRole("button", { name: "Options" }).click();
   await expect(page.getByRole("switch", { name: "Group by epic" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Options, 1 on" })).toBeVisible();
+});
+
+/** AI-396: on a phone too, the dragged card stays under the finger and fits the screen. */
+test("GivenThePhoneBoard_WhenACardIsDragged_ThenItsCopyShowsUnderThePointer", async ({ page }) => {
+  await openBoard(page);
+  await holdMidDrag(page, page.locator('[data-ticket="AI-3"]'), 20, 90);
+  await expect(page.locator("[data-drag-overlay]")).toBeVisible();
+  await expectPageFits(page);
+  await expect(page).toHaveScreenshot("phone-board-drag.png");
+  await cancelDrag(page);
 });

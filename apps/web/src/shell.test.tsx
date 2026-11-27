@@ -24,6 +24,16 @@ const pathname = (h: { router: { state: { location: { pathname: string } } } }) 
   h.router.state.location.pathname;
 
 describe("app shell", () => {
+  it("GivenTheDesktopShell_WhenItRenders_ThenTheSidebarOpensWithTheMarkAndProductName", async () => {
+    await twoProjects("/p/ai");
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    const sidebar = nav.closest("aside")!;
+
+    const brand = sidebar.firstElementChild!;
+    expect(brand.textContent).toBe("andy-intelligence");
+    expect(brand.querySelector("svg[data-logo]")).toBeTruthy();
+  });
+
   it("GivenItemsInTwoProjects_WhenAProjectScreenIsOpen_ThenTheSidebarCountsEachProject", async () => {
     const harness = await twoProjects("/p/ai");
     const main = await screen.findByRole("navigation", { name: "Main" });

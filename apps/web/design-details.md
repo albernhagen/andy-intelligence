@@ -82,3 +82,22 @@ In `src/components/ui/` (AI-369), on Radix. Each works by keyboard alone, shows 
 | `Skeleton`   | The shape of content while it loads; static, no pulse                                                                                                                                   |
 | `EmptyState` | What is missing and the one next step                                                                                                                                                   |
 | `Kbd`        | The key on the control it triggers; the control sets `aria-keyshortcuts`                                                                                                                |
+
+## Logo
+
+The mark (AI-392) on a 24-unit grid: the summit stroked in `currentColor` (the text colour), the wave in `primary`. Never recolour, outline, rotate or add effects.
+
+| Where                       | Form                                        | Size      |
+| --------------------------- | ------------------------------------------- | --------- |
+| Sidebar top, sign-in header | `Brand`: mark + "andy-intelligence"         | 20 px     |
+| Phone header                | `LogoMark` alone, before the picker         | 20 px     |
+| Browser tab                 | `public/favicon.svg` (dark via media query) | 16 px     |
+| Home Screen, app icons      | Mark at 62% on a `primary` square (PNGs)    | 32–512 px |
+
+- **Clear space:** a quarter of the mark's size on every side (5 px at 20 px; `gap-2` beside the name).
+- **Smallest:** 16 px.
+- Static files can't read CSS variables: `pnpm --filter @andy/web icons` rebuilds the favicon and PNGs from the tokens; a test fails if `favicon.svg` drifts from them.
+
+### Project marks
+
+Each project's mark (AI-393), `ProjectMark` in `src/components/ProjectMark.tsx`: its uploaded logo as an `<img>` (never inline SVG), else `KeyTile`, the key on a `foreground` tile. 20 px everywhere (picker, sidebar list, pick-a-project page, roadmap, settings heading); 48 px in the Settings → Logo preview.

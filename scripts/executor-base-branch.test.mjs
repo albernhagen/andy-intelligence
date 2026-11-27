@@ -71,7 +71,7 @@ describe("executor context step: base branch (AI-122)", () => {
   it("GivenTheWorkflow_WhenRead_ThenTheBaseBranchIsUsedOnlyWithTheDefaultBranchAsFallback", () => {
     const checkout = stepBlock("Check out the project").join("\n");
     expect(checkout).toContain(
-      "ref: ${{ needs.context.outputs.step == 'sync' && needs.context.outputs.head_sha || needs.context.outputs.base_branch || github.event.repository.default_branch }}",
+      "ref: ${{ needs.context.outputs.step == 'sync' && needs.context.outputs.head_sha || needs.context.outputs.verify_sha || needs.context.outputs.base_branch || github.event.repository.default_branch }}",
     );
     const publish = stepBlock("Publish the change").join("\n");
     expect(publish).toContain(

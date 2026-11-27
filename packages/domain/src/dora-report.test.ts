@@ -24,6 +24,10 @@ const dep = (over: Partial<Deployment>): Deployment => ({
   finishedAt: daysAgo(1),
   actor: "system",
   previousDeploymentId: null,
+  url: null,
+  request: null,
+  release: null,
+  verification: null,
   ...over,
 });
 

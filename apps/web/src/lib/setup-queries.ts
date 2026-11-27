@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { BriefAnswers, ProjectPlan } from "@andy/contracts";
+import type { BriefAnswers, MarkStepBody, ProjectPlan } from "@andy/contracts";
 import { plainAnswer } from "@andy/domain";
 import { unwrap, useApi } from "@/lib/api";
 import { useLivePoll } from "@/lib/live";
@@ -27,15 +27,74 @@ export function useBriefStatus(projectId: string, enabled = true) {
   });
 }
 
-/** The setup checklist (as `useSetupChecklist`, same key), read only when the caller needs it. */
-function useChecklist(projectId: string, enabled: boolean) {
+/**
+ * The onboarding steps (AI-381), polled so a step done in GitHub ticks itself off; the API caches
+ * its code-host reads (ADR-0028). Polling stops once every step is done.
+ */
+export function useOnboarding(projectId: string, enabled: boolean) {
   const api = useApi();
+  const poll = useLivePoll("slow");
   return useQuery({
+    ...poll,
+    refetchInterval: (q: { state: { data: unknown } }) =>
+      (q.state.data as { complete?: boolean } | undefined)?.complete
+        ? false
+        : poll.refetchInterval(q),
     enabled,
-    queryKey: ["setup", projectId],
-    staleTime: 5 * 60_000,
+    queryKey: ["onboarding", projectId],
     queryFn: async () =>
-      unwrap(await api.GET("/api/projects/{projectId}/setup", { params: { path: { projectId } } })),
+      unwrap(
+        await api.GET("/api/projects/{projectId}/onboarding", {
+          params: { path: { projectId }, query: {} },
+        }),
+      ),
+  });
+}
+
+/** "Check again": reads the code host afresh (the API allows it every 10 s at most). */
+export function useCheckAgain(projectId: string) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      unwrap(
+        await api.GET("/api/projects/{projectId}/onboarding", {
+          params: { path: { projectId }, query: { refresh: "true" } },
+        }),
+      ),
+    onSuccess: (data) => queryClient.setQueryData(["onboarding", projectId], data),
+  });
+}
+
+/** Marks a GitHub or terminal step done by hand, or clears the mark (owner only). */
+export function useMarkStep(projectId: string) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: MarkStepBody) =>
+      unwrap(
+        await api.POST("/api/projects/{projectId}/onboarding/marks", {
+          params: { path: { projectId } },
+          body,
+        }),
+      ),
+    onSuccess: (data) => queryClient.setQueryData(["onboarding", projectId], data),
+  });
+}
+
+/** Starts the proving refine on an Up-next ticket: the ticket page's own route. */
+export function useStartRefine(projectId: string) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ticketId: string) =>
+      unwrap(
+        await api.POST("/api/projects/{projectId}/tickets/{ticketId}/runs", {
+          params: { path: { projectId, ticketId } },
+          body: { step: "refine" },
+        }),
+      ),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["onboarding", projectId] }),
   });
 }
 
@@ -162,35 +221,32 @@ export function useSetupFacts(projectId: string, enabled = true) {
   const projects = useProjects();
   const brief = useBriefStatus(projectId, enabled);
   const plan = useProjectPlan(projectId, enabled);
-  const checklist = useChecklist(projectId, enabled);
+  const onboarding = useOnboarding(projectId, enabled);
   const project = projects.data?.find((p) => p.id === projectId);
-  const error = projects.error ?? brief.error ?? plan.error ?? checklist.error ?? null;
+  const error = projects.error ?? brief.error ?? plan.error ?? onboarding.error ?? null;
   const ready =
     project !== undefined &&
     brief.data !== undefined &&
     plan.data !== undefined &&
-    checklist.data !== undefined;
+    onboarding.data !== undefined;
   const facts: SetupFacts | undefined = ready
     ? {
         briefOnDefaultBranch: brief.data.readable ? brief.data.onDefaultBranch : null,
         plan: plan.data.plan,
-        baselineMerged:
-          checklist.data.items.find((i) => i.key === "baseline_merged")?.status === "done",
-        buildEnabled: project.buildEnabled,
+        onboarding: onboarding.data,
       }
     : undefined;
   const retry = () => {
     void projects.refetch();
     void brief.refetch();
     void plan.refetch();
-    void checklist.refetch();
+    void onboarding.refetch();
   };
   return {
     facts,
     project,
     brief: brief.data,
     plan: plan.data?.plan ?? null,
-    checklist: checklist.data,
     error,
     retry,
   };

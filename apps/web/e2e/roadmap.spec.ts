@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { expectShellLoaded } from "./shell";
 import type { ProjectRoadmap, RoadmapCounts, RoadmapEpic } from "@andy/domain";
 import { expectPageFits } from "./phone";
+import { cancelDrag, holdMidDrag } from "./drag";
 
 /**
  * AI-202: M4.26: Roadmap screen. No write path sets an epic's milestone before AI-304, so the
@@ -144,6 +145,20 @@ test("roadmap: a not-reviewed milestone's case and effort beside its status", as
   await page.getByRole("button", { name: /^M11: Members/ }).click();
   await expect(page.getByRole("region", { name: "Case for M11: Members" })).toBeVisible();
   await expect(page).toHaveScreenshot("roadmap-case.png", { fullPage: true });
+});
+
+/** AI-396: the dragged row is drawn under the pointer, its slot a placeholder, the list lit. */
+test("roadmap: a milestone mid-drag", async ({ page }) => {
+  await open(page);
+  await holdMidDrag(
+    page,
+    page.getByRole("button", { name: "Drag M4: Epics + story board to reorder" }),
+    0,
+    -60,
+  );
+  await expect(page.locator("[data-drag-overlay]")).toBeVisible();
+  await expect(page).toHaveScreenshot("roadmap-drag.png");
+  await cancelDrag(page);
 });
 
 test.describe("phone", () => {

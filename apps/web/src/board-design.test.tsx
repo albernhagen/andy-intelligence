@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, renderHook, screen, within } from "@testing-library/react";
+import { DROP_ANIMATION, useDropAnimation } from "@/components/DragPreview";
 import { Markers, MOVE_TRANSITION } from "@/components/board/BoardCard";
 import { WorkViewMenu } from "@/components/board/WorkViewChips";
 import { BoardSkeleton, KeyHints } from "@/pages/BoardPage";
@@ -83,6 +84,40 @@ describe("board on direction A", () => {
 
   it("GivenACardBeingDragged_WhenOthersMakeRoom_ThenTheyMoveInTheBaseDurationWithStandardEasing", () => {
     expect(MOVE_TRANSITION).toEqual({ duration: 150, easing: "cubic-bezier(0.2, 0, 0, 1)" });
+  });
+});
+
+/** AI-396: the dragged copy settles into place on drop, unless motion is reduced. */
+describe("drag preview drop animation", () => {
+  function emulate({ reduced, animate }: { reduced: boolean; animate: boolean }) {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: reduced && query === "(prefers-reduced-motion: reduce)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    if (animate)
+      Object.defineProperty(Element.prototype, "animate", {
+        value: () => ({}),
+        configurable: true,
+      });
+  }
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete (Element.prototype as Partial<Element>).animate;
+  });
+
+  it("GivenABrowserThatAnimates_WhenACardIsDropped_ThenTheCopySettlesInTheBaseDuration", () => {
+    emulate({ reduced: false, animate: true });
+
+    expect(renderHook(() => useDropAnimation()).result.current).toBe(DROP_ANIMATION);
+    expect(DROP_ANIMATION).toEqual({ duration: 150, easing: "cubic-bezier(0.2, 0, 0, 1)" });
+  });
+
+  it("GivenReducedMotion_WhenACardIsDropped_ThenTheCopyGoesWithoutAnimating", () => {
+    emulate({ reduced: true, animate: true });
+
+    expect(renderHook(() => useDropAnimation()).result.current).toBeNull();
   });
 });
 

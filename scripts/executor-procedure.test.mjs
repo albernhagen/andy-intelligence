@@ -26,7 +26,7 @@ describe("executor-procedure", () => {
     expect(schemaArgs(files.schema)).toMatch(/^--json-schema '\{"type":"object".*\}'$/);
   });
 
-  it.each(["plan-project", "ideate"])(
+  it.each(["plan-project", "ideate", "plan-epic", "verify"])(
     "GivenThe%sStep_WhenLoaded_ThenItsProcedureAndSchemaMakeValidArgs",
     (step) => {
       const files = loadStep(PROCEDURES, step);
@@ -36,7 +36,7 @@ describe("executor-procedure", () => {
   );
 
   it("GivenAStepWithoutFiles_WhenLoaded_ThenBothAreNull", () => {
-    expect(loadStep(PROCEDURES, "verify")).toEqual({ procedure: null, schema: null });
+    expect(loadStep(PROCEDURES, "no-such-step")).toEqual({ procedure: null, schema: null });
   });
 
   it("GivenTheBuildStep_WhenLoaded_ThenItsProcedureAndSchemaArePassedToTheAgent", () => {

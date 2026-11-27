@@ -1,6 +1,6 @@
 ---
 title: API and MCP reference printed from the code
-status: proposed (AI-146; Andy decides at review)
+status: accepted (Andy, 2026-11-25)
 date: 2026-11-21
 ---
 

@@ -203,8 +203,9 @@ describe("list_needs_me", () => {
           prUrl: "https://github.com/albernhagen/andy-intelligence/pull/9",
           mergeMode: "all-clean",
           reasons: ["kept_path"],
-          // No code host connected here: listed without its release note.
+          // No code host connected here: listed without its release note or a queue.
           note: null,
+          queue: null,
         },
       ],
       truncated: false,
@@ -220,6 +221,7 @@ describe("list_needs_me", () => {
       questions: [],
       tickets: [],
       projectPlans: [],
+      epicBreakdowns: [],
       waitingMerges: { merges: [], truncated: false },
     });
   });
@@ -270,6 +272,7 @@ describe("answer_question", () => {
       questions: [],
       tickets: [],
       projectPlans: [],
+      epicBreakdowns: [],
       waitingMerges: { merges: [], truncated: false },
     });
   });
@@ -329,13 +332,15 @@ describe("status", () => {
             ready: 0,
             in_progress: 0,
             ready_for_review: 0,
+            verifying: 0,
             done: 0,
             cancelled: 0,
           },
           dispatch: { runsAtOnce: 2, paused: false, lastDispatch: null },
         },
       ],
-      needsYou: { tickets: 0, stale: 0, projectPlans: 0 },
+      needsYou: { tickets: 0, stale: 0, projectPlans: 0, epicBreakdowns: 0 },
+      mergeHolds: [],
     });
   });
 

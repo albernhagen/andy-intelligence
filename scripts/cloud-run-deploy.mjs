@@ -53,28 +53,58 @@ export function assertPromoted(service, revision) {
     throw new Error(`expected ${revision}=100, serving ${serving}`);
 }
 
-// The API refuses every host but PUBLIC_URL's, except /health (ADR-0044), so a run.app URL can
-// only prove the guard; the 401 from real auth needs the public host, which needs traffic.
-export function candidateChecks({ taggedUrl, publicUrl }) {
-  return [
-    { url: `${taggedUrl}/health`, status: 200 },
-    { url: `${taggedUrl}/api/me`, status: publicUrl ? 404 : 401 },
-  ];
-}
-
-export function publicChecks({ publicUrl, runUrl }) {
-  const url = publicUrl || runUrl;
-  const checks = [
-    { url: `${url}/health`, status: 200 },
-    { url: `${url}/api/me`, status: 401 },
-  ];
-  if (url !== runUrl) {
-    checks.push({ url: `${runUrl}/health`, status: 200 }, { url: `${runUrl}/api/me`, status: 404 });
+/**
+ * Parses a smoke-check input: one check per line, `<path> <status>[,<status>…]`, e.g. `/health 200`
+ * or `/ 200,301`. Blank lines and `#` comments are skipped. `name` is the action input, for errors.
+ */
+export function parseSmokeChecks(text, name) {
+  const checks = [];
+  for (const raw of (text ?? "").split("\n")) {
+    const line = raw.replace(/#.*/, "").trim();
+    if (!line) continue;
+    const match = /^(\/\S*)\s+(\d{3}(?:,\d{3})*)$/.exec(line);
+    if (!match) throw new Error(`${name}: expected "<path> <status>[,<status>…]", got "${line}"`);
+    const statuses = match[2].split(",").map(Number);
+    if (statuses.some((s) => s < 100 || s > 599)) {
+      throw new Error(`${name}: status must be 100 to 599, got "${line}"`);
+    }
+    checks.push({ path: match[1], status: statuses.length === 1 ? statuses[0] : statuses });
   }
   return checks;
 }
 
-/** Runs each check, retrying within a fixed cap: a new revision starts cold (ADR-0028). */
+/**
+ * The checks a service declares (cloud-run-safe-deploy inputs): `publicHost` for its public host
+ * (PUBLIC_URL, or the run.app URL without one); `otherHosts` for any other host while PUBLIC_URL is
+ * set (a host guard, like the control plane's ADR-0044 one, answers there differently), and the
+ * same as `publicHost` when not given. Throws when no check is given: a deploy must smoke test.
+ */
+export function smokeChecks({ publicHost, otherHosts }) {
+  const pub = parseSmokeChecks(publicHost, "smoke-checks");
+  if (pub.length === 0) throw new Error("smoke-checks: give at least one check");
+  const other = parseSmokeChecks(otherHosts, "smoke-checks-other-hosts");
+  return { publicHost: pub, otherHosts: other.length > 0 ? other : pub };
+}
+
+const at = (base, checks) => checks.map(({ path, status }) => ({ url: `${base}${path}`, status }));
+
+// A tagged URL is never the public host: with PUBLIC_URL set it gets the other-host checks; without
+// one every host is public. The 401 from real auth on the public host needs traffic first.
+export function candidateChecks({ taggedUrl, publicUrl }, checks) {
+  return at(taggedUrl, publicUrl ? checks.otherHosts : checks.publicHost);
+}
+
+export function publicChecks({ publicUrl, runUrl }, checks) {
+  const url = publicUrl || runUrl;
+  const list = at(url, checks.publicHost);
+  if (url !== runUrl) list.push(...at(runUrl, checks.otherHosts));
+  return list;
+}
+
+/**
+ * Runs each check (`status`: one code or a list of accepted ones), retrying within a fixed cap: a
+ * new revision starts cold (ADR-0028).
+ */
 export async function runChecks(
   checks,
   {
@@ -85,6 +115,7 @@ export async function runChecks(
   } = {},
 ) {
   for (const { url, status } of checks) {
+    const expected = [status].flat();
     let last;
     for (let attempt = 1; attempt <= attempts; attempt++) {
       try {
@@ -93,16 +124,40 @@ export async function runChecks(
           signal: AbortSignal.timeout(10_000),
         });
         last = `HTTP ${response.status}`;
-        if (response.status === status) break;
+        if (expected.includes(response.status)) break;
       } catch (error) {
         last = error.message;
       }
       last = `${last} (attempt ${attempt}/${attempts})`;
-      if (attempt === attempts) throw new Error(`${url}: expected ${status}, got ${last}`);
+      if (attempt === attempts)
+        throw new Error(`${url}: expected ${expected.join(" or ")}, got ${last}`);
       await sleep(delayMs);
     }
-    log(`ok ${status} ${url}`);
+    log(`ok ${expected.join(",")} ${url}`);
   }
+}
+
+/**
+ * The registry tag that keeps the image prod runs (AI-389): registry cleanup never deletes a
+ * version whose tag starts with a keep prefix (project-env `image_keep_tag_prefixes`), so a cold
+ * start or rollback can still pull it. `image` must be by digest, `<repo>/<name>@sha256:<hex>`, so
+ * the tag names exactly what was deployed; the tag is `<prefix><hex>`, the same for a re-promote.
+ */
+export function keepTag({ image, prefix }) {
+  if (!/^[a-z][a-z0-9._-]*$/.test(prefix ?? "")) {
+    throw new Error(
+      `keep-tag-prefix: expected lowercase letters, digits, ".", "_" or "-", got "${prefix}"`,
+    );
+  }
+  const match = /^([^@\s]+)@sha256:([0-9a-f]{64})$/.exec(image ?? "");
+  if (!match)
+    throw new Error(
+      `keep-tag-prefix needs the image by digest (<repo>/<name>@sha256:…), got "${image}"`,
+    );
+  const [, name, hex] = match;
+  if (/:[^/]*$/.test(name))
+    throw new Error(`image must not carry both a tag and a digest, got "${image}"`);
+  return { source: image, target: `${name}:${prefix}${hex}` };
 }
 
 export function rollbackCommand({ service, region, serving }) {
@@ -111,10 +166,15 @@ export function rollbackCommand({ service, region, serving }) {
 
 /** What happened to traffic, from the action's step outcomes. Order matters: first match wins. */
 export function deployVerdict(o) {
+  if (o.inputs === "failure")
+    return "The smoke checks, keep tag prefix or image are missing or malformed. Nothing was deployed.";
   if (o.before !== "success") return "Could not read the serving revision. Nothing was deployed.";
   if (o.deploy !== "success") return "Candidate did not deploy. **Traffic did not move.**";
   if (o.candidate !== "success" || o.smoke !== "success") {
     return "Candidate failed before promotion. **Traffic did not move**; the command below is not needed unless the service looks wrong.";
+  }
+  if (o.keepTag === "failure") {
+    return "Could not tag the image so registry cleanup keeps it. **Traffic did not move.**";
   }
   if (o.promote !== "success") {
     return "Promotion failed. **Traffic may have moved**: compare the serving revision below; run the command if it is not the previous one.";
@@ -125,7 +185,7 @@ export function deployVerdict(o) {
   return "Deployed. The candidate serves 100 percent of traffic.";
 }
 
-export function renderSummary({ service, region, before, candidate, after, outcomes }) {
+export function renderSummary({ service, region, before, candidate, after, keepTag, outcomes }) {
   const lines = [
     `## Deploy: ${service}`,
     "",
@@ -137,6 +197,9 @@ export function renderSummary({ service, region, before, candidate, after, outco
     `| Candidate | \`${candidate || "none"}\` |`,
     `| Serving after | \`${after || "unknown"}\` |`,
   ];
+  if (keepTag && outcomes.keepTag === "success") {
+    lines.push("", `Registry cleanup keeps this image: tagged \`${keepTag}\`.`);
+  }
   if (outcomes.untag === "failure") {
     lines.push(
       "",
@@ -178,6 +241,11 @@ async function stdinService(command) {
   }
 }
 
+const declaredChecks = (env) => ({
+  publicHost: env.SMOKE_CHECKS,
+  otherHosts: env.SMOKE_CHECKS_OTHER_HOSTS,
+});
+
 async function main([command, argument]) {
   const env = process.env;
   switch (command) {
@@ -194,10 +262,24 @@ async function main([command, argument]) {
       return assertLatest(await stdinService(command), argument);
     case "assert-promoted":
       return assertPromoted(await stdinService(command), argument);
+    case "check-smoke-inputs":
+      return smokeChecks(declaredChecks(env));
     case "smoke-candidate":
-      return runChecks(candidateChecks({ taggedUrl: env.TAGGED_URL, publicUrl: env.PUBLIC_URL }));
+      return runChecks(
+        candidateChecks(
+          { taggedUrl: env.TAGGED_URL, publicUrl: env.PUBLIC_URL },
+          smokeChecks(declaredChecks(env)),
+        ),
+      );
+    case "keep-tag":
+      return setOutputs(keepTag({ image: env.IMAGE, prefix: env.KEEP_TAG_PREFIX }));
     case "smoke-public":
-      return runChecks(publicChecks({ publicUrl: env.PUBLIC_URL, runUrl: env.RUN_URL }));
+      return runChecks(
+        publicChecks(
+          { publicUrl: env.PUBLIC_URL, runUrl: env.RUN_URL },
+          smokeChecks(declaredChecks(env)),
+        ),
+      );
     case "summary":
       return appendFileSync(
         env.GITHUB_STEP_SUMMARY,
@@ -207,11 +289,14 @@ async function main([command, argument]) {
           before: env.BEFORE,
           candidate: env.CANDIDATE,
           after: env.AFTER,
+          keepTag: env.KEEP_TAG,
           outcomes: {
+            inputs: env.OUTCOME_INPUTS,
             before: env.OUTCOME_BEFORE,
             deploy: env.OUTCOME_DEPLOY,
             candidate: env.OUTCOME_CANDIDATE,
             smoke: env.OUTCOME_SMOKE,
+            keepTag: env.OUTCOME_KEEP_TAG,
             promote: env.OUTCOME_PROMOTE,
             verify: env.OUTCOME_VERIFY,
             publicSmoke: env.OUTCOME_PUBLIC_SMOKE,

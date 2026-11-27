@@ -39,13 +39,18 @@ Trust boundaries, entry points and credentials, moved by area (ADR-0046). PRs th
 | Infrastructure                 | [`infrastructure.md`](infrastructure.md)                                 |
 | Night runs                     | [`night-runs.md`](night-runs.md)                                         |
 | Deployment reports             | [`deployments.md`](deployments.md)                                       |
+| Releases read                  | [`releases.md`](releases.md)                                             |
+| Promote and rollback           | [`release-requests.md`](release-requests.md)                             |
+| Deploy caller in managed repos | [`deploy-caller.md`](deploy-caller.md)                                   |
 | Project context in prompts     | [`project-context.md`](project-context.md)                               |
 | Review pipeline                | [`review-pipeline.md`](review-pipeline.md)                               |
 | Web Push                       | [`push.md`](push.md)                                                     |
 | Project agent tasks            | [`project-tasks.md`](project-tasks.md)                                   |
 | Digest summary                 | [`digest-summary.md`](digest-summary.md)                                 |
+| Verification run               | [`verification.md`](verification.md)                                     |
 | Model gateway (OpenRouter)     | [`model-gateway.md`](model-gateway.md)                                   |
 | Project settings               | [`project-settings.md`](project-settings.md)                             |
+| Project logos (uploads)        | [`project-logos.md`](project-logos.md)                                   |
 | Project access                 | [`project-access.md`](project-access.md)                                 |
 | Paid model spend               | [`spend.md`](spend.md)                                                   |
 | Coordinator and cloud sessions | [`coordinator-and-cloud-sessions.md`](coordinator-and-cloud-sessions.md) |
