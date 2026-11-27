@@ -32,6 +32,10 @@ export default defineConfig({
     locale: "en-US",
     timezoneId: "UTC",
     colorScheme: "light",
+    // No motion while capturing (AI-406): the ticket panel's 180 ms slide-in (Web Animations, not
+    // CSS) was sometimes caught a frame early, 8 pixels off at its edge. The app honours reduced
+    // motion everywhere (index.css, useSlideIn, DragPreview), so nothing starts animating.
+    reducedMotion: "reduce",
   },
   webServer: {
     command: `node ../../scripts/gen-exports.mjs && vite --config e2e/vite.config.ts --port ${PORT} --strictPort`,

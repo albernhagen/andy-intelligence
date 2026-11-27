@@ -1,6 +1,6 @@
 # Threat model: Review pipeline
 
-How PR review findings reach the control plane (ADR-0097: review findings become config proposals). Risks: [R5](risks/R5.md), [R-AI-394](risks/R-AI-394.md). PRs that change this area update this file.
+How PR review findings reach the control plane (ADR-0097: review findings become config proposals). Risks: [R5](risks/R5.md), [R-AI-394](risks/R-AI-394.md), [R-AI-406](risks/R-AI-406.md). PRs that change this area update this file.
 
 ## Trust boundaries and entry points
 
@@ -29,3 +29,7 @@ The security and adversarial review agents skip, and their checks pass with the 
 - **Still run on every bump:** CI (`check`, including the lockfile-sources check: npm registry and integrity only), dependency review, CodeQL, the secret scan.
 - **No new permission or credential.** The step reads git and the event payload only.
 - **Residual (R-AI-394).** No agent reads a skipped bump: a minor or patch release that is itself malicious is caught only by the 7-day cooldown, dependency review and CodeQL.
+
+## Which PRs skip the screenshot check (AI-406)
+
+`ui-screenshots` (required) passes without running, naming why, for a docs-only change or one where no changed file can affect the web app: `canAffectWebApp` in `scripts/review-scope.mjs`, called by `platform/actions/ui-screenshots`. Only paths on an explicit can't-affect list skip; unknown paths, unreadable diffs, renames, deletions, a change to the gate itself and pushes to `main` run. No new permission. Residual: [R-AI-406](risks/R-AI-406.md).

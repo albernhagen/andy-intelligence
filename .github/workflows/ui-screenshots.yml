@@ -3,7 +3,8 @@ name: UI screenshots
 # Playwright screenshot checks for the web app (ADR-0059: Visual checks): the shell, board and
 # ticket page against the real API over seeded fakes. Fails on a diff from
 # apps/web/e2e/__screenshots__ and uploads the actual images. Steps: platform/actions/ui-screenshots.
-# A docs-only PR reports a pass without running (AI-358); pushes to main always run.
+# A PR that is docs-only (AI-358), or where no changed file can affect the web app (AI-406), reports
+# a pass without running, naming why; pushes to main always run.
 
 on:
   pull_request:
