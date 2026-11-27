@@ -78,9 +78,7 @@ runs:
       run: |
         if [ -z "$SHARD" ]; then pnpm test; exit 0; fi
         if [ "${SHARD%%/*}" = 1 ]; then
-          files=$(pnpm exec vitest list --filesOnly | grep -c . || true)
-          echo "Test files in the whole suite: $files"
-          if [ "$files" -eq 0 ]; then echo "::error::No test files found"; exit 1; fi
+          pnpm exec vitest list --filesOnly | node "$GITHUB_ACTION_PATH/../../../scripts/test-files-check.mjs"
         fi
         pnpm test --shard="$SHARD" --passWithNoTests
     - if: inputs.part == 'all' || inputs.part == 'build'

@@ -37,7 +37,7 @@ Build runs (plan approval, sandbox, publish limits) and read caps (AI-222): [`ba
 
 | Guardrail | ADR | Source in this repo | Carried by | Status |
 |---|---|---|---|---|
-| Lint, typecheck, test, build; parallel jobs (`part` input; tests in two vitest shards), required `check` passes only when every part succeeded | 0022 | `ci.yml` (`check-*` parts, `check` gate) → `platform/actions/ci-check`, `scripts/ci-check-result.mjs` | A | carried (M1.16); parallel parts with the next baseline pin (AI-402) |
+| Lint, typecheck, test, build; parallel jobs (`part` input; tests in two vitest shards), required `check` passes only when every part succeeded | 0022 | `ci.yml` (`check-*` parts, `check` gate) → `platform/actions/ci-check`, `scripts/ci-check-result.mjs`, `scripts/test-files-check.mjs` (a sharded run fails when the whole suite has no test files) | A | carried (M1.16); parallel parts with the next baseline pin (AI-402) |
 | Firestore adapter contract suites on the emulator (path-gated) | 0034, 0048 | `firestore-suite.yml` | — | control plane only (`github/source-only.json`) |
 | Workflow linter (actionlint) | 0027 | `ci.yml` → `platform/actions/actionlint` | A | carried (M1.16) |
 | Terraform fmt/validate (roots, `infra/modules/` and their `examples/`, and `template/infra/` when present); `terraform test` (mocked) where there is `tests/` | 0011, 0024 | `ci.yml` → `platform/actions/terraform-check` | A | carried (M1.16; tests: next baseline tag) |
