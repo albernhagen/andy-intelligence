@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
@@ -55,18 +56,65 @@ export function LaneZone({
   );
 }
 
+type EpicRef = { key: string; title: string };
+type Done = { done: number; total: number };
+
 /**
- * A group header inside a lane when the board is grouped by epic (AI-86): the epic's key, title
- * and how many of its children are done, or "No epic"; its milestone and status when it has one
- * (AI-311). Not a drop target: rank stays per lane.
+ * An epic's key and title as a link to its panel (AI-403): epics have no card on the board, so
+ * their group headers are how the board opens one. `parent` is the epic it sits under, if any.
+ */
+function EpicLink({
+  projectId,
+  epic,
+  parent = null,
+}: {
+  projectId: string;
+  epic: EpicRef;
+  parent?: { key: string } | null;
+}) {
+  return (
+    <Link
+      to="/p/$projectId/t/$ticketRef"
+      params={{ projectId, ticketRef: epic.key }}
+      aria-label={`Open epic ${epic.key}: ${epic.title}`}
+      className="flex min-w-0 flex-1 items-center gap-1 rounded-sm hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring max-sm:min-h-11"
+    >
+      {parent && <span className="shrink-0">{parent.key} ›</span>}
+      <span className="shrink-0 font-medium text-foreground">{epic.key}</span>
+      <span className="min-w-0 truncate" title={epic.title}>
+        {epic.title}
+      </span>
+    </Link>
+  );
+}
+
+/** "2 of 5 done": an epic's Done tickets of those not Cancelled. */
+function EpicDone({ progress }: { progress: Done }) {
+  return (
+    <span className="shrink-0 tabular-nums">
+      {progress.done} of {progress.total} done
+    </span>
+  );
+}
+
+/**
+ * A group header inside a lane when the board is grouped by epic (AI-86): the epic's key and
+ * title as a link to its panel (AI-403), how many of its tickets are done, or "No epic"; its
+ * milestone and status when it has one (AI-311). A child epic names its parent epic first.
+ * Not a drop target: rank stays per lane.
  */
 export function EpicGroupHeader({
+  projectId,
   epic,
+  parent = null,
   progress,
   milestone = null,
 }: {
-  epic: { key: string; title: string } | null;
-  progress: { done: number; total: number } | null;
+  projectId: string;
+  epic: EpicRef | null;
+  /** The epic this one sits under, when it is a child epic. */
+  parent?: { key: string } | null;
+  progress: Done | null;
   /** The epic's milestone (its top-level epic's, ADR-0131), shown with its status (AI-311). */
   milestone?: Pick<Milestone, "name" | "status"> | null;
 }) {
@@ -77,15 +125,8 @@ export function EpicGroupHeader({
     >
       {epic ? (
         <>
-          <span className="font-medium text-foreground">{epic.key}</span>
-          <span className="min-w-0 flex-1 truncate" title={epic.title}>
-            {epic.title}
-          </span>
-          {progress && (
-            <span className="shrink-0 tabular-nums">
-              {progress.done} of {progress.total} done
-            </span>
-          )}
+          <EpicLink projectId={projectId} epic={epic} parent={parent} />
+          {progress && <EpicDone progress={progress} />}
           {/* Its own line, so the epic's title and the milestone's status both stay readable. */}
           {milestone && (
             <span className="flex basis-full">
@@ -102,53 +143,94 @@ export function EpicGroupHeader({
 
 /**
  * A collapsible group header on Ideas (AI-400): a milestone (its name and status, or "No
- * milestone") or, indented under it, an epic (key and title, or "No epic"), with the group's
- * ticket count. Not a drop target: a drop near it lands on Ideas, as before. While the filter box
- * has text every group is open and the header is a plain label (`onToggle` absent).
+ * milestone") or, indented under it, an epic (key and title as a link to its panel, and its
+ * progress, AI-403; or "No epic"), with the group's idea count. An epic's chevron collapses it;
+ * a milestone's whole row does. Not a drop target: a drop near it lands on Ideas, as before.
+ * While the filter box has text every group is open and the header has no toggle (`onToggle`
+ * absent).
  */
 export function IdeaGroupHeader({
   level,
   groupKey,
+  projectId,
   milestone = null,
   epic = null,
+  parent = null,
+  progress = null,
   count,
   open,
   onToggle,
 }: {
   level: "milestone" | "epic";
   groupKey: string;
+  projectId: string;
   milestone?: Pick<Milestone, "name" | "status"> | null;
-  epic?: { key: string; title: string } | null;
+  epic?: EpicRef | null;
+  parent?: { key: string } | null;
+  progress?: Done | null;
   count: number;
   open: boolean;
   onToggle?: () => void;
 }) {
   const Chevron = open ? ChevronDown : ChevronRight;
-  const label =
-    level === "milestone" ? (
-      milestone ? (
-        <MilestoneChip milestone={milestone} className="max-w-full" />
-      ) : (
-        <span className="font-medium">No milestone</span>
-      )
-    ) : epic ? (
-      <>
-        <span className="font-medium text-foreground">{epic.key}</span>
-        <span className="min-w-0 flex-1 truncate" title={epic.title}>
-          {epic.title}
-        </span>
-      </>
-    ) : (
-      <span className="font-medium">No epic</span>
-    );
-  const body = (
-    <>
-      {onToggle && <Chevron className="size-3.5 shrink-0" aria-hidden />}
-      <span className="flex min-w-0 flex-1 items-center gap-1">{label}</span>
-      <span className="shrink-0 tabular-nums">{count}</span>
-    </>
-  );
+  const chevron = onToggle && <Chevron className="size-3.5 shrink-0" aria-hidden />;
+  const countShown = <span className="shrink-0 tabular-nums">{count}</span>;
   const row = "flex w-full min-h-6 items-center gap-1 rounded-md px-1 py-0.5 text-left text-xs";
+  const hover =
+    "hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring";
+  let content: ReactNode;
+  if (level === "epic" && epic) {
+    // The title is the panel link, so only the chevron toggles.
+    content = (
+      <div className={row}>
+        {onToggle && (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={`${open ? "Collapse" : "Expand"} ${epic.key} ideas`}
+            onClick={onToggle}
+            className={`-m-0.5 inline-flex items-center justify-center rounded-sm p-0.5 ${hover} max-sm:size-11`}
+          >
+            {chevron}
+          </button>
+        )}
+        <EpicLink projectId={projectId} epic={epic} parent={parent} />
+        {progress && <EpicDone progress={progress} />}
+        <span aria-hidden>·</span>
+        {countShown}
+      </div>
+    );
+  } else {
+    const label =
+      level === "milestone" ? (
+        milestone ? (
+          <MilestoneChip milestone={milestone} className="max-w-full" />
+        ) : (
+          <span className="font-medium">No milestone</span>
+        )
+      ) : (
+        <span className="font-medium">No epic</span>
+      );
+    const body = (
+      <>
+        {chevron}
+        <span className="flex min-w-0 flex-1 items-center gap-1">{label}</span>
+        {countShown}
+      </>
+    );
+    content = onToggle ? (
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className={`${row} ${hover} max-sm:min-h-11`}
+      >
+        {body}
+      </button>
+    ) : (
+      <div className={row}>{body}</div>
+    );
+  }
   return (
     <li
       data-idea-group={groupKey}
@@ -156,18 +238,7 @@ export function IdeaGroupHeader({
       data-label={level === "milestone" ? (milestone?.name ?? "none") : (epic?.key ?? "none")}
       className={`text-muted-foreground ${level === "epic" ? "pl-3" : ""}`}
     >
-      {onToggle ? (
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={onToggle}
-          className={`${row} hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring max-sm:min-h-11`}
-        >
-          {body}
-        </button>
-      ) : (
-        <div className={row}>{body}</div>
-      )}
+      {content}
     </li>
   );
 }

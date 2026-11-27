@@ -1,4 +1,6 @@
+import { Link } from "@tanstack/react-router";
 import type { Ticket } from "@andy/contracts";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -14,20 +16,25 @@ const ALL = "all";
 /**
  * The board's epic view controls (AI-86): "Group by epic" (remembered per viewer) and a filter
  * that shows one epic's tickets, hidden while the board has no epic. Both change the view only.
+ * With an epic picked, Open goes to its panel (AI-403): an epic has no card, and one with no
+ * tickets has no header either.
  */
 export function EpicControls({
+  projectId,
   epics,
   grouped,
   onGroupedChange,
   epicId,
   onEpicChange,
 }: {
+  projectId: string;
   epics: readonly Ticket[];
   grouped: boolean;
   onGroupedChange: (on: boolean) => void;
   epicId: string | null;
   onEpicChange: (epicId: string | null) => void;
 }) {
+  const picked = epics.find((e) => e.id === epicId);
   return (
     <>
       <Switch label="Group by epic" checked={grouped} onCheckedChange={onGroupedChange} />
@@ -48,6 +55,17 @@ export function EpicControls({
             ))}
           </SelectContent>
         </Select>
+      )}
+      {picked && (
+        <Button asChild variant="outline" size="sm" className="h-11 sm:h-8">
+          <Link
+            to="/p/$projectId/t/$ticketRef"
+            params={{ projectId, ticketRef: picked.key }}
+            aria-label={`Open epic ${picked.key}: ${picked.title}`}
+          >
+            Open
+          </Link>
+        </Button>
       )}
     </>
   );

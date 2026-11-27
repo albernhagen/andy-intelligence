@@ -56,8 +56,12 @@ describe("ideate from the board", () => {
     const task = screen.getByRole("region", { name: "Ideate agent task" });
     expect(await within(task).findByText(`Created epic ${epic.key} in Ideas.`)).toBeTruthy();
     expect(within(task).getByText("succeeded")).toBeTruthy();
-    // In Ideas the epic's card sits under its own header (AI-400), so its title shows twice.
-    await waitFor(() => expect(document.querySelector(`[data-ticket="${epic.key}"]`)).toBeTruthy());
+    // An epic gets no card (AI-403): with no tickets yet, the Epic filter and the roadmap list it.
+    await harness.user.click(screen.getByRole("combobox", { name: "Epic" }));
+    expect(
+      await screen.findByRole("option", { name: `${epic.key}: Weekly summary email` }),
+    ).toBeTruthy();
+    expect(document.querySelector(`[data-ticket="${epic.key}"]`)).toBeNull();
   });
 
   it("GivenARejectedResult_WhenTheTaskEnds_ThenTheReasonShowsAsTheTaskRecordedIt", async () => {

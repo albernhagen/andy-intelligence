@@ -25,7 +25,10 @@ function trackerWithMilestones(milestoneOfKey: ReadonlyMap<string, string>) {
   });
 }
 
-async function seeded(path: string) {
+async function seeded(
+  path: string,
+  extra?: (h: ReturnType<typeof renderApp>, epics: { hosting: { id: string } }) => Promise<void>,
+) {
   const milestoneOfKey = new Map<string, string>();
   const harness = renderApp("/", { tracker: trackerWithMilestones(milestoneOfKey) });
   const { tracker, milestones } = harness;
@@ -71,6 +74,7 @@ async function seeded(path: string) {
   milestoneOfKey.set(done.key, "m1");
   milestoneOfKey.set(hosting.key, "m2");
   milestoneOfKey.set(mobile.key, "m3");
+  await extra?.(harness, { hosting });
   await harness.router.navigate({ href: path });
   await screen.findByRole("heading", { name: "Roadmap" }, PAGE_LOAD);
   return { harness, done, hosting, mobile, loose };
@@ -211,5 +215,64 @@ describe("roadmap milestone case (ADR-0149, AI-365)", () => {
 
     await screen.findByRole("group", { name: "Status of M1: First flow" });
     expect(screen.queryByRole("region", { name: "Case for M1: First flow" })).toBeNull();
+  });
+});
+
+/** AI-403: every epic is listed under its milestone, since the board shows epics only as headers. */
+describe("every epic on the roadmap", () => {
+  const epicRow = (key: string) => document.querySelector<HTMLElement>(`li[data-epic="${key}"]`);
+
+  it("GivenADoneEpic_WhenItsMilestoneOpens_ThenItIsListedWithStateProgressAndALinkToItsPanel", async () => {
+    const { harness, done } = await seeded("/p/ai/roadmap");
+
+    await harness.user.click(await screen.findByRole("button", { name: /^M1: First flow/ }));
+
+    const item = await waitFor(() => epicRow(done.key)!);
+    expect(within(item).getByText("Done")).toBeTruthy();
+    expect(within(item).getByText("0 of 0 done")).toBeTruthy();
+    await harness.user.click(within(item).getByRole("link", { name: new RegExp(done.key) }));
+    await waitFor(() => expect(harness.router.state.location.pathname).toBe(`/p/ai/t/${done.key}`));
+  });
+
+  it("GivenAnEpicWithNoTickets_WhenItsMilestoneOpens_ThenItIsStillListedAsNotStarted", async () => {
+    const { harness, mobile } = await seeded("/p/ai/roadmap");
+
+    await harness.user.click(await screen.findByRole("button", { name: /^M3: Mobile/ }));
+
+    const item = await waitFor(() => epicRow(mobile.key)!);
+    expect(within(item).getByText("Phone app")).toBeTruthy();
+    expect(within(item).getByText("Not started")).toBeTruthy();
+    expect(within(item).getByText("0 of 0 done")).toBeTruthy();
+  });
+
+  it("GivenAnEpicWithNoMilestoneAndNoTickets_WhenTheRoadmapShows_ThenItIsInTheNoMilestoneGroup", async () => {
+    const { loose } = await seeded("/p/ai/roadmap");
+
+    const section = await screen.findByRole("region", { name: "No milestone" });
+    const item = within(section)
+      .getByRole("link", { name: new RegExp(loose.key) })
+      .closest("li")!;
+    expect(within(item).getByText("Not started")).toBeTruthy();
+  });
+
+  it("GivenAChildEpic_WhenItsParentsMilestoneOpens_ThenItIsListedUnderItsParentWithALink", async () => {
+    let childKey = "";
+    const { harness, hosting } = await seeded("/p/ai/roadmap", async ({ tracker }, epics) => {
+      const child = await tracker.createTicket(
+        "ai",
+        { title: "Runner pool", type: "epic", parentId: epics.hosting.id },
+        "andy",
+      );
+      childKey = child.key;
+    });
+
+    await harness.user.click(await screen.findByRole("button", { name: /^M2: Self-hosting/ }));
+
+    const item = await waitFor(() => epicRow(childKey)!);
+    expect(item.getAttribute("data-parent-epic")).toBe(hosting.key);
+    expect(epicRow(hosting.key)!.nextElementSibling).toBe(item);
+    expect(within(item).getByText("Not started")).toBeTruthy();
+    await harness.user.click(within(item).getByRole("link", { name: new RegExp(childKey) }));
+    await waitFor(() => expect(harness.router.state.location.pathname).toBe(`/p/ai/t/${childKey}`));
   });
 });

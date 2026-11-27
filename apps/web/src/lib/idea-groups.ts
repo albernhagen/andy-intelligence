@@ -29,11 +29,6 @@ export type IdeaRow<T extends Ticket> =
   | { kind: "card"; card: T }
   | { kind: "more"; key: string; total: number };
 
-/** The epic a card is grouped under on Ideas: its epic, or itself when it is a top-level epic. */
-function ideaEpicOf(card: Ticket, byId: ReadonlyMap<string, Ticket>): Ticket | null {
-  return epicOf(card, byId) ?? (card.type === "epic" ? card : null);
-}
-
 const keyNumber = (t: Ticket) => Number(t.key.split("-").pop());
 
 /** One group per epic in key order, then "No epic"; each keeps the lane order. */
@@ -43,7 +38,7 @@ function byEpic<T extends Ticket>(
 ): EpicGroup<T>[] {
   const groups = new Map<string | null, EpicGroup<T>>();
   for (const card of cards) {
-    const epic = ideaEpicOf(card, byId);
+    const epic = epicOf(card, byId);
     const key = epic?.id ?? null;
     if (!groups.has(key)) groups.set(key, { epic, cards: [] });
     groups.get(key)!.cards.push(card);
@@ -107,7 +102,7 @@ export function ideaGroupKey(
   milestones: readonly Milestone[],
 ): string {
   const milestone = milestoneFor(card, all, new Map(milestones.map((m) => [m.id, m])));
-  const epic = ideaEpicOf(card, new Map(all.map((t) => [t.id, t])));
+  const epic = epicOf(card, new Map(all.map((t) => [t.id, t])));
   return `${milestone?.id ?? "none"}/${epic?.id ?? "none"}`;
 }
 

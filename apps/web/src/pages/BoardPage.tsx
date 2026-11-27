@@ -62,7 +62,9 @@ import {
   splitBacklog,
 } from "@/lib/board";
 import {
+  boardCards,
   boardEpics,
+  epicOf,
   epicProgress,
   type EpicGroup,
   groupByEpic,
@@ -102,7 +104,9 @@ import { Segmented } from "@/components/ui/segmented";
  * filter shows one epic's tickets. Work view chips (AI-187) narrow it to one fixed view, kept in
  * the URL (`?view=`); both filters combine. Ideas are always grouped by milestone, then epic,
  * parked milestones collapsed (AI-400); the filter box (`?q=`, under Options on a phone) narrows every lane by key, title
- * or epic title. Child routes (the ticket panel) render in the Outlet.
+ * or epic title. Epics get no card (AI-403): they are the group headers, each a link to the
+ * epic's panel, and the epic filter's Open link reaches one with no tickets on the board.
+ * Child routes (the ticket panel) render in the Outlet.
  * On a phone (AI-337) the board shows one stage at a time under stage tabs, the chips become one
  * View menu and the other controls fold under Options; moving between stages is the panel's Move.
  */
@@ -124,8 +128,9 @@ export function BoardPage() {
   const epics = useMemo(() => boardEpics(board.data ?? []), [board.data]);
   // An epic that left the board (another project's data, or deleted) stops filtering.
   const epicId = epics.some((e) => e.id === chosenEpic) ? chosenEpic : null;
+  // Epics are group headers, not cards (AI-403): every lane, count and chip leaves them out.
   const tickets = useMemo(
-    () => (board.data ? visibleTickets(board.data, showArchived) : []),
+    () => (board.data ? boardCards(visibleTickets(board.data, showArchived)) : []),
     [board.data, showArchived],
   );
   const allById = useMemo(() => new Map((board.data ?? []).map((t) => [t.id, t])), [board.data]);
@@ -160,10 +165,7 @@ export function BoardPage() {
   return (
     <section className="space-y-4 max-sm:space-y-2">
       {board.data && (
-        <SetupNextStep
-          projectId={projectId}
-          storyCount={board.data.filter((t) => t.type !== "epic").length}
-        />
+        <SetupNextStep projectId={projectId} storyCount={boardCards(board.data).length} />
       )}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         {/* Title and work views share one row, as in the approved board mockup (AI-374). */}
@@ -206,6 +208,7 @@ export function BoardPage() {
             <BoardFilter value={q ?? ""} onChange={filterBy} className="max-sm:w-full" />
           )}
           <EpicControls
+            projectId={projectId}
             epics={epics}
             grouped={grouped}
             onGroupedChange={(on) => {
@@ -534,7 +537,9 @@ function Lanes({
         <Fragment key={epic?.id ?? "none"}>
           {grouped && (
             <EpicGroupHeader
+              projectId={projectId}
               epic={epic}
+              parent={epic ? epicOf(epic, allById) : null}
               progress={epic ? epicProgress(epic.id, all) : null}
               milestone={epic ? milestones?.find((m) => m.id === milestoneOf(epic, all)) : null}
             />
@@ -559,6 +564,7 @@ function Lanes({
         <IdeaGroupHeader
           key={`m:${row.group.key}`}
           level="milestone"
+          projectId={projectId}
           groupKey={row.group.key}
           milestone={row.group.milestone}
           count={row.group.count}
@@ -569,8 +575,11 @@ function Lanes({
         <IdeaGroupHeader
           key={`e:${row.group.key}`}
           level="epic"
+          projectId={projectId}
           groupKey={row.group.key}
           epic={row.group.epic}
+          parent={row.group.epic ? epicOf(row.group.epic, allById) : null}
+          progress={row.group.epic ? epicProgress(row.group.epic.id, all) : null}
           count={row.group.cards.length}
           open={row.open}
           onToggle={toggle}
