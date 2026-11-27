@@ -1,0 +1,10 @@
+# Keeps the build context small and local secrets out of the image (AI-401). Seeded with the
+# Dockerfile; this project's own file now.
+**/node_modules
+**/dist
+.git
+.env*
+*.tfvars
+infra
+docs
+coverage

@@ -62,10 +62,12 @@ updates:
         group-by: dependency-name
 
   - package-ecosystem: docker
-    # Root Dockerfile (the image prod runs) and the sandbox lab (AI-58). Both pin tag@sha256.
+    # Root Dockerfile (the image prod runs), the sandbox lab (AI-58) and the starter Dockerfile
+    # managed `cloud-run` projects are seeded with (AI-401). All pin tag@sha256.
     directories:
       - /
       - /scripts/sandbox-lab
+      - /template/docker
     schedule:
       interval: monthly
     open-pull-requests-limit: 5

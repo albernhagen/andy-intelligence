@@ -1,5 +1,5 @@
 {
-  "$comment": "Project baseline files (ADR-0031, ADR-0038). from = path in this repo at the pinned commit. pin = rewrite local ./platform/actions/ uses and ../infra/modules/ sources to the pinned remote ones. deployKind = written only for a project of that deploy kind (ADR-0114); environments = only for that environment policy (AI-109). group = seed files written only all together: none when any of them is already there. A new deploy kind adds its own entries; no code changes.",
+  "$comment": "Project baseline files (ADR-0031, ADR-0038). from = path in this repo at the pinned commit. pin = rewrite local ./platform/actions/ uses and ../infra/modules/ sources to the pinned remote ones. deployKind = written only for a project of that deploy kind (ADR-0114); environments = only for that environment policy (AI-109). group = seed files written only all together: none when any of them is already there. ownAppNote = a seed's warning in the baseline PR when the repo already has its own package.json (no starter). A new deploy kind adds its own entries; no code changes.",
   "source": "albernhagen/andy-intelligence",
   "managed": [
     { "path": ".github/workflows/ci.yml", "from": ".github/workflows/ci.yml", "pin": true },
@@ -76,6 +76,19 @@
     { "path": "docs/security/threat-model.md", "from": "template/docs/security/threat-model.md" },
     { "path": "design.md", "from": "template/design.md" },
     { "path": ".terraform-version", "from": ".terraform-version", "deployKind": "cloud-run" },
+    {
+      "path": "Dockerfile",
+      "from": "template/docker/Dockerfile",
+      "deployKind": "cloud-run",
+      "group": "docker",
+      "ownAppNote": "builds with pnpm (`pnpm-lock.yaml`, `pnpm build`) and runs `dist/main.js`; this repo has its own app, so edit the install step and `CMD` before the first deploy"
+    },
+    {
+      "path": ".dockerignore",
+      "from": "template/docker/.dockerignore",
+      "deployKind": "cloud-run",
+      "group": "docker"
+    },
     {
       "path": "infra/main.tf",
       "from": "template/infra/cloud-run/prod-only/main.tf",
@@ -156,6 +169,17 @@
     { "path": "eslint.config.js", "from": "template/starter/eslint.config.js.template" },
     { "path": ".prettierignore", "from": "template/starter/.prettierignore" },
     { "path": "src/index.ts", "from": "template/starter/src/index.ts" },
-    { "path": "src/index.test.ts", "from": "template/starter/src/index.test.ts" }
+    { "path": "src/index.test.ts", "from": "template/starter/src/index.test.ts" },
+    {
+      "path": "src/server.ts",
+      "from": "template/starter/src/server.ts",
+      "deployKind": "cloud-run"
+    },
+    {
+      "path": "src/server.test.ts",
+      "from": "template/starter/src/server.test.ts",
+      "deployKind": "cloud-run"
+    },
+    { "path": "src/main.ts", "from": "template/starter/src/main.ts", "deployKind": "cloud-run" }
   ]
 }
