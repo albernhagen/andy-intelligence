@@ -53,6 +53,8 @@ import {
   type Repo,
   type RepoToken,
   type RequiredCheck,
+  type AdrHoldRequest,
+  type AdrHoldResult,
   type TicketEvent,
   type WorkflowDispatch,
   type WorkflowRun,
@@ -300,6 +302,14 @@ export interface WorkTracker {
    * the repo's index) and every number reserved before. Never hands out a number twice (ADR-0080).
    */
   reserveAdrNumber(projectId: string, atLeast: number): Promise<number>;
+  /**
+   * A session's ADR number (AI-384): the same counter as `reserveAdrNumber`, plus a hold for
+   * `req.holder`, in one transaction. Expired holds are dropped first; at a cap nothing is
+   * reserved and the open holds come back. `not_found` for an unknown project.
+   */
+  holdAdrNumber(projectId: string, atLeast: number, req: AdrHoldRequest): Promise<AdrHoldResult>;
+  /** Drops the holder's holds (its PR merged or closed); the numbers are never reissued. */
+  releaseAdrHolds(projectId: string, holder: string): Promise<number[]>;
 
   /** Allocates the next key (e.g. "AI-7") and appends a `created` event. */
   createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket>;

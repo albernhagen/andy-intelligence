@@ -249,6 +249,7 @@ const DOMAIN_STATUS = {
   rate_limited: 429,
   not_revertible: 409,
   not_releasable: 409,
+  reservation_limit: 409,
 } as const;
 
 export function createApp(input: AppDeps) {

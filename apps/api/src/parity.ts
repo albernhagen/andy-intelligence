@@ -374,6 +374,12 @@ export const PARITY: readonly ParityEntry[] = [
     tools: [],
     oneSide: "GitHub's manifest flow needs a browser.",
   },
+  {
+    action: "Reserve an ADR number for a ticket (AI-384)",
+    routes: [],
+    tools: ["reserve_adr_number"],
+    oneSide: "Only sessions write ADRs; the web has nothing to number.",
+  },
 
   // ── Open gaps, each with its ticket ─────────────────────────────────────────
   {

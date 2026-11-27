@@ -31,6 +31,7 @@ export class DomainError extends Error {
       | "rate_limited"
       | "not_revertible"
       | "not_releasable"
+      | "reservation_limit"
       | "invalid_field",
     message: string,
     readonly details: string[] = [],

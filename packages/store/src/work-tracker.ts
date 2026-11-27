@@ -1,6 +1,7 @@
 import {
   FieldPath,
   type DocumentReference,
+  type DocumentSnapshot,
   type Firestore,
   type Query,
 } from "@google-cloud/firestore";
@@ -9,6 +10,8 @@ import {
   PullRequestLink,
   Stage,
   WorkTrackerError,
+  AdrHold,
+  applyAdrHold,
   applyTicketChange,
   buildProject,
   buildQuestion,
@@ -16,6 +19,10 @@ import {
   compareRanks,
   event,
   notFound,
+  releaseAdrHoldsFrom,
+  type AdrCounterState,
+  type AdrHoldRequest,
+  type AdrHoldResult,
   type AnsweredVia,
   type EventActor,
   type NewProject,
@@ -34,6 +41,13 @@ import { collections, typedCollection } from "./index";
 
 /** Stored stage values that read as Done: `monitoring` until ADR-0069's upgrader rewrites it. */
 const STORED_AS_DONE = ["done", "monitoring"];
+
+/** The ADR counter document; older ones have only `last`. Holds are parsed, never trusted raw. */
+function adrCounterState(snap: DocumentSnapshot): AdrCounterState {
+  const last = (snap.get("last") as number | undefined) ?? 0;
+  const holds = AdrHold.array().safeParse(snap.get("holds") ?? []);
+  return { last, holds: holds.success ? holds.data : [] };
+}
 
 /** gRPC ALREADY_EXISTS, returned by `create()` on an existing document. */
 const ALREADY_EXISTS = 6;
@@ -113,13 +127,42 @@ export class FirestoreWorkTracker implements WorkTracker {
     if (!(await this.projects().doc(projectId).get()).exists) throw notFound("project", projectId);
     // One counter document per project, like ticket keys (ADR-0080). The transaction holds only
     // that document, so it never contends with writes to the project (the dispatcher's).
-    const ref = this.db.collection("counters").doc(`adr-${projectId}`);
+    const ref = this.adrCounterRef(projectId);
     return this.db.runTransaction(async (tx) => {
       const last = ((await tx.get(ref)).get("last") as number | undefined) ?? 0;
       const next = Math.max(atLeast, last) + 1;
-      tx.set(ref, { last: next });
+      // merge: keeps the sessions' holds (AI-384) on the same document.
+      tx.set(ref, { last: next }, { merge: true });
       return next;
     });
+  }
+
+  async holdAdrNumber(
+    projectId: string,
+    atLeast: number,
+    req: AdrHoldRequest,
+  ): Promise<AdrHoldResult> {
+    if (!(await this.projects().doc(projectId).get()).exists) throw notFound("project", projectId);
+    const ref = this.adrCounterRef(projectId);
+    return this.db.runTransaction(async (tx) => {
+      const { state, result } = applyAdrHold(adrCounterState(await tx.get(ref)), atLeast, req);
+      tx.set(ref, state);
+      return result;
+    });
+  }
+
+  async releaseAdrHolds(projectId: string, holder: string): Promise<number[]> {
+    if (!(await this.projects().doc(projectId).get()).exists) throw notFound("project", projectId);
+    const ref = this.adrCounterRef(projectId);
+    return this.db.runTransaction(async (tx) => {
+      const { state, released } = releaseAdrHoldsFrom(adrCounterState(await tx.get(ref)), holder);
+      if (released.length) tx.set(ref, state);
+      return released;
+    });
+  }
+
+  private adrCounterRef(projectId: string) {
+    return this.db.collection("counters").doc(`adr-${projectId}`);
   }
 
   async createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket> {

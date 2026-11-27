@@ -29,7 +29,7 @@ import {
   type ReleaseReader,
   type ReleaseService,
 } from "@andy/domain";
-import type { MergeHoldReader, RunnerService } from "@andy/domain";
+import type { AdrNumbers, MergeHoldReader, RunnerService } from "@andy/domain";
 import type { SetupChecklistReader } from "../setup";
 import type { SpendSettingsService } from "../spend";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -107,6 +107,8 @@ export interface ToolDeps {
   whatsNew?: WhatsNewReader | null;
   /** Releases (AI-183: M6.9); absent or null: no `list_releases` tool. */
   releases?: ReleaseReader | null;
+  /** ADR numbers for sessions (AI-384); absent or null: no `reserve_adr_number`. */
+  adrNumbers?: AdrNumbers | null;
   /** Project logos (AI-393); absent or null: no logo tools. */
   logos?: ProjectLogoService | null;
   /** Promote and rollback (AI-199: M6.12); absent or null: no `promote`, `rollback`, `list_release_requests`. */
