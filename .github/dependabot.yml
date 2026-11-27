@@ -81,3 +81,7 @@ updates:
       # sandbox's NODE_VERSION by hand; Dependabot keeps the digest of the current tag fresh.
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # Ubuntu's interim releases (24.04 → 24.10) count as minors and leave support within a
+      # year; the sandbox lab mirrors the hosted runner's LTS, so only its digest moves (PR #465).
+      - dependency-name: "ubuntu"
+        update-types: ["version-update:semver-minor"]

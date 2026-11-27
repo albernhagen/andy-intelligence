@@ -2,7 +2,7 @@
 # GitHub-hosted runner where it matters to Claude Code's sandbox: Ubuntu 24.04, user `runner`
 # (uid 1001) with passwordless sudo, the checkout at /home/runner/work/<repo>/<repo>, runner temp
 # at /home/runner/work/_temp, Node and pnpm in the tool cache, and the pinned Claude Code.
-FROM ubuntu:24.10@sha256:cdf755952ed117f6126ff4e65810bf93767d4c38f5c7185b50ec1f1078b464cc
+FROM ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b
 
 ARG NODE_VERSION=24.22.2
 ARG NODE_SHA256_X64=48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75
