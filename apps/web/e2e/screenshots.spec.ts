@@ -187,10 +187,11 @@ test("agent task page from the story panel", async ({ page }) => {
 
 /** AI-85: the epic's stories in the panel, on the OPS epic AI-86 seeds (OPS-5). */
 test("what's new: status, then changes by day, one opened", async ({ page }) => {
+  // AI-385: with the handover the page is taller than 800 px; a full-page capture past the
+  // viewport closed the opened row in CI, so the viewport holds the whole page.
+  await page.setViewportSize({ width: 1280, height: 960 });
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ops/whats-new", "Backups now land in a second region");
-  // AI-385: the digest's sections render after the changes; wait for them, or a late render can
-  // race the click below.
   await expect(page.getByRole("region", { name: "Next up" })).toBeVisible();
   // The row's start: its centre can be the PR link, which leaves the page.
   await page.getByText("Backups now land in a second region").click({ position: { x: 8, y: 8 } });
