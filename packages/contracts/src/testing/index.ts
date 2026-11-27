@@ -84,6 +84,59 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       await rejectsWith(tracker.reserveAdrNumber("does-not-exist", 1), "not_found");
     });
 
+    const hold = (holder: string, now = "2026-11-27T10:00:00.000Z") => ({
+      holder,
+      now,
+      expiresAt: "2026-12-04T10:00:00.000Z",
+      perHolder: 2,
+      perProject: 3,
+    });
+
+    it("GivenSessionHoldsAndRuns_WhenBothReserve_ThenTheyShareOneSequence", async () => {
+      const { tracker, project } = await setup();
+      expect(await tracker.holdAdrNumber(project.id, 160, hold("AI-1"))).toMatchObject({
+        ok: true,
+        hold: { number: 161, holder: "AI-1" },
+      });
+      expect(await tracker.reserveAdrNumber(project.id, 160)).toBe(162);
+      expect(await tracker.holdAdrNumber(project.id, 160, hold("AI-2"))).toMatchObject({
+        hold: { number: 163 },
+      });
+      await rejectsWith(tracker.holdAdrNumber("does-not-exist", 1, hold("AI-1")), "not_found");
+    });
+
+    it("GivenHoldsAtTheCaps_WhenAnotherIsAsked_ThenItIsRefusedAndNothingIsReserved", async () => {
+      const { tracker, project } = await setup();
+      await tracker.holdAdrNumber(project.id, 10, hold("AI-1"));
+      await tracker.holdAdrNumber(project.id, 10, hold("AI-1"));
+      const full = await tracker.holdAdrNumber(project.id, 10, hold("AI-1"));
+      expect(full).toMatchObject({ ok: false, reason: "holder_cap" });
+      expect(full.ok ? [] : full.open.map((h) => h.number)).toEqual([11, 12]);
+      await tracker.holdAdrNumber(project.id, 10, hold("AI-2"));
+      expect(await tracker.holdAdrNumber(project.id, 10, hold("AI-3"))).toMatchObject({
+        ok: false,
+        reason: "project_cap",
+      });
+      expect(await tracker.reserveAdrNumber(project.id, 10)).toBe(14);
+    });
+
+    it("GivenReleasedOrExpiredHolds_WhenAskedAgain_ThenTheSlotIsFreeAndNoNumberIsReissued", async () => {
+      const { tracker, project } = await setup();
+      await tracker.holdAdrNumber(project.id, 10, hold("AI-1"));
+      await tracker.holdAdrNumber(project.id, 10, hold("AI-1"));
+      expect(await tracker.releaseAdrHolds(project.id, "AI-1")).toEqual([11, 12]);
+      expect(await tracker.releaseAdrHolds(project.id, "AI-1")).toEqual([]);
+      expect(await tracker.holdAdrNumber(project.id, 10, hold("AI-1"))).toMatchObject({
+        hold: { number: 13 },
+      });
+      await tracker.holdAdrNumber(project.id, 10, hold("AI-1"));
+      const later = "2026-12-05T00:00:00.000Z";
+      expect(await tracker.holdAdrNumber(project.id, 10, hold("AI-1", later))).toMatchObject({
+        ok: true,
+        hold: { number: 15 },
+      });
+    });
+
     it("GivenAProject_WhenAutoRefineIsTurnedOff_ThenItIsStoredAndDefaultsOnForNewProjects", async () => {
       const tracker = await make();
       const created = await tracker.createProject({ name: "Settings", key: uniqueKey() });

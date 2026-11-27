@@ -121,6 +121,48 @@ describe("PullRequestTickets", () => {
     });
   });
 
+  describe("ADR holds (AI-384)", () => {
+    const hold = (holder: string) => ({
+      holder,
+      now: "2026-11-05T12:00:00.000Z",
+      expiresAt: "2026-11-12T12:00:00.000Z",
+      perHolder: 5,
+      perProject: 20,
+    });
+
+    it("GivenATicketHoldsAdrNumbers_WhenItsPullRequestMerges_ThenTheyAreReleased", async () => {
+      await ticketAt("ready_for_review");
+      await tracker.holdAdrNumber(project.id, 160, hold("AI-1"));
+      await tracker.holdAdrNumber(project.id, 160, hold("AI-9"));
+      const result = await prs.apply(prEvent("closed", { state: "merged" }), project);
+      expect(result.releasedAdrs).toEqual([161]);
+      expect(await tracker.releaseAdrHolds(project.id, "AI-9")).toEqual([162]);
+    });
+
+    it("GivenATicketHoldsAnAdrNumber_WhenItsPullRequestClosesUnmerged_ThenItIsReleased", async () => {
+      await ticketAt("ready_for_review");
+      await tracker.holdAdrNumber(project.id, 160, hold("AI-1"));
+      const result = await prs.apply(prEvent("closed", { state: "closed" }), project);
+      expect(result.releasedAdrs).toEqual([161]);
+    });
+
+    it("GivenATicketHoldsAnAdrNumber_WhenItsPullRequestOpens_ThenItIsKept", async () => {
+      await ticketAt("in_progress");
+      await tracker.holdAdrNumber(project.id, 160, hold("AI-1"));
+      const result = await prs.apply(prEvent("opened"), project);
+      expect(result.releasedAdrs).toBeUndefined();
+      expect(await tracker.releaseAdrHolds(project.id, "AI-1")).toEqual([161]);
+    });
+
+    it("GivenTheReleaseFails_WhenThePullRequestMerges_ThenTheTicketStillMoves", async () => {
+      const t = await ticketAt("ready_for_review");
+      vi.spyOn(tracker, "releaseAdrHolds").mockRejectedValueOnce(new Error("down"));
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      await prs.apply(prEvent("closed", { state: "merged" }), project);
+      expect((await reload(t)).stage).toBe("done");
+    });
+  });
+
   it("GivenAReadyTicket_WhenItsPullRequestOpens_ThenItStepsThroughInProgress", async () => {
     const t = await ticketAt("ready");
     const result = await prs.apply(prEvent("opened"), project);

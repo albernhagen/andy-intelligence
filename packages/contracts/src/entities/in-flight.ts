@@ -39,3 +39,34 @@ export const InFlightRun = z.object({
   reservedAdr: AdrNumber.nullable(),
 });
 export type InFlightRun = z.infer<typeof InFlightRun>;
+
+/**
+ * A session's hold on an ADR number (AI-384), drawn from the same per-project counter as build
+ * runs, so the two never get the same number. Kept on the counter itself; the number is never
+ * handed out again, even after the hold is released (an unused one is a gap, like 0161).
+ */
+export const AdrHold = z.object({
+  number: AdrNumber,
+  /** The ticket key the number is for ("AI-384"): its PR merging or closing releases the hold. */
+  holder: z.string().regex(/^[A-Z][A-Z0-9]{0,9}-\d+$/),
+  reservedAt: Timestamp,
+  /** Past this, the hold no longer counts against the caps and is dropped on the next write. */
+  expiresAt: Timestamp,
+});
+export type AdrHold = z.infer<typeof AdrHold>;
+
+/** A session's hold request: who, when, and the caps checked in the same transaction. */
+export interface AdrHoldRequest {
+  holder: string;
+  now: string;
+  expiresAt: string;
+  /** Most open holds one holder (ticket) may have. */
+  perHolder: number;
+  /** Most open holds across the project. */
+  perProject: number;
+}
+
+/** A hold was taken, or refused at a cap with the open holds that fill it. */
+export type AdrHoldResult =
+  | { ok: true; hold: AdrHold }
+  | { ok: false; reason: "holder_cap" | "project_cap"; open: AdrHold[] };

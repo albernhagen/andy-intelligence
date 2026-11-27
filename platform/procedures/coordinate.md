@@ -19,7 +19,7 @@ Procedure for a **coordinator**: one session that hands tickets to **worker** se
 - Only tickets whose dependencies have merged, in milestone order; a later one may join if it depends on nothing unfinished and touches other packages.
 - **Two workers never own the same file.** Name each worker's files in its brief. Where two must touch one, one owns it; the other gets one named line.
 - Shared documents (ADR index) belong to the coordinator or one worker.
-- Reserve what collides: ADR numbers, who regenerates which screenshots.
+- Reserve who regenerates which screenshots. Workers get ADR numbers from MCP `reserve_adr_number`.
 - Keep batches reviewable.
 
 ## 2. Ticket, then brief

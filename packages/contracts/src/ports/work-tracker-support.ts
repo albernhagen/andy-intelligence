@@ -1,4 +1,13 @@
-import type { EventActor, Project, Question, Ticket, TicketEvent } from "../entities";
+import type {
+  AdrHold,
+  AdrHoldRequest,
+  AdrHoldResult,
+  EventActor,
+  Project,
+  Question,
+  Ticket,
+  TicketEvent,
+} from "../entities";
 import { QuestionId, RUNS_AT_ONCE_DEFAULT } from "../entities";
 import { milestoneTargetProblem } from "../entities/milestone";
 import {
@@ -219,4 +228,50 @@ export function runQuestionId(runId: string, index: number): string {
 
 export function notFound(what: string, id: string): WorkTrackerError {
   return new WorkTrackerError("not_found", `${what} not found: ${id}`);
+}
+
+/** A project's ADR counter as stored: the last number handed out and the sessions' holds. */
+export interface AdrCounterState {
+  last: number;
+  holds: AdrHold[];
+}
+
+/**
+ * `holdAdrNumber`'s rule, shared by every adapter (AI-384): drop expired holds, refuse at a cap,
+ * else take the next number above `atLeast` and `last` and record the hold. Pure: the adapter
+ * reads and writes the state in one transaction.
+ */
+export function applyAdrHold(
+  state: AdrCounterState,
+  atLeast: number,
+  req: AdrHoldRequest,
+): { state: AdrCounterState; result: AdrHoldResult } {
+  const open = state.holds.filter((h) => h.expiresAt > req.now);
+  const mine = open.filter((h) => h.holder === req.holder);
+  if (mine.length >= req.perHolder) {
+    return {
+      state: { ...state, holds: open },
+      result: { ok: false, reason: "holder_cap", open: mine },
+    };
+  }
+  if (open.length >= req.perProject) {
+    return { state: { ...state, holds: open }, result: { ok: false, reason: "project_cap", open } };
+  }
+  const number = Math.max(atLeast, state.last) + 1;
+  const hold: AdrHold = {
+    number,
+    holder: req.holder,
+    reservedAt: req.now,
+    expiresAt: req.expiresAt,
+  };
+  return { state: { last: number, holds: [...open, hold] }, result: { ok: true, hold } };
+}
+
+/** `releaseAdrHolds`' rule: the holder's holds go; `last` stays, so no number is reissued. */
+export function releaseAdrHoldsFrom(
+  state: AdrCounterState,
+  holder: string,
+): { state: AdrCounterState; released: number[] } {
+  const released = state.holds.filter((h) => h.holder === holder).map((h) => h.number);
+  return { state: { ...state, holds: state.holds.filter((h) => h.holder !== holder) }, released };
 }

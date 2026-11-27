@@ -68,6 +68,8 @@ export interface PullRequestTicketResult {
   flagged?: boolean;
   /** Needs-you cleared because this PR, whose close had set it, is open again. */
   unflagged?: boolean;
+  /** ADR numbers the ticket held that this merge or close released (AI-384). */
+  releasedAdrs?: number[];
 }
 
 export interface PullRequestTicketsOptions {
@@ -110,7 +112,13 @@ export class PullRequestTickets {
       "system",
     );
     const reason = `PR #${pr.number} ${outcome}: ${pr.url}`;
-    const base = { result: "linked" as const, ticket: key, outcome };
+    const released = outcome === "opened" ? [] : await this.releaseAdrHolds(ticket);
+    const base = {
+      result: "linked" as const,
+      ticket: key,
+      outcome,
+      ...(released.length ? { releasedAdrs: released } : {}),
+    };
     // An epic never runs, so a PR naming one is a mistake or a reference: link only.
     if (ticket.type === "epic") return { ...base, moves: [] };
     // Only PRs into the default branch move tickets (ADR-0056, ADR-0067); others only link.
@@ -134,6 +142,27 @@ export class PullRequestTickets {
         };
       case "closed":
         return this.rework(ticket, reason, base);
+    }
+  }
+
+  /**
+   * AI-384: a merged or closed PR frees the ADR numbers its ticket's sessions held. Never fails
+   * the move: a hold left behind expires on its own.
+   */
+  private async releaseAdrHolds(ticket: Ticket): Promise<number[]> {
+    try {
+      return await this.tracker.releaseAdrHolds(ticket.projectId, ticket.key);
+    } catch (err) {
+      console.log(
+        JSON.stringify({
+          severity: "WARNING",
+          message: "ADR holds not released",
+          component: "pull-requests",
+          ticket: ticket.key,
+          error: String(err),
+        }),
+      );
+      return [];
     }
   }
 
