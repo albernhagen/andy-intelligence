@@ -230,6 +230,32 @@ describe("isDependencyBump", () => {
 });
 
 describe("dependencyBumpOutput", () => {
+  // AI-394 criterion 3: on a person-started run (the action only asks this file then), a major
+  // bump or a change under infra/, .github/, platform/ or template/ is not a bump, so the action
+  // keeps mode=review and both agents run. Dependabot-started runs skip earlier (no secrets).
+  it("GivenPersonStartedRunOnMajorOrProtectedFolderChange_WhenChecked_ThenAgentsRun", () => {
+    const pkg = (v) => JSON.stringify({ name: "x", dependencies: { a: v } });
+    const lockOf = (k) => `lockfileVersion: '9.0'\n\npackages:\n\n  ${k}:\n    resolution: {}\n`;
+    const files = {
+      "package.json": [pkg("^1.2.3"), pkg("^2.0.0")],
+      "pnpm-lock.yaml": [lockOf("a@1.2.3"), lockOf("a@2.0.0")],
+    };
+    const read = (side, path) => files[path]?.[side === "base" ? 0 : 1] ?? pkg("1.0.0");
+    expect(dependencyBumpOutput(() => ["package.json", "pnpm-lock.yaml"], read)).toBe("false");
+    for (const folder of [
+      "infra/dns/x.tf",
+      ".github/workflows/ci.yml",
+      "platform/actions/a/action.yml",
+      "template/starter/package.json",
+    ]) {
+      // The lockfile part alone is a minor bump, so the folder is what brings the agents back.
+      const minor = (side, path) =>
+        path === "pnpm-lock.yaml" ? lockOf(side === "base" ? "a@1.2.3" : "a@1.3.0") : pkg("^1.0.0");
+      expect(dependencyBumpOutput(() => ["pnpm-lock.yaml"], minor)).toBe("true");
+      expect(dependencyBumpOutput(() => ["pnpm-lock.yaml", folder], minor)).toBe("false");
+    }
+  });
+
   it("GivenUnparsableManifest_WhenChecked_ThenFalse", () => {
     const read = () => "{ not json";
     expect(dependencyBumpOutput(() => ["package.json"], read)).toBe("false");
