@@ -74,6 +74,7 @@ A move that failed shows as `webhook ticket update failed` (severity ERROR) in C
 
 - One person: remove the email from `allowed_emails` and apply; every token stops working on the next request.
 - All tokens: delete the `oauthGrants` collection in the Firestore console. Claude asks to reconnect.
+- Confirm nothing survived: wait about 10 seconds, reload `oauthGrants` and delete any document that appeared. A refresh already in flight when you deleted can still write a new access token (1 h) and, in a token's last 7 days, a new refresh token (AI-211: MCP OAuth: revoke a stolen token's chains together). Empty on the second look means revoked.
 
 ## Troubleshooting
 
