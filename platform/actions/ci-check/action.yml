@@ -2,33 +2,85 @@ name: Baseline — check
 description: >-
   Lockfile sources, lint, context budget, typecheck, test and build a pnpm repo (ADR-0022, ADR-0046, project baseline ADR-0031/ADR-0038).
   Needs package.json (packageManager pinned), pnpm-lock.yaml, .nvmrc and the scripts
-  lint, typecheck, test, build. Run after actions/checkout.
+  lint, typecheck, test, build. Run after actions/checkout. `part` picks one piece so a caller can
+  run them as parallel jobs (AI-402); `part: result` is the final gate over those jobs' results.
+
+inputs:
+  part:
+    description: >-
+      all (every step in order), lint (lockfile sources, lint, context budget), typecheck, test,
+      build, or result (fails unless every job in `results` succeeded; installs nothing).
+    default: all
+  test-shard:
+    description: With part test, run one shard of the suite, as <index>/<count> (vitest `--shard`). Empty runs it whole.
+    default: ""
+  results:
+    description: With part result, the caller's `toJSON(needs)`.
+    default: ""
 
 runs:
   using: composite
   steps:
-    - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+    # An unknown part would otherwise run no step and pass.
+    - name: Check inputs
+      shell: bash
+      env:
+        PART: ${{ inputs.part }}
+        SHARD: ${{ inputs.test-shard }}
+      run: |
+        case "$PART" in all|lint|typecheck|test|build|result) ;; *) echo "::error::Unknown part '$PART'"; exit 1 ;; esac
+        if [ -n "$SHARD" ] && { [ "$PART" != test ] || ! [[ "$SHARD" =~ ^[1-9][0-9]*/[1-9][0-9]*$ ]]; }; then
+          echo "::error::test-shard '$SHARD' needs part test and the form <index>/<count>"; exit 1
+        fi
+    # The required `check`: passes only when every needed job's result is `success`. A failed,
+    # skipped or cancelled part fails it, and so does an empty list (AI-402).
+    - name: Every part passed
+      if: inputs.part == 'result'
+      shell: bash
+      env:
+        RESULTS: ${{ inputs.results }}
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/ci-check-result.mjs"
+    - if: inputs.part != 'result'
+      uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+    - if: inputs.part != 'result'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version-file: .nvmrc
         cache: pnpm
-    - shell: bash
+    - if: inputs.part != 'result'
+      shell: bash
       run: pnpm install --frozen-lockfile
     - name: Lockfile sources (ADR-0046)
+      if: inputs.part == 'all' || inputs.part == 'lint'
       shell: bash
       run: node "$GITHUB_ACTION_PATH/../../../scripts/lockfile-sources.mjs"
-    - shell: bash
+    - if: inputs.part == 'all' || inputs.part == 'lint'
+      shell: bash
       run: pnpm lint
     - name: Context budget (ADR-0046)
+      if: inputs.part == 'all' || inputs.part == 'lint'
       shell: bash
       # On a PR: only the PR's own change fails it. On a push to the default branch: warns, never
       # fails; the context-budget-trim job records the trim (AI-344, ADR-0138).
       env:
         REPORT: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && '--report' || '' }}
       run: node "$GITHUB_ACTION_PATH/../../../scripts/context-budget.mjs" $REPORT
-    - shell: bash
+    - if: inputs.part == 'all' || inputs.part == 'typecheck'
+      shell: bash
       run: pnpm typecheck
-    - shell: bash
-      run: pnpm test
-    - shell: bash
+    - if: inputs.part == 'all' || inputs.part == 'test'
+      shell: bash
+      env:
+        SHARD: ${{ inputs.test-shard }}
+      # A shard may hold no test files in a small repo (vitest refuses a count above the file
+      # count unless --passWithNoTests), so a sharded run allows an empty shard. Shard 1 first
+      # checks the whole suite isn't empty, so a broken test glob can't pass every shard.
+      run: |
+        if [ -z "$SHARD" ]; then pnpm test; exit 0; fi
+        if [ "${SHARD%%/*}" = 1 ]; then
+          pnpm exec vitest list --filesOnly | node "$GITHUB_ACTION_PATH/../../../scripts/test-files-check.mjs"
+        fi
+        pnpm test --shard="$SHARD" --passWithNoTests
+    - if: inputs.part == 'all' || inputs.part == 'build'
+      shell: bash
       run: pnpm build

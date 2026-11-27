@@ -3,9 +3,10 @@ import { expect, test } from "@playwright/test";
 /**
  * AI-176: M7.6: Phone quota banner and pause. At 390 px the quota banner fits without sideways
  * scroll, and dispatch pauses and resumes from the inbox in one tap each (the ticket allows two).
- * No screenshot: the phone shell (AI-173) still changes the header. It flips project OPS, not AI:
- * every flip lands in the settings change log (AI-118), and AI's settings page is a screenshot.
- * The banner shows only at warn or pause (AI-328), so this test serves a warn reading.
+ * No screenshot: the phone shell (AI-173) still changes the header. The pause and resume writes are
+ * intercepted and OPS's `paused` is served from here, so the fake API the other checks share (on
+ * other workers, AI-402) never sees OPS paused. The banner shows only at warn or pause (AI-328), so
+ * this test serves a warn reading.
  */
 
 test.use({ viewport: { width: 390, height: 844 } });
@@ -29,6 +30,20 @@ const WARN = {
 
 test("phone: quota banner fits and pause is one tap from the inbox", async ({ page }) => {
   await page.route("**/api/quota", (route) => route.fulfill({ json: WARN }));
+  let paused = false;
+  await page.route("**/api/projects/ops", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    paused = (route.request().postDataJSON() as { paused: boolean }).paused;
+    await route.fulfill({ json: { id: "ops", paused } });
+  });
+  await page.route("**/api/projects", async (route) => {
+    const response = await route.fetch();
+    const projects = (await response.json()) as { id: string }[];
+    await route.fulfill({
+      response,
+      json: projects.map((p) => (p.id === "ops" ? { ...p, paused } : p)),
+    });
+  });
   await page.goto("/p/ops/inbox");
   const banner = page.getByRole("alert").filter({ hasText: "Claude quota" });
   await expect(banner).toBeVisible();
@@ -40,10 +55,10 @@ test("phone: quota banner fits and pause is one tap from the inbox", async ({ pa
   await page.getByRole("button", { name: "Pause dispatch for Ops" }).click();
   const resume = page.getByRole("button", { name: "Resume dispatch for Ops" });
   await expect(resume).toHaveAttribute("aria-pressed", "true");
-  // Resume, so OPS is unpaused again for the screenshot checks that follow.
   await resume.click();
   await expect(page.getByRole("button", { name: "Pause dispatch for Ops" })).toHaveAttribute(
     "aria-pressed",
     "false",
   );
+  expect(paused).toBe(false);
 });

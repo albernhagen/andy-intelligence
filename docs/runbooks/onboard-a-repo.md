@@ -143,6 +143,8 @@ node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.0.0   # op
 
 Review and merge the PR (an existing repo needs `pnpm lint/typecheck/test/build` scripts, `.nvmrc`, and `lefthook` as a dev dependency with `"prepare": "lefthook install"`). Then `apply` (a dry run first) and `check`. Apply the ruleset only after the PR merges: before that, its required checks don't exist on `main`.
 
+`ci.yml` runs lint, typecheck, tests (two vitest shards, `--passWithNoTests` so a small suite's empty shard passes; shard 1 fails if `vitest list` finds no test files at all) and build as parallel `check-*` jobs; only the final `check` gate is required, so the ruleset is the same with an older baseline (AI-402). Sharding needs vitest: the `test` script must be vitest (or take its `--shard=<i>/<n>` and `--passWithNoTests`), and `pnpm exec vitest` must exist.
+
 ## 5. Update a repo to a newer baseline
 
 Dependabot bumps the action pins monthly. `check` then reports `pins …, but .andy/baseline.json says …`: run `files` at the new tag to update every managed file and the record in one PR.

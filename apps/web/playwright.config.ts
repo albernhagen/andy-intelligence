@@ -12,7 +12,9 @@ export default defineConfig({
   testDir: "e2e",
   snapshotPathTemplate: "{testDir}/__screenshots__/{arg}{ext}",
   outputDir: "test-results",
-  workers: 1,
+  // Two workers share the one dev server and its seeded fake API (AI-402), so a check must not
+  // change that API's state: intercept writes with page.route (e2e/phone-quota.spec.ts).
+  workers: 2,
   retries: 0,
   forbidOnly: CI,
   timeout: 30_000,
