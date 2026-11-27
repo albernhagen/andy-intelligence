@@ -1,5 +1,7 @@
-# Dependabot version updates (ADR-0025). Action pins are commit SHAs with a version comment;
-# Dependabot updates both. Caps: weekly, grouped, at most 5 open PRs per ecosystem (ADR-0028).
+# Dependabot version updates (ADR-0025). Action pins and base images are pinned by digest or
+# commit SHA with a readable tag or version comment; Dependabot updates both. Caps: grouped, at
+# most 5 open PRs per ecosystem (ADR-0028). npm is weekly; Actions, Terraform and Docker monthly
+# (AI-399). Security updates are separate and do not wait for this schedule.
 # cooldown waits a few days after a release, so a hijacked release is usually caught first.
 version: 2
 updates:
@@ -10,11 +12,17 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
+    # One PR for dev tooling, one for what ships; majors come one per package.
     groups:
-      minor-and-patch:
+      dev-minor-and-patch:
+        dependency-type: development
         update-types: [minor, patch]
         # Playwright gets a PR of its own: the screenshot job's browser image (pinned by digest in
         # a workflow) must move with it, and the job fails naming the fix until it does (AI-394).
+        exclude-patterns: ["@playwright/test", "playwright", "playwright-core"]
+      prod-minor-and-patch:
+        dependency-type: production
+        update-types: [minor, patch]
         exclude-patterns: ["@playwright/test", "playwright", "playwright-core"]
     ignore:
       # @types/node majors track the Node runtime in .nvmrc; bump both together by hand.
@@ -27,7 +35,7 @@ updates:
       - /
       - /platform/actions/*
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
@@ -43,7 +51,31 @@ updates:
       - /infra/dns
       - /infra/modules/project-env/examples/basic
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     cooldown:
       default-days: 7
+    groups:
+      terraform:
+        patterns: ["*"]
+        # One PR per provider covering every root above, not one PR per root (PR #204 to #207).
+        group-by: dependency-name
+
+  - package-ecosystem: docker
+    # Root Dockerfile (the image prod runs) and the sandbox lab (AI-58). Both pin tag@sha256.
+    directories:
+      - /
+      - /scripts/sandbox-lab
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      docker:
+        patterns: ["*"]
+    ignore:
+      # Base image majors (node 24 → 26, ubuntu 24.04 → 26.04) move with .nvmrc and the
+      # sandbox's NODE_VERSION by hand; Dependabot keeps the digest of the current tag fresh.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

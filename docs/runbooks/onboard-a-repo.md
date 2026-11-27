@@ -145,7 +145,7 @@ Review and merge the PR (an existing repo needs `pnpm lint/typecheck/test/build`
 
 ## 5. Update a repo to a newer baseline
 
-Dependabot bumps the action pins weekly. `check` then reports `pins …, but .andy/baseline.json says …`: run `files` at the new tag to update every managed file and the record in one PR.
+Dependabot bumps the action pins monthly. `check` then reports `pins …, but .andy/baseline.json says …`: run `files` at the new tag to update every managed file and the record in one PR.
 
 ```sh
 node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.1.0
