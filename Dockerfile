@@ -1,5 +1,6 @@
 # Control-plane image: API (bundled) + built SPA, served by one Cloud Run service.
-FROM node:24-slim AS build
+# Base image pinned tag@digest (both stages the same); Dependabot's docker updates move both (AI-399).
+FROM node:24-slim@sha256:873f586f3794f52281bd039bf02c048a0be08fde619338f9941bad1eb6b34530 AS build
 WORKDIR /repo
 RUN corepack enable
 COPY . .
@@ -8,7 +9,7 @@ RUN pnpm --filter @andy/api --filter @andy/web build
 # Production-only node_modules for the API.
 RUN pnpm --filter @andy/api deploy --prod --legacy /out
 
-FROM node:24-slim
+FROM node:24-slim@sha256:873f586f3794f52281bd039bf02c048a0be08fde619338f9941bad1eb6b34530
 WORKDIR /app
 ENV NODE_ENV=production \
     WEB_ROOT=/app/public
