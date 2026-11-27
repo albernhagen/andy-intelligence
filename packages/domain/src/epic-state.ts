@@ -1,5 +1,7 @@
-import type { EventActor, Stage, Ticket, TicketChange, WorkTracker } from "@andy/contracts";
-import { WorkTrackerError } from "@andy/contracts";
+import type { EventActor, Ticket, TicketChange, WorkTracker } from "@andy/contracts";
+import { Stage as StageSchema, WorkTrackerError, type Stage } from "@andy/contracts";
+
+const STAGES = StageSchema.options;
 
 /**
  * An epic's stage follows its tickets (ADR-0164, AI-404). The stage stays stored, so every reader
@@ -9,42 +11,49 @@ import { WorkTrackerError } from "@andy/contracts";
 
 /** How far up a chain of epics one write syncs (ADR-0131 nests one level; this bounds a cycle). */
 export const EPIC_SYNC_MAX_DEPTH = 5;
-/**
- * Children one sync reads (ADR-0028). An epic with more is left as it is and logged; the fix-up
- * reads the whole project and still puts it in step. Project AI's largest epic has about 40.
- */
-export const EPIC_SYNC_MAX_CHILDREN = 200;
 /** Tries per epic when another write lands between its read and its write. */
 export const EPIC_SYNC_ATTEMPTS = 3;
+/**
+ * The ERROR line a sync that still failed logs; an alert can match it. Reworded only with the
+ * alert, if one is added.
+ */
+export const EPIC_SYNC_FAILED = "epic stage sync failed";
 
 /** The fields whose change can change a parent epic's stage. */
 const SYNC_FIELDS = ["parentId", "archived", "type", "needsCheck"] as const;
 
+/** How many of an epic's children are in each stage (archived ones too). */
+export type StageCounts = Record<Stage, number>;
+
+/** Counts per stage of the given tickets; every stage present. */
+export function stageCounts(children: readonly Pick<Ticket, "stage">[]): StageCounts {
+  const counts = Object.fromEntries(STAGES.map((s) => [s, 0])) as StageCounts;
+  for (const c of children) counts[c.stage]++;
+  return counts;
+}
+
+const total = (counts: StageCounts) => STAGES.reduce((n, s) => n + counts[s], 0);
+
 /** "Why" for the epic's stage event: what its tickets say. */
-export function epicStageReason(children: readonly Pick<Ticket, "stage">[]): string {
-  const counted = children.filter((c) => c.stage !== "cancelled");
-  const done = counted.filter((c) => c.stage === "done").length;
-  return `follows its tickets: ${done} of ${counted.length} done`;
+export function epicStageReason(counts: StageCounts): string {
+  return `follows its tickets: ${counts.done} of ${total(counts) - counts.cancelled} done`;
 }
 
 /**
- * The stage an epic's children give it. Cancelled children don't count; archived ones do (only
- * Done or Cancelled tickets are archived). None left → Backlog (not started); all Done → Done, or
- * Ready for review ("Waiting for your check") when `needsCheck` is on and the owner hasn't closed
- * it yet; any past Backlog → In progress; else Backlog. A child epic counts by its own stage, so
- * nesting rolls up one level at a time.
+ * The stage an epic's children give it, from their counts per stage. Cancelled children don't
+ * count; archived ones do (only Done or Cancelled tickets are archived). None left → Backlog (not
+ * started); all Done → Done, or Ready for review ("Waiting for your check") when `needsCheck` is on
+ * and the owner hasn't closed it yet; any past Backlog → In progress; else Backlog. A child epic
+ * counts by its own stage, so nesting rolls up one level at a time.
  */
-export function epicStage(
-  epic: Pick<Ticket, "stage" | "needsCheck">,
-  children: readonly Pick<Ticket, "stage">[],
-): Stage {
-  const counted = children.filter((c) => c.stage !== "cancelled");
-  if (counted.length === 0) return "backlog";
-  if (counted.every((c) => c.stage === "done")) {
+export function epicStage(epic: Pick<Ticket, "stage" | "needsCheck">, counts: StageCounts): Stage {
+  const counted = total(counts) - counts.cancelled;
+  if (counted === 0) return "backlog";
+  if (counts.done === counted) {
     if (!epic.needsCheck || epic.stage === "done") return "done";
     return "ready_for_review";
   }
-  return counted.some((c) => c.stage !== "backlog") ? "in_progress" : "backlog";
+  return counts.backlog < counted ? "in_progress" : "backlog";
 }
 
 /** The three states screens name; Ready for review on an epic means waiting for the owner's check. */
@@ -62,7 +71,8 @@ const log = (severity: "INFO" | "ERROR", message: string, fields: object = {}) =
 /**
  * Sets one epic's stage to what its children give it, as `system`. Returns the epic after the
  * write, or null when nothing was written (not an epic, Cancelled, already in step). Leaving Done
- * unarchives it, as `TicketService.move` does. Reads: the epic and its children (one query).
+ * unarchives it, as `TicketService.move` does. Reads (ADR-0028): the epic, and its children's
+ * counts per stage by aggregation, the same however many children it has.
  */
 export async function syncEpicStage(
   tracker: WorkTracker,
@@ -71,18 +81,8 @@ export async function syncEpicStage(
 ): Promise<Ticket | null> {
   const epic = await tracker.getTicket(projectId, epicId);
   if (!epic || epic.type !== "epic" || epic.stage === "cancelled") return null;
-  const children = await tracker.listTickets(projectId, {
-    parentId: epic.id,
-    limit: EPIC_SYNC_MAX_CHILDREN + 1,
-  });
-  if (children.length > EPIC_SYNC_MAX_CHILDREN) {
-    log("ERROR", "epic has too many tickets to sync; run the fix-up", {
-      epic: epic.key,
-      cap: EPIC_SYNC_MAX_CHILDREN,
-    });
-    return null;
-  }
-  const to = epicStage(epic, children);
+  const counts = await tracker.countChildrenByStage(projectId, epic.id);
+  const to = epicStage(epic, counts);
   if (to === epic.stage) return null;
   const leavesDone = epic.archived && to !== "done";
   const updated = await tracker.updateTicket(
@@ -90,13 +90,38 @@ export async function syncEpicStage(
     epic.id,
     {
       fields: leavesDone ? { archived: false } : {},
-      stage: { to, forced: false, reason: epicStageReason(children) },
+      stage: { to, forced: false, reason: epicStageReason(counts) },
       ifUpdatedAt: epic.updatedAt,
     },
     "system",
   );
   log("INFO", "epic stage follows its tickets", { epic: epic.key, from: epic.stage, to });
   return updated;
+}
+
+/**
+ * A sync that still failed: the ERROR line, then the epic flagged Needs-you with a comment, so it
+ * reaches Andy's inbox (and Needs-you email). Both writes are best effort: never thrown.
+ */
+async function reportFailedSync(
+  tracker: WorkTracker,
+  projectId: string,
+  epicId: string,
+  key: string,
+  err: unknown,
+): Promise<void> {
+  log("ERROR", EPIC_SYNC_FAILED, { ticket: key, epicId, projectId, error: String(err) });
+  try {
+    await tracker.updateTicket(projectId, epicId, { fields: { needsAttention: true } }, "system");
+    await tracker.addComment(
+      projectId,
+      epicId,
+      `Couldn't put this epic's stage in step with its tickets after ${key} changed (${String(err).slice(0, 200)}). Its next ticket change retries; or run the fix-up (runbook epic-state-fixup.md).`,
+      "system",
+    );
+  } catch (flagErr) {
+    log("ERROR", "epic stage sync failure not flagged", { epicId, error: String(flagErr) });
+  }
 }
 
 /** Syncs one epic, re-reading it when another write lands first (`EPIC_SYNC_ATTEMPTS`). */
@@ -130,8 +155,8 @@ function touchesSync(change: TicketChange): boolean {
  * archived flag, type or `needsCheck` syncs its parent epic (and its old parent on a reparent,
  * read before the write), the ticket itself when it is an epic (so a stray stage write, e.g. a
  * reopen, is put back in step at once), and up the chain. The sync's own writes go to the inner
- * tracker, so they never loop. A sync failure is logged and never fails the write: the next write or the fix-up
- * (`epic-state-fixup.ts`) heals it.
+ * tracker, so they never loop. A sync that still fails never fails the write: it is logged and the
+ * epic is flagged Needs-you (`reportFailedSync`); the next write or the fix-up heals it.
  */
 export function syncEpicStages(tracker: WorkTracker): WorkTracker {
   const sync = async (projectId: string, epicIds: readonly (string | null)[], key: string) => {
@@ -139,11 +164,7 @@ export function syncEpicStages(tracker: WorkTracker): WorkTracker {
       try {
         await syncUp(tracker, projectId, id);
       } catch (err) {
-        log("ERROR", "epic stage sync failed; the next ticket write or the fix-up heals it", {
-          ticket: key,
-          epicId: id,
-          error: String(err),
-        });
+        await reportFailedSync(tracker, projectId, id, key, err);
       }
     }
   };
@@ -202,7 +223,9 @@ export function epicStageFixes(tickets: readonly Ticket[]): EpicStageFix[] {
   const stages = new Map(tickets.map((t) => [t.id, t.stage]));
   const epics = tickets.filter((t) => t.type === "epic" && t.stage !== "cancelled");
   const children = (id: string) =>
-    tickets.filter((t) => t.parentId === id).map((t) => ({ stage: stages.get(t.id)! }));
+    stageCounts(
+      tickets.filter((t) => t.parentId === id).map((t) => ({ stage: stages.get(t.id)! })),
+    );
   const order: string[] = [];
   for (let pass = 0; pass < EPIC_SYNC_MAX_DEPTH; pass++) {
     let changed = false;

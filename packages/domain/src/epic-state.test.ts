@@ -9,10 +9,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DomainError } from "./errors";
 import {
   EPIC_SYNC_ATTEMPTS,
-  EPIC_SYNC_MAX_CHILDREN,
+  EPIC_SYNC_FAILED,
   epicStage,
   epicStageFixes,
   epicStateOf,
+  stageCounts,
   syncEpicStage,
   syncEpicStages,
 } from "./epic-state";
@@ -24,39 +25,41 @@ describe("epicStage (ADR-0164)", () => {
   const open = { stage: "backlog" as Stage, needsCheck: false };
 
   it("GivenNoTickets_WhenComputed_ThenNotStarted", () => {
-    expect(epicStage(open, [])).toBe("backlog");
-    expect(epicStateOf(epicStage(open, []))).toBe("not_started");
+    expect(epicStage(open, stageCounts([]))).toBe("backlog");
+    expect(epicStateOf(epicStage(open, stageCounts([])))).toBe("not_started");
   });
 
   it("GivenOnlyCancelledTickets_WhenComputed_ThenNotStarted", () => {
-    expect(epicStage(open, [at("cancelled"), at("cancelled")])).toBe("backlog");
+    expect(epicStage(open, stageCounts([at("cancelled"), at("cancelled")]))).toBe("backlog");
   });
 
   it("GivenTicketsAllInBacklog_WhenComputed_ThenNotStarted", () => {
-    expect(epicStage(open, [at("backlog"), at("backlog")])).toBe("backlog");
+    expect(epicStage(open, stageCounts([at("backlog"), at("backlog")]))).toBe("backlog");
   });
 
   it("GivenOneTicketPastBacklog_WhenComputed_ThenInProgress", () => {
-    expect(epicStage(open, [at("backlog"), at("ready")])).toBe("in_progress");
-    expect(epicStage(open, [at("done"), at("backlog")])).toBe("in_progress");
+    expect(epicStage(open, stageCounts([at("backlog"), at("ready")]))).toBe("in_progress");
+    expect(epicStage(open, stageCounts([at("done"), at("backlog")]))).toBe("in_progress");
   });
 
   it("GivenEveryTicketDoneOrCancelled_WhenComputed_ThenDone", () => {
-    expect(epicStage(open, [at("done"), at("cancelled"), at("done")])).toBe("done");
+    expect(epicStage(open, stageCounts([at("done"), at("cancelled"), at("done")]))).toBe("done");
   });
 
   it("GivenNeedsCheckOn_WhenEveryTicketIsDone_ThenWaitingForTheCheck", () => {
     const flagged = { stage: "in_progress" as Stage, needsCheck: true };
-    expect(epicStage(flagged, [at("done")])).toBe("ready_for_review");
+    expect(epicStage(flagged, stageCounts([at("done")]))).toBe("ready_for_review");
     expect(epicStateOf("ready_for_review")).toBe("waiting_for_check");
   });
 
   it("GivenNeedsCheckOnAndTheOwnerClosedIt_WhenComputed_ThenItStaysDone", () => {
-    expect(epicStage({ stage: "done", needsCheck: true }, [at("done")])).toBe("done");
+    expect(epicStage({ stage: "done", needsCheck: true }, stageCounts([at("done")]))).toBe("done");
   });
 
   it("GivenNeedsCheckOff_WhenEveryTicketIsDone_ThenDoneByDefault", () => {
-    expect(epicStage({ stage: "in_progress", needsCheck: false }, [at("done")])).toBe("done");
+    expect(epicStage({ stage: "in_progress", needsCheck: false }, stageCounts([at("done")]))).toBe(
+      "done",
+    );
   });
 });
 
@@ -265,16 +268,18 @@ describe("syncEpicStages (ADR-0164)", () => {
     expect((await get(parent)).stage).toBe("backlog");
   });
 
-  it("GivenAnEpicOverTheChildCap_WhenATicketMoves_ThenTheEpicIsLeftAndTheSkipIsLogged", async () => {
+  it("GivenAnEpicWithManyTickets_WhenOneMoves_ThenTheSyncCountsThemAndReadsNone", async () => {
     const epic = await newEpic();
-    for (let i = 0; i <= EPIC_SYNC_MAX_CHILDREN; i++) {
+    for (let i = 0; i < 50; i++) {
       await raw.createTicket("ai", { title: `T${i}`, parentId: epic.id }, "andy");
     }
     const [first] = await raw.listTickets("ai", { parentId: epic.id });
-    const log = vi.spyOn(console, "log");
-    await moveTo(first!, "done");
-    expect((await get(epic)).stage).toBe("backlog");
-    expect(log.mock.calls.some(([line]) => String(line).includes("too many tickets"))).toBe(true);
+    const reads = vi.spyOn(raw, "listTickets");
+    const counts = vi.spyOn(raw, "countChildrenByStage");
+    await moveTo(first!, "ready");
+    expect((await get(epic)).stage).toBe("in_progress");
+    expect(reads).not.toHaveBeenCalled();
+    expect(counts).toHaveBeenCalledTimes(1);
   });
 
   it("GivenOtherWritesLandOnTheEpic_WhenItSyncs_ThenItRetriesUpToTheAttemptCap", async () => {
@@ -307,22 +312,23 @@ describe("syncEpicStages (ADR-0164)", () => {
     expect(reopened.stage).toBe("done");
   });
 
-  it("GivenAnEpicReadFails_WhenATicketMoves_ThenTheMoveStandsAndTheFailureIsLogged", async () => {
+  it("GivenTheSyncFails_WhenATicketMoves_ThenTheMoveStandsAndTheEpicIsFlaggedForAndy", async () => {
     const epic = await newEpic();
     const child = await newTicket(epic.id);
     const log = vi.spyOn(console, "log");
-    vi.spyOn(raw, "listTickets").mockRejectedValueOnce(new Error("store down"));
+    vi.spyOn(raw, "countChildrenByStage").mockRejectedValueOnce(new Error("store down"));
     const moved = await moveTo(child, "ready");
     expect(moved.stage).toBe("ready");
-    expect(log.mock.calls.some(([line]) => String(line).includes("epic stage sync failed"))).toBe(
-      true,
-    );
+    expect(log.mock.calls.some(([line]) => String(line).includes(EPIC_SYNC_FAILED))).toBe(true);
+    expect((await get(epic)).needsAttention).toBe(true);
+    const comment = (await raw.listEvents("ai", epic.id)).find((e) => e.kind === "comment");
+    expect(comment?.body).toContain("Couldn't put this epic's stage in step");
   });
 
   it("GivenAWriteThatChangesNoStageOrParent_WhenMade_ThenNoEpicIsRead", async () => {
     const epic = await newEpic();
     const child = await newTicket(epic.id);
-    const reads = vi.spyOn(raw, "listTickets");
+    const reads = vi.spyOn(raw, "countChildrenByStage");
     await tracker.updateTicket("ai", child.id, { fields: { title: "Renamed" } }, "andy");
     expect(reads).not.toHaveBeenCalled();
   });

@@ -292,11 +292,6 @@ export const TicketFilter = z.object({
   upNext: z.literal(true).optional(),
   /** Only the children of this ticket (ADR-0164: an epic's stage is synced from them). */
   parentId: Id.optional(),
-  /**
-   * Read at most this many (ADR-0028), in no set order before the rank sort. Only with `parentId`
-   * alone: other filters may apply after the cut.
-   */
-  limit: z.number().int().positive().optional(),
 });
 export type TicketFilter = z.infer<typeof TicketFilter>;
 
@@ -339,6 +334,12 @@ export interface WorkTracker {
    * reading tickets (ADR-0028).
    */
   countByStage(projectId: string): Promise<Record<Stage, number>>;
+  /**
+   * The children of `parentId` per stage, archived ones too, every stage present (ADR-0164: an
+   * epic's stage follows them). Counted by aggregation queries, not by reading tickets, so the
+   * cost doesn't grow with the number of children (ADR-0028).
+   */
+  countChildrenByStage(projectId: string, parentId: string): Promise<Record<Stage, number>>;
   /** Appends `fields_changed` (only fields that differ) and/or `stage_changed`. */
   updateTicket(
     projectId: string,

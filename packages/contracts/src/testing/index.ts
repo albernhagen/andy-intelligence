@@ -338,7 +338,7 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect(ids).not.toContain(ticket.id);
     });
 
-    it("GivenAnEpicWithChildren_WhenListedByParent_ThenOnlyItsChildrenAreReturned", async () => {
+    it("GivenAnEpicWithChildren_WhenListedOrCountedByParent_ThenOnlyItsChildrenCountArchivedToo", async () => {
       const { tracker, project, ticket } = await setup();
       const epic = await tracker.createTicket(project.id, { title: "E", type: "epic" }, "andy");
       const a = await tracker.createTicket(project.id, { title: "A", parentId: epic.id }, "andy");
@@ -357,9 +357,12 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect(await tracker.listTickets(project.id, { parentId: epic.id, stage: "done" })).toEqual([
         expect.objectContaining({ id: b.id }),
       ]);
-      expect(await tracker.listTickets(project.id, { parentId: epic.id, limit: 1 })).toHaveLength(
-        1,
-      );
+      await tracker.updateTicket(project.id, b.id, { fields: { archived: true } }, "andy");
+      expect(await tracker.countChildrenByStage(project.id, epic.id)).toEqual({
+        ...Object.fromEntries(Stage.options.map((s) => [s, 0])),
+        backlog: 1,
+        done: 1,
+      });
     });
 
     it("GivenAnArchivedTicket_WhenListedByArchived_ThenOnlyMatchingTicketsAreReturned", async () => {

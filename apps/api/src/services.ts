@@ -136,6 +136,7 @@ export const METERED_READS = {
     "listTicketsChangedSince",
     "getTicketByKey",
     "countByStage",
+    "countChildrenByStage",
     "listEvents",
     "getLatestPullRequest",
     "getQuestion",

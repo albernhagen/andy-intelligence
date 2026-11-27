@@ -212,7 +212,6 @@ export class FirestoreWorkTracker implements WorkTracker {
     if (filter.archived === true) query = query.where("archived", "==", true);
     // ADR-0164: an epic's children. Equality filters only, so no composite index is needed.
     if (filter.parentId !== undefined) query = query.where("parentId", "==", filter.parentId);
-    if (filter.limit !== undefined) query = query.limit(filter.limit);
     const tickets = (await query.get()).docs
       .map((d) => d.data())
       .filter((t) => filter.archived !== false || !t.archived)
@@ -259,6 +258,26 @@ export class FirestoreWorkTracker implements WorkTracker {
       Stage.options.map(async (stage) => {
         const stored = stage === "done" ? STORED_AS_DONE : [stage];
         const counts = await Promise.all(stored.map(count));
+        return [stage, counts.reduce((a, b) => a + b, 0)] as const;
+      }),
+    );
+    return Object.fromEntries(counted) as Record<Stage, number>;
+  }
+
+  /**
+   * ADR-0164: one count aggregation per stored stage, equality filters only (no composite index);
+   * archived children count too. v2 Done may be stored as `monitoring`.
+   */
+  async countChildrenByStage(projectId: string, parentId: string): Promise<Record<Stage, number>> {
+    const children = this.tickets(projectId).where("parentId", "==", parentId);
+    const counted = await Promise.all(
+      Stage.options.map(async (stage) => {
+        const stored = stage === "done" ? STORED_AS_DONE : [stage];
+        const counts = await Promise.all(
+          stored.map(
+            async (s) => (await children.where("stage", "==", s).count().get()).data().count,
+          ),
+        );
         return [stage, counts.reduce((a, b) => a + b, 0)] as const;
       }),
     );
