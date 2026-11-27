@@ -73,9 +73,16 @@ runs:
       env:
         SHARD: ${{ inputs.test-shard }}
       # A shard may hold no test files in a small repo (vitest refuses a count above the file
-      # count unless --passWithNoTests), so a sharded run allows an empty shard.
+      # count unless --passWithNoTests), so a sharded run allows an empty shard. Shard 1 first
+      # checks the whole suite isn't empty, so a broken test glob can't pass every shard.
       run: |
-        if [ -n "$SHARD" ]; then pnpm test --shard="$SHARD" --passWithNoTests; else pnpm test; fi
+        if [ -z "$SHARD" ]; then pnpm test; exit 0; fi
+        if [ "${SHARD%%/*}" = 1 ]; then
+          files=$(pnpm exec vitest list --filesOnly | grep -c . || true)
+          echo "Test files in the whole suite: $files"
+          if [ "$files" -eq 0 ]; then echo "::error::No test files found"; exit 1; fi
+        fi
+        pnpm test --shard="$SHARD" --passWithNoTests
     - if: inputs.part == 'all' || inputs.part == 'build'
       shell: bash
       run: pnpm build
