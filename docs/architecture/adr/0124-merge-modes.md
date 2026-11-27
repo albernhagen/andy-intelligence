@@ -1,6 +1,6 @@
 ---
 title: Merge modes: one project setting decides who merges
-status: accepted (Andy, 2026-11-23); amended by 0134, 0144 (GitHub does not require up-to-date branches), 0157 (proposed: Andy's Merge in the web app waives what the mode keeps for him); GitHub does not enforce its code-owner rule on this repo (AI-380, R23)
+status: accepted (Andy, 2026-11-23); amended by 0134, 0144 (GitHub does not require up-to-date branches), 0157 (proposed: Andy's Merge in the web app waives what the mode keeps for him), 0116 (proposed: a Dependabot pin-only Actions bump with verified SHAs is not a kept kind); GitHub does not enforce its code-owner rule on this repo (AI-380, R23)
 date: 2026-11-20
 amends: 0050 (`autoMerge`), 0078, 0088, 0092, 0120 (who merges), 0107 (night runs)
 ---
