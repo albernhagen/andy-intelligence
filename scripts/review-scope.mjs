@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 // Review scope (ADR-0030, ADR-0037): docs-only PRs skip the review agents to save subscription quota.
 // Agent-facing rule files are never "docs": a PR that edits them still gets reviewed.
-// The same rule lets UI screenshots skip a docs-only PR (AI-358).
+// The same rule lets UI screenshots skip a docs-only PR (AI-358); a second, separate rule lets
+// them skip a PR that changes no file the web app's render depends on (AI-406, canAffectWebApp).
 // A Dependabot PR that only moves dependency versions within their major also skips the agents
 // (AI-394); the caller checks the PR author, this file checks the change.
 //
 // Default CLI: reads changed paths (one per line) from stdin; prints "true" when the PR is docs-only.
-// `--gate <base-ref>`: diffs <base-ref> against HEAD itself and prints `run=true` or `run=false`
-// for $GITHUB_OUTPUT. Any failure to read the change (bad ref, no git, empty diff) prints
-// `run=true`, so the check runs its full work.
+// `--gate <base-ref>`: the UI screenshots gate. Diffs <base-ref> against HEAD itself and prints
+// `run=true`, or `run=false` plus a `reason=` line, for $GITHUB_OUTPUT. Any failure to read the
+// change (bad ref, no git, empty diff) prints `run=true`, so the check runs its full work.
 // `--dependency-bump <base-ref>`: prints "true" when the change from <base-ref> to HEAD is a
 // minor or patch dependency bump (isDependencyBump); any failure prints "false", so agents run.
 import { execFileSync } from "node:child_process";
@@ -144,10 +145,84 @@ export function fileAt(ref, path) {
   }
 }
 
-/** `run=false` only when `listPaths()` succeeds and the change is docs-only; fails safe to `run=true`. */
+// What the web app renders in the screenshot checks (AI-406), derived from the code, not memory:
+// - the app itself (src, e2e specs, stored images, its fake API and seeds in e2e/, its Vite,
+//   Tailwind and TypeScript config);
+// - every workspace package it imports, directly or through another (WEB_WORKSPACE_DEPS; a test
+//   rebuilds this from the package.json files and fails if it grows);
+// - files outside those packages that their sources import (platform/baseline, from apps/api;
+//   a test scans the relative imports);
+// - root install and build config, and what the Playwright webServer command runs (gen-exports);
+// - the screenshot check's own gate, image check, workflow and action.
+export const WEB_WORKSPACE_DEPS = [
+  "apps/api",
+  "packages/contracts",
+  "packages/domain",
+  "packages/github",
+  "packages/store",
+];
+export const AFFECTS_WEB_FILES = new Set([
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  ".nvmrc",
+  "tsconfig.base.json",
+  "scripts/gen-exports.mjs",
+  "scripts/review-scope.mjs",
+  "scripts/playwright-image.mjs",
+  ".github/workflows/ui-screenshots.yml",
+]);
+export const AFFECTS_WEB_DIRS = [
+  "apps/web",
+  ...WEB_WORKSPACE_DEPS,
+  "platform/baseline",
+  "platform/actions/ui-screenshots",
+];
+
+// Paths known not to reach the web app's render. Only these can be skipped: a path on neither
+// list (a new top-level file, a new workspace package, .gitignore) runs the suite.
+const CANNOT_AFFECT_WEB = [
+  /^docs\//,
+  /^[^/]+\.md$/,
+  /^LICENSE$/,
+  /^(infra|template|\.claude)\//,
+  /^apps\/local-runner\//, // a workspace package apps/web doesn't import
+  /^\.github\//, // other workflows and repo config (ui-screenshots.yml is in AFFECTS_WEB_FILES)
+  /^platform\/(actions|procedures|evals|executor)\//, // other actions (not ui-screenshots)
+  /^scripts\//, // repo CLIs; the ones the check runs are in AFFECTS_WEB_FILES
+  // Root tooling the screenshot run never reads: lint, format, hooks, unit tests, the API image,
+  // the Firestore emulator, Terraform's version, context budgets.
+  /^(eslint\.config\.js|\.prettierrc\.json|\.prettierignore|lefthook\.yml|vitest\.config\.ts|vitest\.temp-dir\.ts|Dockerfile|\.dockerignore|firebase\.json|\.terraform-version|context-budget\.json)$/,
+];
+
+/**
+ * True unless `path` is provably irrelevant to what the web app renders: it is on the known
+ * can't-affect list and not under anything the app depends on. Unknown paths count as affecting.
+ */
+export function canAffectWebApp(path) {
+  if (AFFECTS_WEB_FILES.has(path) || AFFECTS_WEB_DIRS.some((dir) => path.startsWith(`${dir}/`))) {
+    return true;
+  }
+  return !CANNOT_AFFECT_WEB.some((pattern) => pattern.test(path));
+}
+
+/** Why the screenshot checks may skip this change, or null when they must run. */
+export function screenshotSkipReason(paths) {
+  const files = paths.map((p) => p.trim()).filter((p) => p !== "");
+  if (files.length === 0) return null;
+  if (isDocsOnly(files)) return "docs-only change";
+  if (!files.some(canAffectWebApp)) return "no changed file can affect what the web app renders";
+  return null;
+}
+
+/**
+ * `run=false` plus `reason=…` only when `listPaths()` succeeds and the change is docs-only or
+ * can't affect the web app; fails safe to `run=true`.
+ */
 export function gateOutput(listPaths) {
   try {
-    return `run=${!isDocsOnly(listPaths())}`;
+    const reason = screenshotSkipReason(listPaths());
+    return reason === null ? "run=true" : `run=false\nreason=${reason}`;
   } catch {
     return "run=true";
   }
