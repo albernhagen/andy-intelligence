@@ -1,8 +1,9 @@
 name: Agent review — prepare
 description: >-
   Shared first half of a PR review agent (ADR-0025, ADR-0026, ADR-0037): decide the mode, drop
-  a stale override label, skip docs-only PRs, and write the agent's inputs to .review/. Run after
-  actions/checkout (fetch-depth 0); the caller runs the agent, then agent-review-finish.
+  a stale override label, skip docs-only PRs and Dependabot minor/patch bumps, and write the
+  agent's inputs to .review/. Run after actions/checkout (fetch-depth 0); the caller runs the
+  agent, then agent-review-finish.
   Project baseline (ADR-0031, ADR-0038): managed repos pin this action by SHA, so its scripts and
   procedures come from that pinned commit; this repo uses it locally and reads them from the base branch.
 
@@ -142,7 +143,11 @@ runs:
         LABEL: ${{ inputs.label }}
       run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
 
-    - name: Skip docs-only changes (saves quota, ADR-0030)
+    # Docs-only PRs (ADR-0030) and Dependabot minor/patch bumps (AI-394) skip the agent. A bump
+    # counts only when the PR was opened by Dependabot and the merged change is manifests and
+    # lockfiles alone, outside .github/, infra/, platform/ and template/, with no major version
+    # (scripts/review-scope.mjs); a later push of anything else brings the agent back.
+    - name: Skip docs-only changes and minor dependency bumps (saves quota)
       id: scope
       if: steps.ctx.outputs.mode != 'skip'
       shell: bash
@@ -150,10 +155,15 @@ runs:
         MODE: ${{ steps.ctx.outputs.mode }}
         REASON: ${{ steps.ctx.outputs.reason }}
         BASELINE: ${{ steps.root.outputs.dir }}
+        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       run: |
         if [ "$MODE" = review ] && [ "$(git diff --name-only HEAD^1 HEAD | node "$BASELINE/scripts/review-scope.mjs")" = true ]; then
           MODE=skipped
           REASON="docs-only change; the agent is skipped to save quota (rule files such as AGENTS.md are still reviewed)"
+        elif [ "$MODE" = review ] && [ "$PR_AUTHOR" = "dependabot[bot]" ] \
+          && [ "$(node "$BASELINE/scripts/review-scope.mjs" --dependency-bump HEAD^1)" = true ]; then
+          MODE=skipped
+          REASON="Dependabot minor or patch bump (manifests and lockfiles only); the agent is skipped to save quota. CI, dependency review, CodeQL and the secret scan still run"
         fi
         { echo "mode=$MODE"; echo "reason=$REASON"; } >> "$GITHUB_OUTPUT"
         echo "mode=$MODE"
