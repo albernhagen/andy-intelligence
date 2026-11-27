@@ -6,6 +6,7 @@ import {
   gateOutput,
   isDependencyBump,
   isDocsOnly,
+  lockedPackages,
 } from "./review-scope.mjs";
 
 describe("isDocsOnly", () => {
@@ -87,9 +88,14 @@ describe("isDependencyBump", () => {
     JSON.stringify({ name: "x", ...extra, dependencies: deps }, null, 2);
   // read(side, path) over a map of { path: [baseText, headText] }; a missing side is null.
   const reader = (files) => (side, path) => files[path]?.[side === "base" ? 0 : 1] ?? null;
+  // A pnpm v9 lockfile with the given "name@version" package keys.
+  const lockOf = (...keys) =>
+    `lockfileVersion: '9.0'\n\npackages:\n\n${keys.map((k) => `  '${k}':\n    resolution: {}\n`).join("\n")}\nsnapshots:\n\n  zzz@9.9.9:\n`;
+  const lock = (base, head) => ({ "pnpm-lock.yaml": [lockOf(...base), lockOf(...head)] });
 
   it("GivenMinorAndPatchBumpsWithLockfile_WhenChecked_ThenTrue", () => {
     const read = reader({
+      ...lock(["a@1.2.3", "@s/b@2.0.0"], ["a@1.9.0", "@s/b@2.0.5"]),
       "apps/web/package.json": [
         pkg({ a: "^1.2.3", b: "2.0.0", c: "~0.4.1" }),
         pkg({ a: "^1.9.0", b: "2.0.5", c: "~0.4.7" }),
@@ -98,15 +104,58 @@ describe("isDependencyBump", () => {
     expect(isDependencyBump(["apps/web/package.json", "pnpm-lock.yaml", ""], read)).toBe(true);
   });
 
-  it("GivenLockfileOnly_WhenChecked_ThenTrue", () => {
-    expect(isDependencyBump(["pnpm-lock.yaml"], reader({}))).toBe(true);
+  it("GivenLockfileOnlyMinorBump_WhenChecked_ThenTrue", () => {
+    const read = reader(
+      lock(
+        ["a@1.2.3", "a@2.0.0", "@s/b@0.4.1", "gone@1.0.0"],
+        ["a@1.3.0", "a@2.0.0", "@s/b@0.4.9"],
+      ),
+    );
+    expect(isDependencyBump(["pnpm-lock.yaml"], read)).toBe(true);
+  });
+
+  it("GivenLockfileMajorBump_WhenChecked_ThenFalse", () => {
+    expect(isDependencyBump(["pnpm-lock.yaml"], reader(lock(["a@1.2.3"], ["a@2.0.0"])))).toBe(
+      false,
+    );
+    expect(isDependencyBump(["pnpm-lock.yaml"], reader(lock(["a@0.4.1"], ["a@0.5.0"])))).toBe(
+      false,
+    );
+  });
+
+  it("GivenLockfileAddsPackage_WhenChecked_ThenFalse", () => {
+    expect(
+      isDependencyBump(["pnpm-lock.yaml"], reader(lock(["a@1.2.3"], ["a@1.2.3", "evil@1.0.0"]))),
+    ).toBe(false);
+  });
+
+  it("GivenLockfileNonSemverResolution_WhenChecked_ThenFalse", () => {
+    const read = reader(lock(["a@1.2.3"], ["a@https://example.com/a.tgz"]));
+    expect(isDependencyBump(["pnpm-lock.yaml"], read)).toBe(false);
+  });
+
+  it("GivenUnreadableOrNonPnpmLockfile_WhenChecked_ThenFalse", () => {
+    expect(
+      isDependencyBump(["pnpm-lock.yaml"], reader({ "pnpm-lock.yaml": ["x: 1", "x: 2"] })),
+    ).toBe(false);
+    expect(
+      isDependencyBump(["package-lock.json"], reader({ "package-lock.json": ["{}", "{}"] })),
+    ).toBe(false);
+    expect(isDependencyBump(["yarn.lock"], reader({ "yarn.lock": ["", ""] }))).toBe(false);
+  });
+
+  it("GivenRangeOperatorChanged_WhenChecked_ThenFalse", () => {
+    const widened = reader({ "package.json": [pkg({ a: "^1.2.3" }), pkg({ a: ">=1.2.3" })] });
+    expect(isDependencyBump(["package.json"], widened)).toBe(false);
+    const loosened = reader({ "package.json": [pkg({ a: "1.2.3" }), pkg({ a: "^1.2.4" })] });
+    expect(isDependencyBump(["package.json"], loosened)).toBe(false);
   });
 
   it("GivenMajorBump_WhenChecked_ThenFalse", () => {
     const read = reader({
       "package.json": [pkg({ "web-push": "^3.6.7" }), pkg({ "web-push": "^4.0.0" })],
     });
-    expect(isDependencyBump(["package.json", "pnpm-lock.yaml"], read)).toBe(false);
+    expect(isDependencyBump(["package.json"], read)).toBe(false);
   });
 
   it("GivenZeroMajorMinorBump_WhenChecked_ThenFalse", () => {
@@ -199,5 +248,15 @@ describe("dependencyBumpOutput", () => {
 
   it("GivenUnknownRef_WhenFileRead_ThenNull", () => {
     expect(fileAt("no-such-ref-ai-394", "package.json")).toBeNull();
+  });
+});
+
+describe("lockedPackages", () => {
+  it("GivenPnpmV9Lockfile_WhenRead_ThenOnlyPackagesSectionKeys", () => {
+    const text =
+      "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    x: 1\n\npackages:\n\n  '@playwright/test@1.65.1':\n    resolution: {}\n\n  vitest@5.1.1:\n    resolution: {}\n\nsnapshots:\n\n  other@1.0.0: {}\n";
+    const packages = lockedPackages(text);
+    expect([...packages.keys()]).toEqual(["@playwright/test", "vitest"]);
+    expect([...packages.get("vitest")]).toEqual(["5.1.1"]);
   });
 });

@@ -26,20 +26,59 @@ export function isDocsOnly(paths) {
 }
 
 const MANIFEST = /(^|\/)package\.json$/;
-const LOCKFILE = /(^|\/)(pnpm-lock\.yaml|package-lock\.json|yarn\.lock)$/;
+// Only pnpm lockfiles are parsed; an npm or yarn lockfile change always gets reviewed.
+const LOCKFILE = /(^|\/)pnpm-lock\.yaml$/;
 // Workflows, baseline actions and procedures, the template and Terraform always get reviewed.
 const ALWAYS_REVIEW = /^(\.github|infra|platform|template)\//;
 const DEP_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
-// A plain version or caret/tilde range: "1.2.3", "^1.2.3", "~1.2", ">=1.2.3". Anything else
-// (workspace:, npm: aliases, URLs, "||" ranges, prereleases) isn't a simple bump.
-const SIMPLE_RANGE = /^(?:[\^~]|>=)?v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$/;
+// A plain version or caret/tilde range: "1.2.3", "^1.2.3", "~1.2". Anything else (">=", "||",
+// workspace:, npm: aliases, URLs, prereleases) isn't a simple bump.
+const SIMPLE_RANGE = /^([\^~]?)(\d+)(?:\.(\d+))?(?:\.(\d+))?$/;
 
-/** The semver "major" a range stays inside: the first number, or 0.<minor> below 1.0. Null if not simple. */
+/**
+ * What a version or range must keep across a minor bump: its operator and its semver major (the
+ * first number, or 0.<minor> below 1.0), e.g. "^|1". Null when it isn't a simple version or range.
+ */
 function majorOf(range) {
   const m = SIMPLE_RANGE.exec(String(range).trim());
   if (!m) return null;
-  if (m[1] !== "0") return m[1];
-  return m[2] === undefined ? null : `0.${m[2]}`;
+  if (m[2] !== "0") return `${m[1]}|${m[2]}`;
+  return m[3] === undefined ? null : `${m[1]}|0.${m[3]}`;
+}
+
+/** Resolved versions per package name in a pnpm lockfile's `packages:` section (v9 keys). */
+export function lockedPackages(lockText) {
+  const packages = new Map();
+  let inPackages = false;
+  for (const line of lockText.split("\n")) {
+    if (/^\S/.test(line)) inPackages = line.trimEnd() === "packages:";
+    const key = inPackages && /^ {2}'?((?:@[^@/\s]+\/)?[^@\s']+)@([^'\s]+)'?:\s*$/.exec(line);
+    if (!key) continue;
+    if (!packages.has(key[1])) packages.set(key[1], new Set());
+    packages.get(key[1]).add(key[2]);
+  }
+  return packages;
+}
+
+/**
+ * True when a pnpm lockfile adds no package and every newly resolved version stays within the
+ * major of a version already locked for that package. Removed packages are fine.
+ */
+function isMinorLockChange(baseText, headText) {
+  const base = lockedPackages(baseText);
+  const head = lockedPackages(headText);
+  if (base.size === 0) return false; // unreadable or not a v9 lockfile
+  for (const [name, versions] of head) {
+    const before = base.get(name);
+    if (!before) return false;
+    const majors = new Set([...before].map(majorOf));
+    for (const v of versions) {
+      if (before.has(v)) continue;
+      const major = majorOf(v);
+      if (major === null || !majors.has(major)) return false;
+    }
+  }
+  return true;
 }
 
 /** True when a package.json changed only dependency versions, each within its major. */
@@ -66,8 +105,9 @@ function isMinorManifestChange(baseText, headText) {
 /**
  * True when every changed path is a package manifest or lockfile outside the always-reviewed
  * folders, and each changed package.json only moves existing dependency versions within their
- * major. `read(side, path)` returns the file's text on "base" or "head", or null if absent there.
- * Lockfiles aren't parsed: the `check` job's lockfile-sources check and dependency review cover them.
+ * major (same range operator), and each changed pnpm lockfile adds no package and resolves new
+ * versions only within a locked major. `read(side, path)` returns the file's text on "base" or
+ * "head", or null if absent there.
  */
 export function isDependencyBump(paths, read) {
   const files = paths.map((p) => p.trim()).filter((p) => p !== "");
@@ -75,13 +115,12 @@ export function isDependencyBump(paths, read) {
   if (!files.every((f) => (MANIFEST.test(f) || LOCKFILE.test(f)) && !ALWAYS_REVIEW.test(f))) {
     return false;
   }
-  return files
-    .filter((f) => MANIFEST.test(f))
-    .every((f) => {
-      const base = read("base", f);
-      const head = read("head", f);
-      return base !== null && head !== null && isMinorManifestChange(base, head);
-    });
+  return files.every((f) => {
+    const base = read("base", f);
+    const head = read("head", f);
+    if (base === null || head === null) return false;
+    return MANIFEST.test(f) ? isMinorManifestChange(base, head) : isMinorLockChange(base, head);
+  });
 }
 
 /** "true" only when the change can be read and is a minor or patch bump; fails safe to "false". */
