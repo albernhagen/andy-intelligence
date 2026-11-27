@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
 import type { TokenVerifier } from "../auth";
 import { WEBHOOK_PATH } from "../github/webhooks";
-import { ownerOnlyAccess } from "../project-access";
+import { ownerOnlyAccess, type ProjectAccess } from "../project-access";
 import { ClientMetadataResolver } from "./client-metadata";
 import { mcpCaller } from "./test-client";
 
@@ -33,7 +33,7 @@ const verifier: TokenVerifier = {
   },
 };
 
-async function setup() {
+async function setup(access: ProjectAccess = ownerOnlyAccess()) {
   const tracker = new InMemoryWorkTracker();
   const grants = new InMemoryOAuthGrantStore();
   const host = new InMemoryCodeHost([
@@ -51,7 +51,7 @@ async function setup() {
     connectedAt: "2026-11-03T00:00:00.000Z",
   });
   const app = createApp({
-    projectAccess: ownerOnlyAccess(),
+    projectAccess: access,
     verifier,
     allowedEmails: new Set(["andy@example.com"]),
     version: "test",
@@ -130,6 +130,14 @@ describe("reserve_adr_number (AI-384)", () => {
     await t.reserve();
     expect((await t.prClosed(true)).status).toBe(200);
     expect(await t.tracker.releaseAdrHolds("ai", t.ticket.key)).toEqual([]);
+  });
+
+  it("GivenACallerWithoutAccessToTheTicketsProject_WhenReserved_ThenNotFoundAndNothingIsHeld", async () => {
+    const t = await setup({ canRead: async () => false });
+    const res = await t.reserve();
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("not found");
+    expect(await t.tracker.reserveAdrNumber("ai", 160)).toBe(161);
   });
 
   it("GivenAnUnknownTicket_WhenReserved_ThenAPlainError", async () => {

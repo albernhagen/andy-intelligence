@@ -112,7 +112,9 @@ export class PullRequestTickets {
       "system",
     );
     const reason = `PR #${pr.number} ${outcome}: ${pr.url}`;
-    const released = outcome === "opened" ? [] : await this.releaseAdrHolds(ticket);
+    // Like ticket moves, only PRs into the default branch release (an epic-branch PR doesn't).
+    const released =
+      outcome !== "opened" && pr.intoDefaultBranch ? await this.releaseAdrHolds(ticket) : [];
     const base = {
       result: "linked" as const,
       ticket: key,

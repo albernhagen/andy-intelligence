@@ -8,7 +8,7 @@ One sequence of ADR numbers per project, shared by build runs and Claude session
 | --------------- | ------------------------------------------------------------------------------------------ |
 | Holder          | The ticket key passed to the tool                                                          |
 | Caps (ADR-0028) | 5 open per ticket, 20 per project; at a cap the call is refused with the open holds listed |
-| Released        | When the ticket's PR merges or closes, or 7 days after the reservation                     |
+| Released        | When the ticket's PR into the default branch merges or closes, or after 7 days             |
 | Who             | Andy's MCP grant only (owner only); MCP only, sessions write ADRs and the web does not     |
 
 **How to use:** a worker calls `reserve_adr_number` with its ticket key; runbook [`coordinating-sessions.md`](../runbooks/coordinating-sessions.md) §3.

@@ -146,6 +146,17 @@ describe("PullRequestTickets", () => {
       expect(result.releasedAdrs).toEqual([161]);
     });
 
+    it("GivenAPullRequestIntoAnotherBranch_WhenItCloses_ThenTheHoldsAreKept", async () => {
+      await ticketAt("ready_for_review");
+      await tracker.holdAdrNumber(project.id, 160, hold("AI-1"));
+      const result = await prs.apply(
+        prEvent("closed", { state: "closed", intoDefaultBranch: false }),
+        project,
+      );
+      expect(result.releasedAdrs).toBeUndefined();
+      expect(await tracker.releaseAdrHolds(project.id, "AI-1")).toEqual([161]);
+    });
+
     it("GivenATicketHoldsAnAdrNumber_WhenItsPullRequestOpens_ThenItIsKept", async () => {
       await ticketAt("in_progress");
       await tracker.holdAdrNumber(project.id, 160, hold("AI-1"));
