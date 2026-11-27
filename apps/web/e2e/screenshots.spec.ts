@@ -189,6 +189,9 @@ test("agent task page from the story panel", async ({ page }) => {
 test("what's new: status, then changes by day, one opened", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ops/whats-new", "Backups now land in a second region");
+  // AI-385: the digest's sections render after the changes; wait for them, or a late render can
+  // race the click below.
+  await expect(page.getByRole("region", { name: "Next up" })).toBeVisible();
   // The row's start: its centre can be the PR link, which leaves the page.
   await page.getByText("Backups now land in a second region").click({ position: { x: 8, y: 8 } });
   await expect(page.getByText("A nightly job copies each snapshot")).toBeVisible();
