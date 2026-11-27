@@ -18,6 +18,14 @@ export function epicOf(ticket: Ticket, byId: ReadonlyMap<string, Ticket>): Ticke
   return parent?.type === "epic" ? parent : null;
 }
 
+/**
+ * The tickets that get a card (AI-403): every type but `epic`. Nobody builds an epic, so its card
+ * would never move; epics show as group headers instead, and lane counts leave them out.
+ */
+export function boardCards<T extends Ticket>(tickets: readonly T[]): T[] {
+  return tickets.filter((t) => t.type !== "epic");
+}
+
 /** Key number, so AI-9 sorts before AI-10. */
 const keyNumber = (t: Ticket) => Number(t.key.split("-").pop());
 

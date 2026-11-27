@@ -40,9 +40,9 @@ v1.x screens:
 - Cards: type icon, key, title, markers (size, worker (ADR-0082), questions, run step and minutes, PR, "Blocked by"). Ready is numbered; the first unblocked agent card says "Next".
 - Drag (mouse, touch, keyboard; card under pointer, AI-396) within a lane sets `rank`; across lanes moves (forced if not allowed, not onto Cancelled), then ranks. Optimistic; refusals roll back with the reason. A drop never opens the ticket (AI-25).
 - Quick add atop Backlog. Up next above Ideas (ADR-0075). Done: a counted strip; Cancelled, archived behind a toggle.
-- Group by epic (AI-86, remembered): per lane, a header per epic (key, title, done of total), No epic last; rank stays per lane. Epic filter.
+- Epics get no card (AI-403): lanes, lane counts and chips leave them out. Group by epic (AI-86, remembered): per lane, a header per epic (key and title linking to its panel, done of total; a child epic names its parent), No epic last; rank stays per lane. Epic filter, with Open for the picked epic.
 - Work view chips (AI-187): All plus five views, counted; one at a time, `?view=`, with the epic filter.
-- Ideas (AI-400): by milestone, then epic; parked collapsed; 10 per group. Filter box (`?q=`).
+- Ideas (AI-400): by milestone, then epic (header links to the epic, with progress); parked collapsed; 10 per group. Filter box (`?q=`).
 
 **Built in AI-29: Ticket panel (M3, ADR-0059):**
 - The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc closes.

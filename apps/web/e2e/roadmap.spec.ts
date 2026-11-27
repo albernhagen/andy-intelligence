@@ -107,13 +107,19 @@ const ROADMAP: ProjectRoadmap = {
   noMilestone: ["AI-140"],
   epics: [
     epic("AI-21", "M1: First end-to-end flow", "done", 9, 9),
-    epic("AI-84", "M4: Epics + story board", "in_progress", 23, 32, {
-      needsYou: 2,
-      inReview: 3,
-      inProgress: 1,
-      blocked: 4,
-      notStarted: 1,
-    }),
+    // AI-403: a child epic is listed under its parent.
+    {
+      ...epic("AI-84", "M4: Epics + story board", "in_progress", 23, 32, {
+        needsYou: 2,
+        inReview: 3,
+        inProgress: 1,
+        blocked: 4,
+        notStarted: 1,
+      }),
+      children: [
+        { ...epic("AI-302", "Board polish", "in_progress", 2, 5, { inProgress: 1 }), children: [] },
+      ],
+    },
     epic("AI-285", "Web UI and MCP parity", "not_started", 0, 0),
     epic("AI-153", "M6: Dev → prod releases", "in_progress", 5, 20, { inReview: 1, blocked: 13 }),
     epic("AI-290", "Project members", "not_started", 0, 6, { notStarted: 6 }),

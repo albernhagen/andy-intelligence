@@ -38,8 +38,9 @@ import type { components } from "@/lib/api.gen";
 import { showsError, useLivePoll } from "@/lib/live";
 
 type Schema = components["schemas"]["ProjectRoadmap"];
-/** An epic as the page shows it: child epics aren't listed, so `children` isn't read. */
-type Epic = Omit<Schema["epics"][number], "children">;
+/** A top-level epic, with its child epics nested one level (AI-403 lists them). */
+type ChildEpic = Omit<Schema["epics"][number]["children"][number], "children">;
+type Epic = Omit<Schema["epics"][number], "children"> & { children: ChildEpic[] };
 type ProjectRoadmap = Omit<Schema, "epics"> & { epics: Epic[] };
 type Milestone = Schema["milestones"][number];
 type Counts = Milestone["counts"];
@@ -76,7 +77,9 @@ function useRoadmap(projectId: string | undefined) {
  * milestone's status (AI-311) beside its case and effort (ADR-0149: a not-reviewed one always,
  * saying so when it has no case), and milestones reorder by dragging their handle or with Move up
  * and Move down (AI-324); both go through the milestone route, so only the owner can and it's
- * logged.
+ * logged. Every epic is listed (AI-403: the board shows epics only as group headers): Done ones,
+ * ones with no tickets yet, child epics under their parent, and epics with no milestone in their
+ * own group; each links to its panel.
  */
 export function RoadmapPage() {
   const { projectId } = useParams({ strict: false });
@@ -485,34 +488,62 @@ const EPIC_STATE: Record<Epic["state"], string> = {
   done: "Done",
 };
 
+/** A milestone's (or No milestone's) epics, each followed by its child epics, indented. */
 function EpicList({ epics, projectId }: { epics: Epic[]; projectId: string }) {
   return (
     <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised">
-      {epics.map((e) => (
-        <li
-          key={e.key}
-          data-epic={e.key}
-          className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm"
-        >
-          <Link
-            to="/p/$projectId/t/$ticketRef"
-            params={{ projectId, ticketRef: e.key }}
-            className="min-w-0 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            <span className="font-mono text-xs text-muted-foreground tabular-nums">{e.key}</span>{" "}
-            {e.title}
-          </Link>
-          <span className="text-xs text-muted-foreground">{EPIC_STATE[e.state]}</span>
-          {e.outcome && (
-            <span className="min-w-0 flex-1 text-xs text-muted-foreground max-sm:basis-full">
-              {e.outcome}
-            </span>
-          )}
-          <Progress done={e.progress.done} total={e.progress.total} />
-          {e.state !== "done" && <CountChips counts={e.counts} />}
-        </li>
-      ))}
+      {epics.flatMap((e) => [
+        <EpicRow key={e.key} epic={e} projectId={projectId} />,
+        ...e.children.map((c) => (
+          <EpicRow key={c.key} epic={c} parentKey={e.key} projectId={projectId} />
+        )),
+      ])}
     </ul>
+  );
+}
+
+/** One epic: key and title linking to its panel, state, outcome, progress and open counts. */
+function EpicRow({
+  epic: e,
+  parentKey,
+  projectId,
+}: {
+  epic: Epic | ChildEpic;
+  /** Set for a child epic: it is indented under this epic. */
+  parentKey?: string;
+  projectId: string;
+}) {
+  return (
+    <li
+      data-epic={e.key}
+      data-parent-epic={parentKey}
+      className={cn(
+        "flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm",
+        parentKey && "pl-8",
+      )}
+    >
+      <Link
+        to="/p/$projectId/t/$ticketRef"
+        params={{ projectId, ticketRef: e.key }}
+        className="min-w-0 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        {parentKey && (
+          <span className="text-xs text-muted-foreground" aria-label={`under ${parentKey}`}>
+            ↳{" "}
+          </span>
+        )}
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">{e.key}</span>{" "}
+        {e.title}
+      </Link>
+      <span className="text-xs text-muted-foreground">{EPIC_STATE[e.state]}</span>
+      {e.outcome && (
+        <span className="min-w-0 flex-1 text-xs text-muted-foreground max-sm:basis-full">
+          {e.outcome}
+        </span>
+      )}
+      <Progress done={e.progress.done} total={e.progress.total} />
+      {e.state !== "done" && <CountChips counts={e.counts} />}
+    </li>
   );
 }
 

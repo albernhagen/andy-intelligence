@@ -125,13 +125,9 @@ describe("milestone on the board's epic groups (AI-311)", () => {
     // AI-3's group is its child epic's, which takes M6 from its top-level epic.
     const header = document.querySelector<HTMLElement>(`[data-epic="${child.key}"]`)!;
     await waitFor(() => expect(chip(header)?.textContent).toBe("M6: Dev → prod releases · Parked"));
+    // The loose epic has no tickets, so no card and no header (AI-403); the roadmap lists it.
     const backlog = screen.getByRole("region", { name: "Backlog" });
-    // The loose epic sits in Ideas, which groups by milestone on its own (AI-400): no chip.
-    const looseHeader = backlog.querySelector<HTMLElement>(
-      '[data-idea-group][data-level="milestone"][data-label="none"]',
-    )!;
-    expect(looseHeader.textContent).toContain("No milestone");
-    expect(chip(looseHeader)).toBeNull();
+    expect(backlog.querySelector('[data-ticket="AI-4"], [data-label="AI-4"]')).toBeNull();
   });
 });
 

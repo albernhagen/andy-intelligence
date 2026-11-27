@@ -43,13 +43,13 @@ const open = { isCollapsed: (_: string, d: boolean) => d, shownInFull: new Set<s
 
 describe("groupIdeas", () => {
   it("GivenIdeasAcrossMilestones_WhenGrouped_ThenRoadmapOrderWithNoMilestoneLast", () => {
-    const groups = groupIdeas([loose, inLoose, inA, inB, epicA], all, milestones);
+    const groups = groupIdeas([loose, inLoose, inA, inB], all, milestones);
 
     expect(groups.map((g) => g.key)).toEqual(["M4", "M6", "none"]);
-    expect(groups.map((g) => g.count)).toEqual([1, 2, 2]);
-    // A top-level epic card sits under its own header; a loose epic's child under that epic.
+    expect(groups.map((g) => g.count)).toEqual([1, 1, 2]);
+    // An epic is its children's header, never a card (AI-403); a loose epic's child is under it.
     expect(groups[1]!.epics.map((e) => [e.epic?.key, e.cards.map((c) => c.key)])).toEqual([
-      ["AI-1", ["AI-10", "AI-1"]],
+      ["AI-1", ["AI-10"]],
     ]);
     expect(groups[2]!.epics.map((e) => e.epic?.key ?? null)).toEqual(["AI-3", null]);
   });
@@ -103,7 +103,7 @@ describe("ideaRows", () => {
 describe("ideaGroupKey", () => {
   it("GivenTwoIdeas_WhenUnderDifferentEpics_ThenTheirKeysDiffer", () => {
     expect(ideaGroupKey(inA, all, milestones)).toBe("M6/AI-1");
-    expect(ideaGroupKey(epicA, all, milestones)).toBe("M6/AI-1");
+    expect(ideaGroupKey(inB, all, milestones)).toBe("M4/AI-2");
     expect(ideaGroupKey(loose, all, milestones)).toBe("none/none");
   });
 });
