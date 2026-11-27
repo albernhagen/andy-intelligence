@@ -4,6 +4,10 @@ import { DEFAULT_ROUTE } from "@andy/domain";
 import { expectPageFits, expectTouchTargets } from "./phone";
 import { expectShellLoaded } from "./shell";
 
+// The ticket panel's 180 ms slide-in (Web Animations) can still be moving when a shot is taken,
+// which flaked `epic-breakdown-drafting.png` by a few pixels; reduced motion skips it (AI-405).
+test.use({ reducedMotion: "reduce" });
+
 /**
  * AI-383: epic breakdowns. The seed's OPS-5 has no breakdown and a parked milestone, so the
  * stored epic panel images show "Draft tickets" disabled with its reason. Here its reads are
