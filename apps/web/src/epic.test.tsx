@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
+import { TicketService, syncEpicStages } from "@andy/domain";
 import { renderApp } from "@/test/harness";
 import { formatEpicRollup } from "@/components/EpicChildren";
 
@@ -109,5 +110,52 @@ describe("epic panel", () => {
       partial: false,
     });
     expect(line).toBe("0 of 1 done · Cost unknown");
+  });
+});
+
+/** ADR-0164 (AI-404): an epic's state follows its tickets, so its panel has no moves. */
+describe("epic state follows its tickets", () => {
+  async function openEpic({ needsCheck = false, childDone = false } = {}) {
+    const harness = renderApp();
+    const { tracker } = harness;
+    // Seeds write as the app does, so the epic's stage follows its tickets.
+    const service = new TicketService(syncEpicStages(tracker));
+    await tracker.createProject({ name: "AI", key: "AI" });
+    const epic = await service.create("ai", { title: "Epics", type: "epic", needsCheck }, "andy");
+    const child = await service.create("ai", { title: "Child", parentId: epic.id }, "andy");
+    if (childDone) await service.move("ai", child.id, "done", "andy", { force: true });
+    await harness.router.navigate({ to: `/p/ai/t/${epic.key}` });
+    const panel = await screen.findByRole("dialog", { name: new RegExp(`^${epic.key}: `) });
+    return { harness, epic, panel };
+  }
+
+  it("GivenAnOpenEpic_WhenItsPanelOpens_ThenItSaysItsStateFollowsItsTicketsWithNoMoves", async () => {
+    const { panel } = await openEpic();
+
+    const next = within(panel).getByRole("region", { name: "Next" });
+    expect(within(next).getByText(/Its state follows its tickets/)).toBeTruthy();
+    expect(within(next).queryByRole("button", { name: /^Move/ })).toBeNull();
+    expect(await within(panel).findByText("Not started · follows its tickets")).toBeTruthy();
+  });
+
+  it("GivenAnEpic_WhenAndyTurnsOnNeedsYourCheck_ThenItIsSaved", async () => {
+    const { harness, epic, panel } = await openEpic();
+
+    await harness.user.click(within(panel).getByRole("switch", { name: /Needs your check/ }));
+
+    await expect
+      .poll(async () => (await harness.tracker.getTicket("ai", epic.id))?.needsCheck)
+      .toBe(true);
+  });
+
+  it("GivenACheckedEpicWhoseTicketsAreDone_WhenAndyClicksCloseEpic_ThenItIsDone", async () => {
+    const { harness, epic, panel } = await openEpic({ needsCheck: true, childDone: true });
+
+    expect(await within(panel).findByText(/^Waiting for your check/)).toBeTruthy();
+    await harness.user.click(within(panel).getByRole("button", { name: "Close epic" }));
+
+    await expect
+      .poll(async () => (await harness.tracker.getTicket("ai", epic.id))?.stage)
+      .toBe("done");
   });
 });

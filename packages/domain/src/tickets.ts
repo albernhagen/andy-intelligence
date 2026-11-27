@@ -620,6 +620,7 @@ export class TicketService {
     if (to === "cancelled") {
       throw new DomainError("invalid_transition", "cancel the ticket instead of moving it");
     }
+    if (ticket.type === "epic") checkEpicMove(ticket, to, actor);
     if (ticket.stage === "cancelled") requireCan(actor, "reopen_ticket", projectId);
     if (force) {
       // ADR-0057: the reason is optional; `forced: true` in history is the audit trail.
@@ -1062,4 +1063,21 @@ export class TicketService {
 
 function stripUndefined<T extends object>(value: T): Partial<T> {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+/**
+ * ADR-0164: an epic's stage follows its tickets, so nobody moves it, forced or not. Two moves
+ * stay: reopening a Cancelled epic, and the owner closing one that waits for his check
+ * (`needsCheck`, Ready for review → Done).
+ */
+function checkEpicMove(epic: Ticket, to: Stage, actor: EventActor): void {
+  if (epic.stage === "cancelled" && to === "backlog") return;
+  if (epic.needsCheck && epic.stage === "ready_for_review" && to === "done") {
+    requireCan(actor, "close_epic", epic.projectId);
+    return;
+  }
+  throw new DomainError(
+    "invalid_transition",
+    `${epic.key} is an epic: its state follows its tickets, so it can't be moved`,
+  );
 }

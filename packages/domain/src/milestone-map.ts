@@ -1,5 +1,6 @@
 import { notFound, type Project, type Stage, type Ticket, type WorkTracker } from "@andy/contracts";
 import { epicChildren, type EpicChild } from "./epic-rollup";
+import { epicStateOf, type EpicState } from "./epic-state";
 import { DomainError } from "./errors";
 import { ProjectTickets } from "./ticket-snapshots";
 
@@ -33,6 +34,8 @@ export interface MilestoneMapEpic {
   key: string;
   title: string;
   stage: Stage;
+  /** Its state, read from its stage as the roadmap reads it (ADR-0164). */
+  state: EpicState;
   /** Done children of all children that aren't Cancelled. */
   progress: { done: number; total: number };
   /** Keys only: the done list grows and needs no detail. */
@@ -131,6 +134,7 @@ function epicEntry(
     key: epic.key,
     title: epic.title,
     stage: epic.stage,
+    state: epicStateOf(epic.stage),
     progress: { done: counted.filter((c) => c.stage === "done").length, total: counted.length },
     done: children.filter((c) => c.stage === "done").map((c) => c.key),
     inReview: of("inReview"),
@@ -189,7 +193,11 @@ export function renderMilestoneMapText(map: Omit<MilestoneMap, "text">): string 
   const lines = [`${map.projectKey} milestone map (from tickets)`];
   if (map.epics.length === 0) lines.push("No open epics.");
   for (const e of map.epics) {
-    lines.push("", `${e.key}: ${e.title}: ${e.progress.done} of ${e.progress.total} done`);
+    const waiting = e.state === "waiting_for_check" ? " · waiting for your check" : "";
+    lines.push(
+      "",
+      `${e.key}: ${e.title}: ${e.progress.done} of ${e.progress.total} done${waiting}`,
+    );
     const groups: [string, string[]][] = [
       ["Done", e.done],
       ["In review", e.inReview.map(itemText)],

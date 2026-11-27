@@ -932,7 +932,7 @@ describe("Ideas grouped by milestone and epic, and the filter box", () => {
 /** AI-403: Board shows epics as group headers, not cards. */
 describe("epics as group headers, not cards", () => {
   /**
-   * AI-1 "Board polish" is an epic forced into Ready with child AI-2 in Ready and Done child AI-3;
+   * AI-1 "Board polish" is an epic with child AI-2 in Ready and Done child AI-3;
    * AI-4 "Child epic" is an epic under AI-1 with child AI-5 in Ready; AI-6 "Empty epic" has no
    * tickets; AI-7 is a loose Ready ticket. `idea` adds AI-8 "An idea" under AI-1, in Ideas.
    */
@@ -941,7 +941,6 @@ describe("epics as group headers, not cards", () => {
     const { service } = harness;
     await harness.tracker.createProject({ name: "AI", key: "AI" });
     const epic = await service.create("ai", { type: "epic", title: "Board polish" }, "andy");
-    await service.move("ai", epic.id, "ready", "andy", { force: true });
     const inReady = await service.create(
       "ai",
       { ...readyStory, title: "Header link", parentId: epic.id },

@@ -32,6 +32,7 @@ export const OWNER_ACTIONS = {
   change_milestones: "create, edit or order milestones, or attach an epic to one",
   merge_pr: "merge a pull request through merge_pr",
   release: "promote or roll back a release",
+  close_epic: "close an epic waiting for the owner's check",
 } as const;
 
 export type OwnerAction = keyof typeof OWNER_ACTIONS;

@@ -207,7 +207,13 @@ describe("PullRequestTickets", () => {
 
   it("GivenAnEpic_WhenItsPullRequestOpensMergesOrCloses_ThenLinkedOnly", async () => {
     const epic = await service.create(project.id, { type: "epic", title: "M1" }, "andy");
-    await service.move(project.id, epic.id, "in_progress", "andy", { force: true });
+    // ADR-0164: nobody moves an epic; the store write stands in for its tickets moving it.
+    await tracker.updateTicket(
+      project.id,
+      epic.id,
+      { stage: { to: "in_progress", forced: false, reason: null } },
+      "system",
+    );
     for (const e of [
       prEvent("opened"),
       prEvent("closed", { state: "merged" }),

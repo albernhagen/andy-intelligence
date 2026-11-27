@@ -7,6 +7,7 @@ import {
 } from "@andy/contracts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { syncEpicStages } from "@andy/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
@@ -82,14 +83,18 @@ describe("roadmap API and MCP (AI-193)", () => {
     return result as any;
   };
 
-  const at = (projectId: string, id: string, to: Stage) =>
-    tracker.updateTicket(projectId, id, { stage: { to, forced: true, reason: null } }, "andy");
-
-  /** M1 (Done) and M2 with an outcome, a child epic, and tickets in several stages. */
+  /**
+   * M1 (Done) and M2 with an outcome, a child epic, and tickets in several stages. Written as the
+   * app writes (ADR-0164), so each epic's stage follows its tickets.
+   */
   async function seed() {
+    const synced = syncEpicStages(tracker);
     const create = (input: Parameters<InMemoryWorkTracker["createTicket"]>[1]) =>
-      tracker.createTicket("ai", input, "andy");
+      synced.createTicket("ai", input, "andy");
+    const at = (projectId: string, id: string, to: Stage) =>
+      synced.updateTicket(projectId, id, { stage: { to, forced: true, reason: null } }, "andy");
     const m1 = await create({ title: "M1", type: "epic" });
+    const m1Done = await create({ title: "M1 done", parentId: m1.id });
     const m2 = await create({
       title: "M2",
       type: "epic",
@@ -104,7 +109,7 @@ describe("roadmap API and MCP (AI-193)", () => {
     await at("ai", doneOne.id, "done");
     await at("ai", review.id, "ready_for_review");
     await at("ai", subStory.id, "in_progress");
-    await at("ai", m1.id, "done");
+    await at("ai", m1Done.id, "done");
     return { m1, m2, sub };
   }
 

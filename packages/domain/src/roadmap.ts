@@ -15,6 +15,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { epicChildren } from "./epic-rollup";
+import { epicStateOf, type EpicState } from "./epic-state";
 import { childGroup } from "./milestone-map";
 import type { BoardSource } from "./work-list";
 import { workViews } from "./work-views";
@@ -43,7 +44,8 @@ export const MAX_ROADMAP_EPICS = 50;
 /** Child epics listed under one epic; past it the roadmap says `truncated` (tickets still count). */
 export const MAX_ROADMAP_CHILD_EPICS = 20;
 
-export type RoadmapState = "not_started" | "in_progress" | "done";
+/** An epic's state (ADR-0164): its stored stage, which follows its tickets. */
+export type RoadmapState = EpicState;
 
 export interface RoadmapCounts {
   /** Open tickets waiting on Andy: the board's Needs you rule (ADR-0108); overlaps the others. */
@@ -149,14 +151,12 @@ function ticketsUnder(epic: Ticket, tickets: readonly Ticket[], seen = new Set<s
   return under;
 }
 
-/** Not started: no ticket past Backlog (none Done either); done: the epic is Done. */
-export function roadmapState(
-  epic: Pick<Ticket, "stage">,
-  ticketStages: readonly Stage[],
-): RoadmapState {
-  if (epic.stage === "done") return "done";
-  const started = ticketStages.some((s) => s !== "backlog" && s !== "cancelled");
-  return started ? "in_progress" : "not_started";
+/**
+ * The epic's state, read from its stage: the stage follows its tickets (ADR-0164), so the
+ * roadmap, the milestone page, the board, `status` and `milestone_map` all say the same.
+ */
+export function roadmapState(epic: Pick<Ticket, "stage">): RoadmapState {
+  return epicStateOf(epic.stage);
 }
 
 function fields(
@@ -192,10 +192,7 @@ function fields(
     outcome: epic.outcome,
     doneWhen: epic.acceptanceCriteria,
     stage: epic.stage,
-    state: roadmapState(
-      epic,
-      under.map((s) => s.stage),
-    ),
+    state: roadmapState(epic),
     progress: { done, total },
     counts,
   };

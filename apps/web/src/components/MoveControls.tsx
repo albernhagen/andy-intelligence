@@ -24,6 +24,45 @@ export function nextMove(stage: Stage, deploys = true): Stage | null {
  * rules (e.g. DoR for Backlog → Ready); its errors show here.
  */
 export function MoveControls({ ticket, aside }: { ticket: Ticket; aside?: ReactNode }) {
+  return ticket.type === "epic" ? (
+    <EpicMoveControls ticket={ticket} aside={aside} />
+  ) : (
+    <StageMoveControls ticket={ticket} aside={aside} />
+  );
+}
+
+/**
+ * An epic has no moves (ADR-0164): its stage follows its tickets. The one decision left is
+ * closing an epic that waits for Andy's check (`needsCheck`, all its tickets Done).
+ */
+function EpicMoveControls({ ticket, aside }: { ticket: Ticket; aside?: ReactNode }) {
+  const move = useMoveTicket({ projectId: ticket.projectId, ticketId: ticket.id });
+  const waiting = ticket.needsCheck && ticket.stage === "ready_for_review";
+  return (
+    <section aria-label="Move" className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {waiting ? (
+          <Button
+            size="sm"
+            className="max-sm:w-full"
+            disabled={move.isPending}
+            onClick={() => move.mutate({ to: "done", force: false, reason: null })}
+          >
+            Close epic
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            Its state follows its tickets; it closes itself when the last one is Done.
+          </span>
+        )}
+        {aside}
+      </div>
+      {move.error && <QueryError error={move.error} />}
+    </section>
+  );
+}
+
+function StageMoveControls({ ticket, aside }: { ticket: Ticket; aside?: ReactNode }) {
   const move = useMoveTicket({ projectId: ticket.projectId, ticketId: ticket.id });
   const upNext = useSetUpNext(ticket.projectId);
   const inUpNext = ticket.upNextRank !== null;

@@ -101,6 +101,7 @@ export const NewTicket = Ticket.pick({ title: true }).extend({
   size: Ticket.shape.size.default(null),
   sizeReason: Ticket.shape.sizeReason.default(null),
   outcome: Ticket.shape.outcome,
+  needsCheck: Ticket.shape.needsCheck,
   outOfScope: Ticket.shape.outOfScope,
   touches: Ticket.shape.touches,
   overrides: Ticket.shape.overrides.default({}),
@@ -137,6 +138,7 @@ export const TicketFields = Ticket.pick({
   confidence: true,
   confidenceReason: true,
   outcome: true,
+  needsCheck: true,
 })
   .partial()
   // Zod 4 applies defaults inside `.partial()`, which would turn "not given" into "reset":
@@ -150,6 +152,7 @@ export const TicketFields = Ticket.pick({
     sentBackReason: z.string().max(300).nullable().optional(),
     refineAssumptions: z.array(Assumption).optional(),
     outcome: EpicOutcome.nullable().optional(),
+    needsCheck: z.boolean().optional(),
     /**
      * A top-level epic's milestone (ADR-0131). Set only through the milestone service (AI-304):
      * the ticket edit paths (REST PATCH, `edit_ticket`, `TicketService.edit`) leave it out.
@@ -285,6 +288,8 @@ export const TicketFilter = z.object({
    * of the Backlog (AI-315: dispatch reads only what it uses).
    */
   upNext: z.literal(true).optional(),
+  /** Only the children of this ticket (ADR-0164: an epic's stage is synced from them). */
+  parentId: Id.optional(),
 });
 export type TicketFilter = z.infer<typeof TicketFilter>;
 
@@ -314,7 +319,8 @@ export interface WorkTracker {
   /** The project's ticket with this key (e.g. "AI-7"), or null. Reads only that ticket. */
   getTicketByKey(projectId: string, key: string): Promise<Ticket | null>;
   /**
-   * Unarchived tickets per stage, every stage present. Counted by aggregation queries, not by
+   * Unarchived tickets per stage, every stage present; epics are left out (ADR-0164: an epic is
+   * not work, as the board leaves it out). Counted by aggregation queries, not by
    * reading tickets (ADR-0028).
    */
   countByStage(projectId: string): Promise<Record<Stage, number>>;

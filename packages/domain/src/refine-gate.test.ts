@@ -334,6 +334,24 @@ describe("RefineGate split of an epic (AI-115)", () => {
     expect(applied).toMatchObject({ notice: expect.stringContaining(api!.key) });
   });
 
+  it("GivenAnEpicRefinedWithNothingToAsk_WhenApplied_ThenItStaysInBacklogAndNeedsNobody", async () => {
+    const t = await setup("epic");
+    await t.gate.apply(t.run, {
+      ...result([]),
+      outcome: "ready",
+      reason: null,
+      body: "Boards Andy can trust.",
+      acceptanceCriteria: ["Every board loads"],
+      epicOutcome: "Boards load",
+    });
+    // ADR-0164: an epic's stage follows its tickets, so refine never moves it to Ready.
+    expect(await t.ticket()).toMatchObject({
+      stage: "backlog",
+      dorStatus: "met",
+      needsAttention: false,
+    });
+  });
+
   it("GivenAnEpicSplitWhoseLastWriteWasLost_WhenTheSameRunIsAppliedAgain_ThenNoChildIsCreatedTwice", async () => {
     const t = await setup("epic");
     await t.gate.apply(t.run, result(slices));

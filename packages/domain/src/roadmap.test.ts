@@ -47,7 +47,12 @@ const PROJECT = { id: "ai", key: "AI", name: "Andy Intelligence" };
 describe("roadmap (AI-193)", () => {
   it("GivenEpicsWithStories_WhenBuilt_ThenTopLevelEpicsInRankOrderWithOutcomeStateProgressAndCounts", () => {
     const tickets = [
-      epic(2, { title: "M2", outcome: "Self-hosting works", acceptanceCriteria: ["A", "B"] }),
+      epic(2, {
+        title: "M2",
+        outcome: "Self-hosting works",
+        acceptanceCriteria: ["A", "B"],
+        stage: "in_progress",
+      }),
       epic(1, { title: "M1", stage: "done" }),
       under(1, 10, { stage: "done" }),
       under(2, 20, { stage: "done" }),
@@ -69,7 +74,7 @@ describe("roadmap (AI-193)", () => {
       title: "M2",
       outcome: "Self-hosting works",
       doneWhen: ["A", "B"],
-      stage: "backlog",
+      stage: "in_progress",
       progress: { done: 1, total: 5 },
       counts: { needsYou: 1, inReview: 1, inProgress: 1, blocked: 1, notStarted: 1 },
       children: [],
@@ -103,18 +108,15 @@ describe("roadmap (AI-193)", () => {
     expect(buildRoadmap(PROJECT, tickets).epics.map((e) => e.key)).toEqual(["AI-3"]);
   });
 
+  // ADR-0164: the stage follows the epic's tickets, so the state is read from it.
   it.each([
-    ["backlog", [], "not_started"],
-    ["backlog", ["backlog", "cancelled"], "not_started"],
-    ["backlog", ["backlog", "ready"], "in_progress"],
-    ["in_progress", ["backlog", "done"], "in_progress"],
-    ["done", ["backlog"], "done"],
-  ] as const)(
-    "GivenEpicStage%sAndStories%j_WhenStateRead_ThenItIs%s",
-    (stage, tickets, expected) => {
-      expect(roadmapState({ stage }, tickets)).toBe(expected);
-    },
-  );
+    ["backlog", "not_started"],
+    ["in_progress", "in_progress"],
+    ["ready_for_review", "waiting_for_check"],
+    ["done", "done"],
+  ] as const)("GivenEpicStage%s_WhenStateRead_ThenItIs%s", (stage, expected) => {
+    expect(roadmapState({ stage })).toBe(expected);
+  });
 
   it("GivenAWorkerToPick_WhenBuilt_ThenTheStoryCountsAsNeedsYou", () => {
     const tickets = [

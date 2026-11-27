@@ -4,7 +4,7 @@ import {
   InMemoryWorkTracker,
   type BoardTicket,
 } from "@andy/contracts";
-import { boardLanes } from "@andy/domain";
+import { boardCards, boardLanes } from "@andy/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import type { TokenVerifier } from "./auth";
@@ -84,10 +84,11 @@ describe("MCP board matches GET …/board (AI-296)", () => {
 
     expect(result.isError).toBe(false);
     expect(keysByLane(result.data.lanes)).toEqual(
-      keysByLane(boardLanes(json, { showVerifying: false })),
+      keysByLane(boardLanes(boardCards(json), { showVerifying: false })),
     );
     expect(keysByLane(result.data.lanes)).toEqual([
-      ["backlog", [epic.key]],
+      // ADR-0164: the epic gets no card, as on the web board.
+      ["backlog", []],
       ["ready", [c.key, a.key]],
       ["in_progress", [b.key]],
       ["ready_for_review", []],
@@ -120,7 +121,7 @@ describe("MCP board matches GET …/board (AI-296)", () => {
     const result = await tool({ project: "AI", archived: true });
 
     expect(keysByLane(result.data.lanes)).toEqual(
-      keysByLane(boardLanes(json, { showArchived: true, showVerifying: false })),
+      keysByLane(boardLanes(boardCards(json), { showArchived: true, showVerifying: false })),
     );
     expect(result.data.lanes.find((l: { stage: string }) => l.stage === "done").tickets).toEqual([
       expect.objectContaining({ key: old.key, archived: true }),

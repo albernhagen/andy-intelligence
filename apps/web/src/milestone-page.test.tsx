@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
+import { syncEpicStages } from "@andy/domain";
 import { PAGE_LOAD, renderApp } from "@/test/harness";
 import { pick } from "@/test/pick";
 
@@ -48,18 +49,16 @@ async function seeded(path: string, opts: Parameters<typeof renderApp>[1] = {}) 
     { stage: { to: "done", forced: true, reason: null } },
     "andy",
   );
-  const story = await tracker.createTicket(
-    "ai",
-    { title: "Opens a PR", parentId: flow.id },
-    "andy",
-  );
-  await tracker.updateTicket(
+  // The tickets are written as the app writes (ADR-0164), so their epics' stages follow them.
+  const synced = syncEpicStages(tracker);
+  const story = await synced.createTicket("ai", { title: "Opens a PR", parentId: flow.id }, "andy");
+  await synced.updateTicket(
     "ai",
     story.id,
     { stage: { to: "done", forced: true, reason: null } },
     "andy",
   );
-  await tracker.createTicket("ai", { title: "Merges a PR", parentId: child.id }, "andy");
+  await synced.createTicket("ai", { title: "Merges a PR", parentId: child.id }, "andy");
   await harness.router.navigate({ href: path });
   return { harness, flow, child, shipped };
 }
