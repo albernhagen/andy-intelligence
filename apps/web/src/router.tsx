@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { parseWorkView, type WorkView } from "@andy/domain";
 import { AppShell } from "@/components/AppShell";
+import { NotFound } from "@/components/NotFound";
 import { loadScope, scopePath } from "@/lib/scope";
 import { BoardPage } from "@/pages/BoardPage";
 import { DashboardsPage } from "@/pages/DashboardsPage";
@@ -25,11 +26,12 @@ import { RunPage } from "@/pages/RunPage";
 import { TicketPage } from "@/pages/TicketPage";
 import { WhatsNewPage } from "@/pages/WhatsNewPage";
 import { RoadmapPage } from "@/pages/RoadmapPage";
+import { MilestonePage } from "@/pages/MilestonePage";
 import { WorkPage } from "@/pages/WorkPage";
 
 const rootRoute = createRootRoute({
   component: AppShell,
-  notFoundComponent: () => <p className="text-muted-foreground">Page not found.</p>,
+  notFoundComponent: NotFound,
 });
 
 const boardRoute = createRoute({
@@ -118,6 +120,12 @@ const routeTree = rootRoute.addChildren([
     getParentRoute: () => rootRoute,
     path: "/p/$projectId/roadmap",
     component: RoadmapPage,
+  }),
+  // A milestone's own page (AI-405): by id, as milestones have no readable key.
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/p/$projectId/m/$milestoneId",
+    component: MilestonePage,
   }),
   // Old Ready page links (AI-298) open the board with the same filters (AI-343).
   createRoute({

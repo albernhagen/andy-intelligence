@@ -590,8 +590,13 @@ export class TicketService {
   /** Places a ticket next to another in its lane; order is priority (ADR-0058). */
   async reorderByKey(key: string, anchor: ReorderAnchor, actor: EventActor): Promise<Ticket> {
     const ticket = await this.findByKey(key);
-    // Only the ticket's own lane (AI-222); a lane never holds archived tickets outside Done.
-    const lane = await this.tracker.listTickets(ticket.projectId, { stage: ticket.stage });
+    // Only the ticket's own lane (AI-222); a lane never holds archived tickets outside Done. A
+    // top-level epic's lane is its milestone's epics, in any stage (AI-405), so it reads them all.
+    const topLevelEpic = ticket.type === "epic" && ticket.parentId === null;
+    const lane = await this.tracker.listTickets(
+      ticket.projectId,
+      topLevelEpic ? undefined : { stage: ticket.stage },
+    );
     const placed = reorderRank(ticket, anchor, lane);
     if (typeof placed === "string") throw new DomainError("invalid_reference", placed);
     return placed.lane === "up_next"

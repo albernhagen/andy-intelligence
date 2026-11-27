@@ -19,7 +19,11 @@ import {
   type Stage,
 } from "@andy/contracts";
 import { Segmented } from "@/components/ui/segmented";
-import { MilestoneChip } from "@/components/MilestoneControls";
+import {
+  MilestoneChip,
+  MilestoneChipLink,
+  MilestonePageLink,
+} from "@/components/MilestoneControls";
 import { STAGE_LABELS } from "@/lib/tickets";
 
 /**
@@ -115,8 +119,11 @@ export function EpicGroupHeader({
   /** The epic this one sits under, when it is a child epic. */
   parent?: { key: string } | null;
   progress: Done | null;
-  /** The epic's milestone (its top-level epic's, ADR-0131), shown with its status (AI-311). */
-  milestone?: Pick<Milestone, "name" | "status"> | null;
+  /**
+   * The epic's milestone (its top-level epic's, ADR-0131), shown with its status (AI-311); the
+   * chip opens the milestone's page (AI-405).
+   */
+  milestone?: Pick<Milestone, "id" | "name" | "status"> | null;
 }) {
   return (
     <li
@@ -130,7 +137,7 @@ export function EpicGroupHeader({
           {/* Its own line, so the epic's title and the milestone's status both stay readable. */}
           {milestone && (
             <span className="flex basis-full">
-              <MilestoneChip milestone={milestone} className="max-w-full" />
+              <MilestoneChipLink projectId={projectId} milestone={milestone} />
             </span>
           )}
         </>
@@ -164,7 +171,7 @@ export function IdeaGroupHeader({
   level: "milestone" | "epic";
   groupKey: string;
   projectId: string;
-  milestone?: Pick<Milestone, "name" | "status"> | null;
+  milestone?: Pick<Milestone, "id" | "name" | "status"> | null;
   epic?: EpicRef | null;
   parent?: { key: string } | null;
   progress?: Done | null;
@@ -218,7 +225,7 @@ export function IdeaGroupHeader({
         {countShown}
       </>
     );
-    content = onToggle ? (
+    const toggleOrRow = onToggle ? (
       <button
         type="button"
         aria-expanded={open}
@@ -230,6 +237,16 @@ export function IdeaGroupHeader({
     ) : (
       <div className={row}>{body}</div>
     );
+    // A milestone's page (AI-405) sits beside the toggle, not inside it.
+    content =
+      level === "milestone" && milestone ? (
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1">{toggleOrRow}</div>
+          <MilestonePageLink projectId={projectId} milestone={milestone} className="sm:size-6" />
+        </div>
+      ) : (
+        toggleOrRow
+      );
   }
   return (
     <li

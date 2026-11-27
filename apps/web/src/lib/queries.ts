@@ -249,6 +249,58 @@ export function useSetEpicMilestone(path: TicketPath) {
   );
 }
 
+/**
+ * New epic created, but attaching it to the milestone was refused: the epic exists with no
+ * milestone, so the page clears its title rather than offer a retry that would create a second.
+ */
+export class EpicAttachError extends ApiError {
+  constructor(
+    readonly epicKey: string,
+    status: number,
+    why: string,
+  ) {
+    super(
+      status,
+      `${epicKey} was created with no milestone: ${why}. Pick its milestone on its panel.`,
+    );
+    this.name = "EpicAttachError";
+  }
+}
+
+/**
+ * The milestone page's New epic (AI-405): creates an epic, then attaches it to the milestone,
+ * as MCP does with `create_ticket` and `set_epic_milestone`. Attaching is the owner's logged
+ * milestone write (ADR-0131), so it stays its own call; if it is refused, the epic exists with no
+ * milestone, every query refetches so it shows, and the error is an `EpicAttachError`.
+ */
+export function useCreateEpicInMilestone(projectId: string) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  return useWrite(async ({ title, milestoneId }: { title: string; milestoneId: string }) => {
+    const epic = unwrap(
+      await api.POST("/api/projects/{projectId}/tickets", {
+        params: { path: { projectId } },
+        body: { title, type: "epic" },
+      }),
+    );
+    try {
+      return unwrap(
+        await api.PUT("/api/projects/{projectId}/tickets/{ticketId}/milestone", {
+          params: { path: { projectId, ticketId: epic.id } },
+          body: { milestoneId },
+        }),
+      );
+    } catch (e) {
+      void queryClient.invalidateQueries();
+      throw new EpicAttachError(
+        epic.key,
+        e instanceof ApiError ? e.status : 500,
+        e instanceof ApiError ? e.message : "attaching it failed",
+      );
+    }
+  });
+}
+
 export const ticketQueryKey = (projectId: string, ref: string) => ["ticket", projectId, ref];
 
 /** A ticket by key (`AI-2`, readable links) or by id (older links). */

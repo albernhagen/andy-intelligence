@@ -86,12 +86,36 @@ export function blockerProblem(
   return null;
 }
 
-type Lane = "up_next" | "ideas" | "stage";
+type Lane = "up_next" | "ideas" | "stage" | "milestone";
+
+/** A top-level epic: ordered among its milestone's epics (the roadmap's order, AI-405). */
+const isTopLevelEpic = (t: Ticket) => t.type === "epic" && t.parentId === null;
 
 const laneOf = (t: Ticket): Lane =>
-  t.stage !== "backlog" ? "stage" : t.upNextRank !== null ? "up_next" : "ideas";
+  isTopLevelEpic(t)
+    ? "milestone"
+    : t.stage !== "backlog"
+      ? "stage"
+      : t.upNextRank !== null
+        ? "up_next"
+        : "ideas";
 
-/** The new rank that places `ticket` next to the anchor, or why it can't go there. */
+/**
+ * Whether `t` sits in `ticket`'s lane. A ticket's lane is its stage (and, in Backlog, Up next or
+ * Ideas). A top-level epic has no board card (AI-403); its lane is its milestone's top-level
+ * epics (or No milestone's), whatever their stages, not Cancelled: the roadmap and milestone
+ * page order (AI-405).
+ */
+function inLane(ticket: Ticket, t: Ticket, lane: Lane): boolean {
+  if (t.archived || laneOf(t) !== lane) return false;
+  if (lane === "milestone") return t.stage !== "cancelled" && t.milestoneId === ticket.milestoneId;
+  return t.stage === ticket.stage;
+}
+
+/**
+ * The new rank that places `ticket` next to the anchor, or why it can't go there. `tickets` holds
+ * the ticket's lane at least: the project's tickets for a top-level epic.
+ */
 export function reorderRank(
   ticket: Ticket,
   anchor: ReorderAnchor,
@@ -103,14 +127,15 @@ export function reorderRank(
   const target = tickets.find((t) => t.key === key);
   if (!target) return `${key} is not in this project`;
   const lane = laneOf(ticket);
-  if (target.archived || target.stage !== ticket.stage || laneOf(target) !== lane) {
-    return `${key} is not in ${ticket.key}'s lane`;
+  if (!inLane(ticket, target, lane)) {
+    return lane === "milestone"
+      ? `${key} is not a top-level epic in ${ticket.key}'s milestone`
+      : `${key} is not in ${ticket.key}'s lane`;
   }
 
   const rankOf = (t: Ticket) => (lane === "up_next" ? t.upNextRank! : t.rank);
   const order = tickets
-    .filter((t) => !t.archived && t.stage === ticket.stage && laneOf(t) === lane)
-    .filter((t) => t.id !== ticket.id)
+    .filter((t) => t.id !== ticket.id && inLane(ticket, t, lane))
     .sort((a, b) => compareRanks(rankOf(a), rankOf(b)));
   const at = order.findIndex((t) => t.id === target.id) + ("above" in anchor ? 0 : 1);
   const before = order[at - 1];
