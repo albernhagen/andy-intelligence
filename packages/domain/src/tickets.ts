@@ -47,7 +47,13 @@ import { cascadesFrom, epicOf, withEpicOverrides } from "./overrides";
 import { requireOverrideNotLooser } from "./merge-mode";
 import { executorView } from "./executor";
 import { routeLayers } from "./route-layers";
-import { canTransition, isForwardMove, pullRequestPath, type PullRequestTarget } from "./stages";
+import {
+  canTransition,
+  isBackwardMove,
+  isForwardMove,
+  pullRequestPath,
+  type PullRequestTarget,
+} from "./stages";
 
 function log(severity: "INFO" | "WARNING" | "ERROR", message: string, fields: object = {}) {
   console.log(JSON.stringify({ severity, message, component: "tickets", ...fields }));
@@ -99,6 +105,8 @@ export const PULL_REQUEST_CONFLICT_RETRIES = 3;
 /** Stops a ticket's runs in flight before it is cancelled; RunService implements it. */
 export interface RunCanceller {
   cancelForTicket(projectId: string, ticketId: string): Promise<Run[]>;
+  /** The ticket's runs queued or running; a session's backward move waits for them (ADR-0163). */
+  activeForTicket?(projectId: string, ticketId: string): Promise<Run[]>;
 }
 
 export interface MoveOptions {
@@ -642,6 +650,18 @@ export class TicketService {
         }
       }
     }
+    return this.writeMove(ticket, to, actor, force, reason);
+  }
+
+  /** Writes a checked stage move and runs what follows it (unarchive, reopen, dispatch, wake). */
+  private async writeMove(
+    ticket: Ticket,
+    to: Stage,
+    actor: EventActor,
+    force: boolean,
+    reason: string | null,
+  ): Promise<Ticket> {
+    const { projectId, id: ticketId } = ticket;
     // Only Done or Cancelled tickets stay archived, so moving out of them unarchives.
     const unarchive = ticket.archived && !ARCHIVABLE_STAGES.includes(to);
     // A question that slipped in while the ticket was being cancelled is withdrawn on reopen,
@@ -812,16 +832,48 @@ export class TicketService {
     await this.reportCancelledRuns(ticket.projectId, ticket.id, runs, "when its PR merged");
   }
 
-  /** One step forward by ticket key, never forced (the MCP `move_ticket` tool). */
-  async moveForward(key: string, to: Stage, actor: EventActor): Promise<Ticket> {
+  /**
+   * A session's move by ticket key (the MCP `move_ticket` tool), never forced: one step forward
+   * (Definition of Ready checked into Ready), or back to any earlier stage (ADR-0163). Only Andy
+   * moves a ticket out of Done or Cancelled, and a backward move waits while an agent task or an
+   * open PR is on the ticket, so neither is orphaned. It takes no Up next option: a ticket moved
+   * back to Backlog lands in Ideas, because the tracker clears `upNextRank` when it leaves Backlog.
+   */
+  async moveBySession(key: string, to: Stage, actor: EventActor): Promise<Ticket> {
     const ticket = await this.findByKey(key);
-    if (!isForwardMove(ticket.stage, to)) {
+    if (isForwardMove(ticket.stage, to)) return this.move(ticket.projectId, ticket.id, to, actor);
+    if (ticket.stage === "done" || ticket.stage === "cancelled") {
       throw new DomainError(
         "invalid_transition",
-        `can't move ${key} from ${ticket.stage} to ${to}: only one step forward is allowed`,
+        `can't move ${key} out of ${ticket.stage}: only Andy can, in the web app`,
       );
     }
-    return this.move(ticket.projectId, ticket.id, to, actor);
+    if (!isBackwardMove(ticket.stage, to)) {
+      throw new DomainError(
+        "invalid_transition",
+        `can't move ${key} from ${ticket.stage} to ${to}: forward is one step at a time`,
+      );
+    }
+    await this.refuseIfInFlight(ticket);
+    return this.writeMove(ticket, to, actor, false, null);
+  }
+
+  /** Refuses a session's backward move while an agent task or an open PR is on the ticket. */
+  private async refuseIfInFlight(ticket: Ticket): Promise<void> {
+    const active = (await this.runs?.activeForTicket?.(ticket.projectId, ticket.id)) ?? [];
+    if (active.length > 0) {
+      throw new DomainError(
+        "invalid_transition",
+        `can't move ${ticket.key} back: agent task ${active[0]?.id} is in flight; wait for it or ask Andy to cancel it`,
+      );
+    }
+    const pr = await this.tracker.getLatestPullRequest(ticket.projectId, ticket.id);
+    if (pr?.state === "open") {
+      throw new DomainError(
+        "invalid_transition",
+        `can't move ${ticket.key} back: PR #${pr.number} is open; close it first`,
+      );
+    }
   }
 
   /** Takes the ticket out of the Needs-you inbox unless a question is still open. */

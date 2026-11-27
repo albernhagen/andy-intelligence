@@ -2112,6 +2112,11 @@ export class RunService {
     }
   }
 
+  /** The ticket's runs queued or running (ADR-0163: a session's backward move waits for them). */
+  async activeForTicket(projectId: string, ticketId: string): Promise<Run[]> {
+    return (await this.runs.listActive(projectId)).filter((r) => r.ticketId === ticketId);
+  }
+
   /**
    * Cancels the ticket's runs in flight (AI-15: Cancel and archive tickets): stops each one at
    * the executor, then marks it cancelled. Throws `cancel_failed` if the executor can't stop a
@@ -2119,7 +2124,7 @@ export class RunService {
    * that finished meanwhile is left as it is. Returns the runs it cancelled.
    */
   async cancelForTicket(projectId: string, ticketId: string): Promise<Run[]> {
-    const active = (await this.runs.listActive(projectId)).filter((r) => r.ticketId === ticketId);
+    const active = await this.activeForTicket(projectId, ticketId);
     const cancelled: Run[] = [];
     for (const run of active) {
       const handle = handleOf(run);

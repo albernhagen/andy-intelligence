@@ -610,7 +610,7 @@ describe("cancel_ticket and archive_ticket", () => {
     await ctx.call("create_ticket", { project: "AI", type: "chore", title: "x" });
     await ctx.call("cancel_ticket", { ticket: "AI-1" });
     const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "backlog" });
-    expect(res).toMatchObject({ isError: true, text: expect.stringMatching(/one step forward/) });
+    expect(res).toMatchObject({ isError: true, text: expect.stringMatching(/only Andy can/) });
     const status = await ctx.call("status", { ticket: "AI-1" });
     expect(status.data.ticket.stage).toBe("cancelled");
   });
@@ -645,15 +645,80 @@ describe("move_ticket", () => {
     expect(body.stage).toBe("in_progress");
   });
 
-  it("GivenABackwardOrSkippingMove_WhenCalled_ThenAToolErrorAndTheTicketIsUnchanged", async () => {
+  it("GivenASkippingMove_WhenCalled_ThenAToolErrorSaysWhyAndTheTicketIsUnchanged", async () => {
     const ctx = await withProject();
     const t = await ctx.service.create("ai", readyStory, "andy");
     await ctx.service.move("ai", t.id, "ready", "andy");
-    for (const to of ["backlog", "ready_for_review", "done"]) {
+    for (const to of ["ready_for_review", "done"]) {
       const res = await ctx.call("move_ticket", { ticket: "AI-1", to });
-      expect(res).toMatchObject({ isError: true, text: expect.stringMatching(/one step forward/) });
+      expect(res).toMatchObject({
+        isError: true,
+        text: expect.stringMatching(/one step at a time/),
+      });
     }
     expect((await ctx.tracker.getTicket("ai", t.id))?.stage).toBe("ready");
+  });
+
+  it("GivenAnInProgressTicket_WhenMovedBackToBacklog_ThenInIdeasAsTheSessionWithNoAgentTask", async () => {
+    const ctx = await withProject();
+    const t = await ctx.service.create("ai", readyStory, "andy", { upNext: true });
+    await ctx.service.move("ai", t.id, "in_progress", "andy", { force: true });
+    const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "backlog" });
+    expect(res).toMatchObject({ isError: false, data: { ticket: { stage: "backlog" } } });
+    expect(await ctx.tracker.getTicket("ai", t.id)).toMatchObject({ upNextRank: null });
+    const events = await ctx.tracker.listEvents("ai", t.id);
+    expect(events.at(-1)).toMatchObject({
+      kind: "stage_changed",
+      actor: "user:andy",
+      data: { from: "in_progress", to: "backlog", forced: false },
+    });
+    expect(await ctx.runs.listForTicket("ai", t.id)).toEqual([]);
+  });
+
+  it("GivenADoneTicket_WhenMovedBack_ThenAToolErrorLeavesItToAndy", async () => {
+    const ctx = await withProject();
+    const t = await ctx.service.create("ai", readyStory, "andy");
+    await ctx.service.move("ai", t.id, "done", "andy", { force: true });
+    const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "in_progress" });
+    expect(res).toMatchObject({ isError: true, text: expect.stringMatching(/only Andy can/) });
+    expect((await ctx.tracker.getTicket("ai", t.id))?.stage).toBe("done");
+  });
+
+  it("GivenAnAgentTaskInFlight_WhenMovedBack_ThenAToolErrorNamesItAndTheTicketIsUnchanged", async () => {
+    const ctx = await withProject();
+    const t = await ctx.service.create("ai", readyStory, "andy");
+    await ctx.service.move("ai", t.id, "in_progress", "andy", { force: true });
+    const run = await ctx.runs.create({
+      projectId: "ai",
+      ticketId: t.id,
+      step: "build",
+      route: { harness: "claude-code", provider: "claude-sub", model: "sonnet" },
+      tier: null,
+      deadline: null,
+      prompt: null,
+      maxTurns: null,
+    });
+    const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "ready" });
+    expect(res).toMatchObject({
+      isError: true,
+      text: expect.stringContaining(`${run.id} is in flight`),
+    });
+    expect((await ctx.tracker.getTicket("ai", t.id))?.stage).toBe("in_progress");
+  });
+
+  it("GivenAnOpenPr_WhenMovedBack_ThenAToolErrorNamesThePrAndTheTicketIsUnchanged", async () => {
+    const ctx = await withProject();
+    const t = await ctx.service.create("ai", readyStory, "andy");
+    await ctx.service.move("ai", t.id, "ready_for_review", "andy", { force: true });
+    await ctx.tracker.linkPullRequest(
+      "ai",
+      t.id,
+      { number: 3, url: "https://github.com/a/b/pull/3", state: "open" },
+      "system",
+    );
+    const res = await ctx.call("move_ticket", { ticket: "AI-1", to: "in_progress" });
+    expect(res).toMatchObject({ isError: true, text: expect.stringContaining("PR #3 is open") });
+    expect((await ctx.tracker.getTicket("ai", t.id))?.stage).toBe("ready_for_review");
   });
 
   it("GivenATicketInReview_WhenMovedToMonitoring_ThenAToolErrorAndTheTicketIsUnchanged", async () => {

@@ -47,6 +47,18 @@ export function isForwardMove(from: Stage, to: Stage): boolean {
 }
 
 /**
+ * A move back to an earlier pipeline stage, any number of steps (ADR-0163): what a session may do
+ * over MCP `move_ticket`. Never out of Done or Cancelled (those stay Andy's), never into Verifying.
+ */
+export function isBackwardMove(from: Stage, to: Stage): boolean {
+  if (from === "done" || from === "cancelled") return false;
+  // Verifying sits after review, so every pipeline stage before Done is behind it.
+  const at = from === "verifying" ? PIPELINE.indexOf("done") : PIPELINE.indexOf(from);
+  const target = PIPELINE.indexOf(to);
+  return at >= 0 && target >= 0 && target < at;
+}
+
+/**
  * The one-step forward moves from `from` to `to` along the pipeline, e.g. ready →
  * [in_progress, ready_for_review]. Empty when `to` isn't ahead of `from` in the pipeline.
  */

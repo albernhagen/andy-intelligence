@@ -114,7 +114,7 @@ const ArchiveInput = {
 
 const MoveInput = {
   ticket: TicketKey.describe('Ticket key, e.g. "AI-42".'),
-  to: Stage.describe("Target stage: the next one forward from where the ticket is."),
+  to: Stage.describe("Target stage: the next one forward, or any earlier one."),
 };
 
 export function registerCoreTools(server: McpServer, deps: ToolDeps, run: Run): void {
@@ -374,12 +374,12 @@ export function registerCoreTools(server: McpServer, deps: ToolDeps, run: Run): 
     "move_ticket",
     {
       description:
-        "Moves a ticket one stage forward (backlog → ready → in_progress → ready_for_review → done; for projects that deploy, ready_for_review → verifying → done). Backlog → ready needs the Definition of Ready. Backward or skipping moves are refused; Andy makes those in the UI.",
+        "Moves a ticket one stage forward (backlog → ready → in_progress → ready_for_review → done; for projects that deploy, ready_for_review → verifying → done), or back to any earlier stage in one call. Backlog → ready needs the Definition of Ready. A ticket moved back to Backlog lands in Ideas, not Up next. Refused: skipping forward; moving out of Done or Cancelled (Andy, in the UI); moving back while an agent task or an open PR is on the ticket.",
       inputSchema: MoveInput,
       annotations: { destructiveHint: false, idempotentHint: false },
     },
     ({ ticket, to }) =>
-      run(async () => ({ ticket: summary(await service.moveForward(ticket, to, deps.actor)) })),
+      run(async () => ({ ticket: summary(await service.moveBySession(ticket, to, deps.actor)) })),
   );
 
   server.registerTool(

@@ -16,7 +16,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 | **Done** | Summary included in rollups | — |
 | **Cancelled** | Andy cancelled it; runs stop, questions withdrawn | Andy reopens it to Backlog |
 
-**Stage moves** (`packages/domain`): forward one step, plus back: re-refine (ready → backlog), retry (in progress → ready), rework (ready for review or verifying → in progress). Backlog → ready requires the DoR. A stage change clears Up next: moved back, a ticket lands in Ideas (AI-395). Only the owner forces (reason optional, ADR-0057; history marks it), cancels (not a move), reopens, archives (policy `can`, AI-19); MCP `move_ticket` steps forward. **Archived** (Done/Cancelled only) hides it from board, inbox, counts.
+**Stage moves** (`packages/domain`): forward one step, plus back: re-refine (ready → backlog), retry (in progress → ready), rework (ready for review or verifying → in progress). Backlog → ready requires the DoR. A stage change clears Up next: moved back, a ticket lands in Ideas (AI-395). Only the owner forces (reason optional, ADR-0057; history marks it), cancels (not a move), reopens, archives (policy `can`, AI-19); MCP `move_ticket` steps forward or moves back any number of stages (ADR-0163). **Archived** (Done/Cancelled only) hides it from board, inbox, counts.
 
 As built (PR events, build dispatch, plan approval): [`history/workflow-as-built.md`](history/workflow-as-built.md).
 

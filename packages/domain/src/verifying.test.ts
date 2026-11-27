@@ -215,7 +215,7 @@ describe("Verifying on merge (AI-181)", () => {
     await expect(service.move(project.id, t.id, "verifying", "andy")).rejects.toThrow(
       "doesn't deploy",
     );
-    await expect(service.moveForward("AI-1", "verifying", "agent:r1")).rejects.toThrow(
+    await expect(service.moveBySession("AI-1", "verifying", "agent:r1")).rejects.toThrow(
       "doesn't deploy",
     );
     expect(
@@ -246,10 +246,12 @@ describe("Verifying on merge (AI-181)", () => {
 
   it("GivenATicketInReview_WhenMovedForwardByKeyToVerifying_ThenAccepted", async () => {
     await ticketAt("ready_for_review");
-    expect(await service.moveForward("AI-1", "verifying", "agent:r1")).toMatchObject({
+    expect(await service.moveBySession("AI-1", "verifying", "agent:r1")).toMatchObject({
       stage: "verifying",
     });
-    expect(await service.moveForward("AI-1", "done", "agent:r1")).toMatchObject({ stage: "done" });
+    expect(await service.moveBySession("AI-1", "done", "agent:r1")).toMatchObject({
+      stage: "done",
+    });
   });
 });
 

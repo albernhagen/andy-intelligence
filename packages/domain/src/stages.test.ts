@@ -5,6 +5,7 @@ import {
   TRANSITIONS,
   canTransition,
   forwardPath,
+  isBackwardMove,
   isForwardMove,
   pullRequestPath,
 } from "./stages";
@@ -144,5 +145,26 @@ describe("Verifying stage (AI-181, ADR-0114)", () => {
     expect(pullRequestPath("verifying", "ready_for_review")).toEqual([]);
     expect(pullRequestPath("done", "verifying")).toEqual([]);
     expect(pullRequestPath("cancelled", "verifying")).toEqual([]);
+  });
+});
+
+describe("isBackwardMove (ADR-0163)", () => {
+  it("GivenAnOpenStage_WhenTheTargetIsAnyEarlierStage_ThenItIsBackward", () => {
+    expect(isBackwardMove("in_progress", "backlog")).toBe(true);
+    expect(isBackwardMove("ready_for_review", "ready")).toBe(true);
+    expect(isBackwardMove("verifying", "ready_for_review")).toBe(true);
+    expect(isBackwardMove("verifying", "backlog")).toBe(true);
+  });
+
+  it("GivenDoneOrCancelled_WhenMovingToAnEarlierStage_ThenItIsNotASessionsBackwardMove", () => {
+    expect(isBackwardMove("done", "ready_for_review")).toBe(false);
+    expect(isBackwardMove("cancelled", "backlog")).toBe(false);
+  });
+
+  it("GivenAForwardSameOrSideTarget_WhenChecked_ThenItIsNotBackward", () => {
+    expect(isBackwardMove("ready", "in_progress")).toBe(false);
+    expect(isBackwardMove("ready", "ready")).toBe(false);
+    expect(isBackwardMove("in_progress", "verifying")).toBe(false);
+    expect(isBackwardMove("in_progress", "cancelled")).toBe(false);
   });
 });
