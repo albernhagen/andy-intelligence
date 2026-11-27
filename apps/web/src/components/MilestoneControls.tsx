@@ -1,3 +1,5 @@
+import { Link } from "@tanstack/react-router";
+import { ArrowUpRight } from "lucide-react";
 import { MilestoneStatus, type Milestone, type Ticket } from "@andy/contracts";
 import { milestoneOf, topLevelOf } from "@andy/domain";
 import { QueryError } from "@/components/Status";
@@ -53,6 +55,63 @@ export function MilestoneChip({
       <span className="truncate">{m.name}</span>
       <span className="shrink-0 whitespace-pre"> · {MILESTONE_STATUS[m.status].label}</span>
     </Badge>
+  );
+}
+
+/**
+ * The milestone page's link (AI-405) as a chip: where the chip shows (the epic panel and the
+ * board's epic groups), clicking it opens that milestone's page.
+ */
+export function MilestoneChipLink({
+  projectId,
+  milestone: m,
+  className,
+}: {
+  projectId: string;
+  milestone: Shown & { id: string };
+  className?: string;
+}) {
+  return (
+    <Link
+      to="/p/$projectId/m/$milestoneId"
+      params={{ projectId, milestoneId: m.id }}
+      aria-label={`Open ${milestoneChipText(m)}`}
+      className={cn(
+        "inline-flex max-w-full min-w-0 rounded-md hover:opacity-80 focus-visible:outline-2 focus-visible:outline-ring",
+        className,
+      )}
+    >
+      <MilestoneChip milestone={m} className="max-w-full" />
+    </Link>
+  );
+}
+
+/**
+ * An icon link to a milestone's page (AI-405), for rows whose own click already does something
+ * else (the roadmap row expands; the board's Ideas group collapses): a 44 px target on a phone.
+ */
+export function MilestonePageLink({
+  projectId,
+  milestone: m,
+  className,
+}: {
+  projectId: string;
+  milestone: Pick<Milestone, "id" | "name">;
+  className?: string;
+}) {
+  return (
+    <Link
+      to="/p/$projectId/m/$milestoneId"
+      params={{ projectId, milestoneId: m.id }}
+      aria-label={`Open ${m.name}`}
+      title={`Open ${m.name}`}
+      className={cn(
+        "inline-flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:size-7",
+        className,
+      )}
+    >
+      <ArrowUpRight className="size-4" aria-hidden />
+    </Link>
   );
 }
 
@@ -142,7 +201,7 @@ export function TicketMilestone({ ticket: t }: { ticket: Ticket }) {
       )}
       {milestone && (
         <p className="flex min-w-0 flex-wrap items-center gap-1">
-          <MilestoneChip milestone={milestone} className="max-w-full" />
+          <MilestoneChipLink projectId={t.projectId} milestone={milestone} />
           {!own && <span className="text-xs text-muted-foreground">from {top.key}</span>}
         </p>
       )}

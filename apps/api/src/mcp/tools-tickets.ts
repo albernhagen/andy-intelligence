@@ -333,7 +333,7 @@ export function registerTicketTools(server: McpServer, deps: ToolDeps): void {
     "reorder_ticket",
     {
       description:
-        "Moves a ticket within its lane, directly above or below another ticket in that lane; order is priority. Give exactly one of `above` or `below`. Up next and Ideas are separate lanes.",
+        "Moves a ticket within its lane, directly above or below another ticket in that lane; order is priority. Give exactly one of `above` or `below`. Up next and Ideas are separate lanes. A top-level epic moves among its milestone's top-level epics (or No milestone's), whatever their stages: the roadmap and milestone page order.",
       inputSchema: ReorderInput,
       annotations: { destructiveHint: false, idempotentHint: true },
     },

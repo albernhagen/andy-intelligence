@@ -292,6 +292,61 @@ describe("milestones over REST and MCP (AI-304 parity)", () => {
   });
 });
 
+describe("milestone page actions over REST and MCP (AI-405)", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  const roadmapOf = async (rest: Awaited<ReturnType<typeof setup>>["rest"], id: string) =>
+    (await rest("GET", "/api/projects/ai/roadmap")).json.milestones.find(
+      (m: { id: string }) => m.id === id,
+    ).epicKeys as string[];
+
+  it("GivenAMilestone_WhenANewEpicIsCreatedIntoItOverEach_ThenTheRoadmapListsBothThere", async () => {
+    const { rest, mcp } = await setup();
+    const m = (await rest("POST", "/api/projects/ai/milestones", { name: "M4", outcome: "x" }))
+      .json;
+    // The web's New epic: create the epic, then attach it (two calls, as over MCP).
+    const created = await rest("POST", "/api/projects/ai/tickets", { title: "A", type: "epic" });
+    expect(created.status).toBe(201);
+    const attached = await rest("PUT", `/api/projects/ai/tickets/${created.json.id}/milestone`, {
+      milestoneId: m.id,
+    });
+    expect(attached.status).toBe(200);
+    const viaMcp = await mcp("create_ticket", { project: "AI", title: "B", type: "epic" });
+    expect(viaMcp.isError).toBe(false);
+    const key = viaMcp.data.ticket.key as string;
+    expect(
+      (await mcp("set_epic_milestone", { project: "AI", epic: key, milestone: m.id })).isError,
+    ).toBe(false);
+    expect(await roadmapOf(rest, m.id)).toEqual([created.json.key, key]);
+  });
+
+  it("GivenEpicsInOneMilestoneInDifferentStages_WhenReorderedOverMcp_ThenTheRoadmapOrderChanges", async () => {
+    const { rest, mcp, epic, tracker } = await setup();
+    const m = (await rest("POST", "/api/projects/ai/milestones", { name: "M4", outcome: "x" }))
+      .json;
+    const a = await epic("A");
+    const b = await epic("B");
+    const c = await epic("C");
+    for (const e of [a, b, c])
+      await rest("PUT", `/api/projects/ai/tickets/${e.id}/milestone`, { milestoneId: m.id });
+    await tracker.updateTicket(
+      "ai",
+      c.id,
+      { stage: { to: "in_progress", forced: true, reason: null } },
+      "andy",
+    );
+    const moved = await mcp("reorder_ticket", { ticket: c.key, above: a.key });
+    expect(moved.isError).toBe(false);
+    expect(await roadmapOf(rest, m.id)).toEqual([c.key, a.key, b.key]);
+    const outside = await epic("D");
+    const refused = await mcp("reorder_ticket", { ticket: outside.key, above: a.key });
+    expect(refused).toMatchObject({ isError: true });
+    expect(refused.text).toMatch(/milestone/);
+  });
+});
+
 describe("milestone case from plan to change log (ADR-0149, AI-365)", () => {
   beforeEach(() => {
     vi.spyOn(console, "log").mockImplementation(() => {});

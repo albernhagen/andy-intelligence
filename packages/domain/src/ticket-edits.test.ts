@@ -62,6 +62,45 @@ describe("reorderRank", () => {
     ];
     expect(reorderRank(tickets[0]!, { below: "AI-2" }, tickets)).toMatch(/lane/);
   });
+
+  // AI-405: a top-level epic orders among its milestone's epics, whatever their stages.
+  const epic = (key: string, fields: Partial<Ticket> = {}) =>
+    t(key, { type: "epic", milestoneId: "m1", ...fields });
+
+  it("GivenEpicsInOneMilestoneInDifferentStages_WhenReordered_ThenItsRankSortsBetweenThem", () => {
+    const epics = [
+      epic("AI-1", { stage: "done" }),
+      epic("AI-2", { stage: "backlog" }),
+      epic("AI-3", { stage: "in_progress" }),
+    ];
+    const placed = reorderRank(epics[2]!, { above: "AI-2" }, epics);
+    expect(placed).toMatchObject({ lane: "milestone" });
+    const rank = (placed as { rank: string }).rank;
+    expect(rank > epics[0]!.rank && rank < epics[1]!.rank).toBe(true);
+  });
+
+  it("GivenAnEpicInAnotherMilestoneOrAChildEpic_WhenUsedAsAnchor_ThenRefused", () => {
+    const tickets = [
+      epic("AI-1"),
+      epic("AI-2", { milestoneId: "m2" }),
+      epic("AI-3", { parentId: "AI-1", milestoneId: null }),
+      t("AI-4"),
+    ];
+    expect(reorderRank(tickets[0]!, { above: "AI-2" }, tickets)).toMatch(/milestone/);
+    expect(reorderRank(tickets[0]!, { above: "AI-3" }, tickets)).toMatch(/milestone/);
+    expect(reorderRank(tickets[0]!, { above: "AI-4" }, tickets)).toMatch(/milestone/);
+  });
+
+  it("GivenACancelledEpicInTheMilestone_WhenReordering_ThenItIsNotANeighbour", () => {
+    const tickets = [
+      epic("AI-1"),
+      epic("AI-2", { stage: "cancelled", rank: "0000000002" }),
+      epic("AI-3"),
+    ];
+    expect(reorderRank(tickets[2]!, { above: "AI-2" }, tickets)).toMatch(/milestone/);
+    const rank = (reorderRank(tickets[0]!, { below: "AI-3" }, tickets) as { rank: string }).rank;
+    expect(rank > tickets[2]!.rank).toBe(true);
+  });
 });
 
 describe("parentProblem", () => {

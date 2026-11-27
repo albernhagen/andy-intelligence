@@ -1,74 +1,30 @@
 import { useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, GripVertical } from "lucide-react";
-import { MilestoneStatus } from "@andy/contracts";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, ChevronRight, GripVertical } from "lucide-react";
 import { milestoneReorder } from "@andy/domain";
-import { DRAG_PREVIEW_CLASS, DragPreview, verticalOnly } from "@/components/DragPreview";
+import { DRAG_PREVIEW_CLASS } from "@/components/DragPreview";
 import { MilestoneCaseView } from "@/components/MilestoneCase";
-import { MILESTONE_STATUS } from "@/components/MilestoneControls";
+import { MilestonePageLink } from "@/components/MilestoneControls";
 import { PageHeader } from "@/components/PageHeader";
 import { ProjectMark } from "@/components/ProjectMark";
 import { ListSkeleton } from "@/components/PageSkeleton";
+import { EpicList, MilestoneSummary, StatusPick } from "@/components/roadmap/RoadmapParts";
+import {
+  ReorderControls,
+  SortableRows,
+  useSortableRow,
+  type RowReorder,
+} from "@/components/roadmap/SortableRows";
 import { QueryError } from "@/components/Status";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Segmented } from "@/components/ui/segmented";
 import { unwrap, useApi } from "@/lib/api";
-import { useProjects, useReorderMilestones, useSetMilestoneStatus } from "@/lib/queries";
+import { useProjects, useReorderMilestones } from "@/lib/queries";
+import { useRoadmap, type Epic, type Milestone, type ProjectRoadmap } from "@/lib/roadmap";
 import { cn } from "@/lib/utils";
-import type { components } from "@/lib/api.gen";
-import { showsError, useLivePoll } from "@/lib/live";
-
-type Schema = components["schemas"]["ProjectRoadmap"];
-/** A top-level epic, with its child epics nested one level (AI-403 lists them). */
-type ChildEpic = Omit<Schema["epics"][number]["children"][number], "children">;
-type Epic = Omit<Schema["epics"][number], "children"> & { children: ChildEpic[] };
-type ProjectRoadmap = Omit<Schema, "epics"> & { epics: Epic[] };
-type Milestone = Schema["milestones"][number];
-type Counts = Milestone["counts"];
-
-/**
- * `GET /api/projects/{id}/roadmap`, or `GET /api/roadmap` under All projects (AI-193, AI-305):
- * polled at the slow pace, as the roadmap moves only when tickets do (ADR-0091).
- */
-function useRoadmap(projectId: string | undefined) {
-  const api = useApi();
-  return useQuery({
-    ...useLivePoll("slow"),
-    queryKey: ["roadmap", projectId ?? null],
-    queryFn: async () =>
-      projectId
-        ? {
-            projects: [
-              unwrap(
-                await api.GET("/api/projects/{projectId}/roadmap", {
-                  params: { path: { projectId } },
-                }),
-              ),
-            ],
-            truncated: false,
-          }
-        : unwrap(await api.GET("/api/roadmap")),
-  });
-}
+import { showsError } from "@/lib/live";
 
 /**
  * Roadmap (AI-202: M4.26, ADR-0131): a project's milestones in order, each with its status and
@@ -79,7 +35,7 @@ function useRoadmap(projectId: string | undefined) {
  * and Move down (AI-324); both go through the milestone route, so only the owner can and it's
  * logged. Every epic is listed (AI-403: the board shows epics only as group headers): Done ones,
  * ones with no tickets yet, child epics under their parent, and epics with no milestone in their
- * own group; each links to its panel.
+ * own group; each links to its panel. Each milestone row links to its own page (AI-405).
  */
 export function RoadmapPage() {
   const { projectId } = useParams({ strict: false });
@@ -239,9 +195,8 @@ function StartPlan({ projectId }: { projectId: string }) {
 }
 
 /**
- * The milestone rows, reorderable (AI-324): drag a row's handle (pointer, or Space and the arrow
- * keys), or use Move up and Move down. The new order shows at once and saves through the
- * milestone route; on a refusal the rows go back and the API's message shows.
+ * The milestone rows, reorderable (AI-324) through `SortableRows`. Each order write goes through
+ * the milestone route; on a refusal the rows go back and the API's message shows.
  */
 function MilestoneList({
   milestones,
@@ -253,104 +208,43 @@ function MilestoneList({
   projectId: string;
 }) {
   const reorder = useReorderMilestones(projectId);
-  const [pending, setPending] = useState<string[] | null>(null);
-  // The row being dragged, drawn under the pointer (AI-396), and whether it is over the list.
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [overList, setOverList] = useState(false);
-  const byId = new Map(milestones.map((m) => [m.id, m]));
-  const shown = pending ? pending.flatMap((id) => byId.get(id) ?? []) : milestones;
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-  const canMove = milestones.length > 1;
-  const dragged = activeId ? byId.get(activeId) : undefined;
-
-  function move(id: string, to: number) {
-    const writes = milestoneReorder(shown, id, to);
-    if (writes.length === 0) return;
-    const ids = shown.map((m) => m.id).filter((x) => x !== id);
-    ids.splice(to, 0, id);
-    setPending(ids);
-    // The hook refetches before the mutation settles, so the rows never flash the old order.
-    reorder.mutate(writes, { onSettled: () => setPending(null) });
-  }
-
-  function endDrag() {
-    setActiveId(null);
-    setOverList(false);
-  }
-
-  function onDragEnd({ active, over }: DragEndEvent) {
-    endDrag();
-    if (!over || active.id === over.id) return;
-    move(
-      String(active.id),
-      shown.findIndex((m) => m.id === over.id),
-    );
-  }
-
   return (
     <div className="space-y-2">
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={({ active }: DragStartEvent) => setActiveId(String(active.id))}
-        onDragOver={({ over }) => setOverList(over !== null)}
-        onDragCancel={endDrag}
-        onDragEnd={onDragEnd}
-      >
-        <SortableContext items={shown.map((m) => m.id)} strategy={verticalListSortingStrategy}>
-          {/* The list a dragged row is over takes the selected edge and fill (AI-396). */}
-          <ul
-            data-drop-over={overList || undefined}
+      <SortableRows
+        items={milestones}
+        idOf={(m) => m.id}
+        busy={reorder.isPending}
+        onMove={(id, to, shown) => {
+          const writes = milestoneReorder(shown, id, to);
+          return writes.length === 0 ? null : reorder.mutateAsync(writes);
+        }}
+        row={(m, rowReorder) => (
+          <MilestoneRow
+            key={m.id}
+            milestone={m}
+            epics={m.epicKeys.flatMap((k) => byKey.get(k) ?? [])}
+            projectId={projectId}
+            reorder={rowReorder}
+          />
+        )}
+        preview={(m) => (
+          <div
+            aria-hidden
+            data-drag-overlay
             className={cn(
-              "divide-y divide-border overflow-hidden rounded-lg border",
-              overList ? "border-selected-edge bg-selected" : "border-border bg-raised",
+              "flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-raised px-3 py-2 text-sm",
+              DRAG_PREVIEW_CLASS,
             )}
           >
-            {shown.map((m, i) => (
-              <MilestoneRow
-                key={m.id}
-                milestone={m}
-                epics={m.epicKeys.flatMap((k) => byKey.get(k) ?? [])}
-                projectId={projectId}
-                reorder={
-                  canMove
-                    ? {
-                        up: i > 0 ? () => move(m.id, i - 1) : null,
-                        down: i < shown.length - 1 ? () => move(m.id, i + 1) : null,
-                        busy: reorder.isPending,
-                      }
-                    : null
-                }
-              />
-            ))}
-          </ul>
-        </SortableContext>
-        <DragPreview modifiers={[verticalOnly]}>
-          {dragged ? (
-            <div
-              aria-hidden
-              data-drag-overlay
-              className={cn(
-                "flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-raised px-3 py-2 text-sm",
-                DRAG_PREVIEW_CLASS,
-              )}
-            >
-              <GripVertical className="size-4 shrink-0 text-muted-foreground" />
-              <MilestoneSummary milestone={dragged} />
-            </div>
-          ) : null}
-        </DragPreview>
-      </DndContext>
+            <GripVertical className="size-4 shrink-0 text-muted-foreground" />
+            <MilestoneSummary milestone={m} />
+          </div>
+        )}
+      />
       {reorder.error && <QueryError error={reorder.error} />}
     </div>
   );
 }
-
-const MOVE_BUTTON =
-  "inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-40 sm:size-7";
 
 function MilestoneRow({
   milestone: m,
@@ -361,76 +255,27 @@ function MilestoneRow({
   milestone: Milestone;
   epics: Epic[];
   projectId: string;
-  /** Null when there is only one milestone, so nothing to reorder. */
-  reorder: { up: (() => void) | null; down: (() => void) | null; busy: boolean } | null;
+  reorder: RowReorder;
 }) {
   const [open, setOpen] = useState(false);
   const Chevron = open ? ChevronDown : ChevronRight;
-  const {
-    setNodeRef,
-    setActivatorNodeRef,
-    attributes,
-    listeners,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: m.id, disabled: !reorder || reorder.busy });
-  const style = {
-    transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
-    transition,
-  };
+  const sortable = useSortableRow(m.id, reorder);
   return (
     <li
-      ref={setNodeRef}
-      style={style}
+      ref={sortable.ref}
+      style={sortable.style}
       data-milestone={m.id}
       data-status={m.done ? "done" : m.status}
-      data-dragging={isDragging || undefined}
+      data-dragging={sortable.isDragging || undefined}
       // While dragged, the row stays as a sunken placeholder of its size, its content hidden but
       // still read out; the copy under the pointer is the list's DragPreview.
       className={cn(
         m.status === "parked" && "opacity-60",
-        isDragging && "bg-muted [&>*]:opacity-0",
+        sortable.isDragging && "bg-muted [&>*]:opacity-0",
       )}
     >
       <div className="flex flex-wrap items-start">
-        {reorder && (
-          <div
-            role="group"
-            aria-label={`Order of ${m.name}`}
-            className="flex items-center pl-1 pt-0.5"
-          >
-            <button
-              type="button"
-              ref={setActivatorNodeRef}
-              {...attributes}
-              {...listeners}
-              aria-label={`Drag ${m.name} to reorder`}
-              // On a phone the move buttons reorder; the handle would crowd the row.
-              className={`${MOVE_BUTTON} cursor-grab max-sm:hidden`}
-            >
-              <GripVertical className="size-4" aria-hidden />
-            </button>
-            <button
-              type="button"
-              aria-label={`Move ${m.name} up`}
-              disabled={!reorder.up || reorder.busy}
-              onClick={() => reorder.up?.()}
-              className={MOVE_BUTTON}
-            >
-              <ArrowUp className="size-4" aria-hidden />
-            </button>
-            <button
-              type="button"
-              aria-label={`Move ${m.name} down`}
-              disabled={!reorder.down || reorder.busy}
-              onClick={() => reorder.down?.()}
-              className={MOVE_BUTTON}
-            >
-              <ArrowDown className="size-4" aria-hidden />
-            </button>
-          </div>
-        )}
+        {reorder && <ReorderControls name={m.name} reorder={reorder} handle={sortable.handle} />}
         <button
           type="button"
           aria-expanded={open}
@@ -440,6 +285,8 @@ function MilestoneRow({
           <Chevron className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <MilestoneSummary milestone={m} />
         </button>
+        {/* AI-405: the milestone's own page, beside the row's expand toggle. */}
+        <MilestonePageLink projectId={projectId} milestone={m} className="mt-0.5 sm:mt-2" />
         {!m.done && (
           <div className="shrink-0 py-1.5 pr-2 max-sm:basis-full max-sm:pb-2 max-sm:pl-9">
             <StatusPick projectId={projectId} milestone={m} />
@@ -463,157 +310,5 @@ function MilestoneRow({
         </div>
       )}
     </li>
-  );
-}
-
-/** A milestone's name, outcome, progress and counts: its row, and the row's dragged copy. */
-function MilestoneSummary({ milestone: m }: { milestone: Milestone }) {
-  const status = MILESTONE_STATUS[m.done ? "done" : m.status];
-  return (
-    <>
-      <span className="min-w-0 flex-1 basis-48">
-        <span className="block font-medium">{m.name}</span>
-        {!m.done && <span className="block text-muted-foreground">{m.outcome}</span>}
-      </span>
-      {m.done && <Badge variant={status.variant}>{status.label}</Badge>}
-      <Progress done={m.progress.done} total={m.progress.total} />
-      {!m.done && <CountChips counts={m.counts} />}
-    </>
-  );
-}
-
-const EPIC_STATE: Record<Epic["state"], string> = {
-  not_started: "Not started",
-  in_progress: "In progress",
-  done: "Done",
-};
-
-/** A milestone's (or No milestone's) epics, each followed by its child epics, indented. */
-function EpicList({ epics, projectId }: { epics: Epic[]; projectId: string }) {
-  return (
-    <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-raised">
-      {epics.flatMap((e) => [
-        <EpicRow key={e.key} epic={e} projectId={projectId} />,
-        ...e.children.map((c) => (
-          <EpicRow key={c.key} epic={c} parentKey={e.key} projectId={projectId} />
-        )),
-      ])}
-    </ul>
-  );
-}
-
-/** One epic: key and title linking to its panel, state, outcome, progress and open counts. */
-function EpicRow({
-  epic: e,
-  parentKey,
-  projectId,
-}: {
-  epic: Epic | ChildEpic;
-  /** Set for a child epic: it is indented under this epic. */
-  parentKey?: string;
-  projectId: string;
-}) {
-  return (
-    <li
-      data-epic={e.key}
-      data-parent-epic={parentKey}
-      className={cn(
-        "flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm",
-        parentKey && "pl-8",
-      )}
-    >
-      <Link
-        to="/p/$projectId/t/$ticketRef"
-        params={{ projectId, ticketRef: e.key }}
-        className="min-w-0 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-      >
-        {parentKey && (
-          <span className="text-xs text-muted-foreground" aria-label={`under ${parentKey}`}>
-            ↳{" "}
-          </span>
-        )}
-        <span className="font-mono text-xs text-muted-foreground tabular-nums">{e.key}</span>{" "}
-        {e.title}
-      </Link>
-      <span className="text-xs text-muted-foreground">{EPIC_STATE[e.state]}</span>
-      {e.outcome && (
-        <span className="min-w-0 flex-1 text-xs text-muted-foreground max-sm:basis-full">
-          {e.outcome}
-        </span>
-      )}
-      <Progress done={e.progress.done} total={e.progress.total} />
-      {e.state !== "done" && <CountChips counts={e.counts} />}
-    </li>
-  );
-}
-
-/** "14 of 23 done", with a thin bar beside it (the number is what to read). */
-function Progress({ done, total }: { done: number; total: number }) {
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-  return (
-    <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-      <span
-        role="progressbar"
-        aria-label={`${done} of ${total} done`}
-        aria-valuemin={0}
-        aria-valuemax={total}
-        aria-valuenow={done}
-        className="h-1 w-16 overflow-hidden rounded-full bg-muted"
-      >
-        <span className="block h-full bg-success" style={{ width: `${pct}%` }} />
-      </span>
-      {done} of {total} done
-    </span>
-  );
-}
-
-/** A chip per non-zero count of open tickets: "2 need you", "3 in review", "1 blocked". */
-function CountChips({ counts }: { counts: Counts }) {
-  const chips: [number, string, "attention" | "running" | "danger" | "default"][] = [
-    [counts.needsYou, counts.needsYou === 1 ? "needs you" : "need you", "attention"],
-    [counts.inReview, "in review", "default"],
-    [counts.inProgress, "in progress", "running"],
-    [counts.blocked, "blocked", "danger"],
-  ];
-  return (
-    <span className="flex flex-wrap gap-1">
-      {chips
-        .filter(([n]) => n > 0)
-        .map(([n, label, variant]) => (
-          <Badge key={label} variant={variant} className="tabular-nums">
-            {n} {label}
-          </Badge>
-        ))}
-    </span>
-  );
-}
-
-/**
- * The owner's status pick for one milestone, in its row (AI-378; the mockup's Approved | Parked):
- * saved on click, the API's refusal shown. Every write goes through the milestone route (AI-304).
- */
-function StatusPick({
-  projectId,
-  milestone: m,
-}: {
-  projectId: string;
-  milestone: Pick<Milestone, "id" | "name" | "status">;
-}) {
-  const set = useSetMilestoneStatus(projectId);
-  return (
-    <div className={cn("space-y-1", set.isPending && "opacity-60")}>
-      <Segmented
-        label={`Status of ${m.name}`}
-        value={m.status}
-        options={MilestoneStatus.options.map((s) => ({
-          value: s,
-          label: MILESTONE_STATUS[s].label,
-        }))}
-        onChange={(status) => {
-          if (status !== m.status && !set.isPending) set.mutate({ milestoneId: m.id, status });
-        }}
-      />
-      {set.error && <QueryError error={set.error} />}
-    </div>
   );
 }

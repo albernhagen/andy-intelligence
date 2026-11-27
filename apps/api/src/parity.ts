@@ -335,7 +335,7 @@ export const PARITY: readonly ParityEntry[] = [
       "set_milestone_status",
       "set_epic_milestone",
     ],
-    note: "The web sets status and attaches from the epic panel and the roadmap (AI-311), and reorders on the roadmap (AI-324). PATCH covers edit_milestone (order included) and set_milestone_status (ADR-0136).",
+    note: "The web sets status and attaches from the epic panel and the roadmap (AI-311), and reorders on the roadmap (AI-324). PATCH covers edit_milestone (order included) and set_milestone_status (ADR-0136). The milestone page (AI-405) does the same writes; its New epic is `POST …/tickets` (type epic) then this PUT, as MCP is create_ticket then set_epic_milestone, and its epic reorder is `PATCH …/tickets/:ticketId` rank, as MCP is reorder_ticket (a top-level epic's lane is its milestone's epics).",
   },
   {
     action: "Start a project agent task (plan-project, ideate)",

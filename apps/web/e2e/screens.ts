@@ -57,6 +57,14 @@ export const SCREENS: Screen[] = [
   },
   { route: "/p/$projectId/work", name: "work", url: "/p/ai/work", ready: "Story side panel" },
   { route: "/p/$projectId/roadmap", name: "roadmap", url: "/p/ops/roadmap", ready: "M2: Backups" },
+  // AI-405: a milestone's own page: OPS's parked M2, with two epics, one with tickets in three lanes.
+  {
+    route: "/p/$projectId/m/$milestoneId",
+    name: "milestone",
+    url: "/p/ops/m/m2",
+    ready: "Backups you can trust",
+    dark: true,
+  },
   {
     route: "/p/$projectId/settings",
     name: "project-settings",
