@@ -611,24 +611,133 @@ describe("TicketService", () => {
   it("GivenAReadyTicket_WhenMovedForwardByKey_ThenOneStepAndNotForced", async () => {
     const t = await service.create(projectId, readyStory, "andy");
     await service.move(projectId, t.id, "ready", "andy");
-    const moved = await service.moveForward(t.key, "in_progress", "andy");
+    const moved = await service.moveBySession(t.key, "in_progress", "andy");
     expect(moved.stage).toBe("in_progress");
     expect((await tracker.listEvents(projectId, t.id)).at(-1)?.data).toMatchObject({
       forced: false,
     });
   });
 
-  it("GivenABackwardOrSkippingMove_WhenMovedForwardByKey_ThenRejectedAndUnchanged", async () => {
-    const t = await service.create(projectId, readyStory, "andy");
-    await service.move(projectId, t.id, "ready", "andy");
-    await rejects(service.moveForward(t.key, "backlog", "andy"), "invalid_transition");
-    await rejects(service.moveForward(t.key, "ready_for_review", "andy"), "invalid_transition");
-    expect((await tracker.getTicket(projectId, t.id))?.stage).toBe("ready");
+  describe("a session's move by key (ADR-0163)", () => {
+    const at = async (stage: "in_progress" | "ready_for_review" | "done") => {
+      const t = await service.create(projectId, readyStory, "andy", { upNext: true });
+      return service.move(projectId, t.id, stage, "andy", { force: true });
+    };
+    const stageOf = async (id: string) => (await tracker.getTicket(projectId, id))?.stage;
+
+    it("GivenAnInProgressTicket_WhenASessionMovesItToAnEarlierStage_ThenMovedUnforcedAsTheSession", async () => {
+      const t = await at("in_progress");
+      expect((await service.moveBySession(t.key, "ready", "agent:r1")).stage).toBe("ready");
+      expect((await tracker.listEvents(projectId, t.id)).at(-1)).toMatchObject({
+        kind: "stage_changed",
+        actor: "agent:r1",
+        data: { from: "in_progress", to: "ready", forced: false },
+      });
+    });
+
+    it("GivenATicketOnceInUpNext_WhenASessionMovesItBackToBacklog_ThenItLandsInIdeasAndStartsNoTask", async () => {
+      const dispatchNext = vi.fn(async () => null);
+      const activeForTicket = vi.fn(async () => []);
+      service = new TicketService(
+        tracker,
+        { cancelForTicket: vi.fn(), activeForTicket },
+        dispatchNext,
+      );
+      const t = await at("in_progress");
+      dispatchNext.mockClear();
+      const moved = await service.moveBySession(t.key, "backlog", "agent:r1");
+      expect(moved).toMatchObject({ stage: "backlog", upNextRank: null, upNextAt: null });
+      expect(await tracker.listTickets(projectId, { upNext: true })).toEqual([]);
+      expect(dispatchNext).not.toHaveBeenCalled();
+    });
+
+    it("GivenAReadyTicket_WhenASessionSkipsAStageForward_ThenRefusedWithTheReasonAndUnchanged", async () => {
+      const t = await service.create(projectId, readyStory, "andy");
+      await service.move(projectId, t.id, "ready", "andy");
+      await expect(service.moveBySession(t.key, "ready_for_review", "agent:r1")).rejects.toThrow(
+        "forward is one step at a time",
+      );
+      await rejects(service.moveBySession(t.key, "done", "agent:r1"), "invalid_transition");
+      expect(await stageOf(t.id)).toBe("ready");
+    });
+
+    it("GivenAnInProgressTicketWithoutTheDor_WhenASessionMovesItBackToReady_ThenRefusedAndNoBuildIsWoken", async () => {
+      const dispatchNext = vi.fn(async () => null);
+      service = new TicketService(tracker, null, dispatchNext);
+      const t = await service.create(projectId, { type: "feature", title: "x" }, "andy");
+      await service.move(projectId, t.id, "in_progress", "andy", { force: true });
+      dispatchNext.mockClear();
+      await rejects(service.moveBySession(t.key, "ready", "agent:r1"), "dor_not_met");
+      expect(await stageOf(t.id)).toBe("in_progress");
+      expect(dispatchNext).not.toHaveBeenCalled();
+      expect((await service.moveBySession(t.key, "backlog", "agent:r1")).stage).toBe("backlog");
+    });
+
+    it("GivenASameStageOrCancelledTarget_WhenASessionMovesTheTicket_ThenRefusedWithItsOwnReason", async () => {
+      const t = await at("in_progress");
+      await expect(service.moveBySession(t.key, "in_progress", "agent:r1")).rejects.toThrow(
+        "is already in in_progress",
+      );
+      await expect(service.moveBySession(t.key, "cancelled", "agent:r1")).rejects.toThrow(
+        "use cancel_ticket",
+      );
+      expect(await stageOf(t.id)).toBe("in_progress");
+    });
+
+    it("GivenADoneOrCancelledTicket_WhenASessionMovesItBack_ThenRefusedAsAndysAndUnchanged", async () => {
+      const done = await at("done");
+      await expect(service.moveBySession(done.key, "in_progress", "agent:r1")).rejects.toThrow(
+        "only Andy can",
+      );
+      const cancelled = await service.create(projectId, readyStory, "andy");
+      await service.cancel(projectId, cancelled.id, "andy");
+      await expect(service.moveBySession(cancelled.key, "backlog", "agent:r1")).rejects.toThrow(
+        "only Andy can",
+      );
+      expect(await stageOf(done.id)).toBe("done");
+      expect(await stageOf(cancelled.id)).toBe("cancelled");
+    });
+
+    it("GivenAnAgentTaskInFlight_WhenASessionMovesTheTicketBack_ThenRefusedWithTheReasonAndUnchanged", async () => {
+      const activeForTicket = vi.fn(async () => [{ id: "run-1" } as Run]);
+      service = new TicketService(tracker, { cancelForTicket: vi.fn(), activeForTicket });
+      const t = await at("in_progress");
+      await expect(service.moveBySession(t.key, "backlog", "agent:r1")).rejects.toThrow(
+        "agent task run-1 is in flight",
+      );
+      expect(activeForTicket).toHaveBeenCalledWith(projectId, t.id);
+      expect(await stageOf(t.id)).toBe("in_progress");
+    });
+
+    it("GivenAnOpenPr_WhenASessionMovesTheTicketBack_ThenRefusedUntilThePrIsClosed", async () => {
+      const t = await at("ready_for_review");
+      const pr = { number: 7, url: "https://github.com/a/b/pull/7" };
+      await tracker.linkPullRequest(projectId, t.id, { ...pr, state: "open" }, "system");
+      await expect(service.moveBySession(t.key, "in_progress", "agent:r1")).rejects.toThrow(
+        "PR #7 is open",
+      );
+      expect(await stageOf(t.id)).toBe("ready_for_review");
+      await tracker.linkPullRequest(projectId, t.id, { ...pr, state: "closed" }, "system");
+      expect((await service.moveBySession(t.key, "in_progress", "agent:r1")).stage).toBe(
+        "in_progress",
+      );
+    });
+
+    it("GivenAnAgentTaskInFlight_WhenAndyForcesTheMoveBack_ThenItMovesAndTheTaskIsNotCancelled", async () => {
+      const cancelForTicket = vi.fn(async () => []);
+      const activeForTicket = vi.fn(async () => [{ id: "run-1" } as Run]);
+      service = new TicketService(tracker, { cancelForTicket, activeForTicket });
+      const t = await at("in_progress");
+      await service.move(projectId, t.id, "backlog", "andy", { force: true });
+      expect(await stageOf(t.id)).toBe("backlog");
+      expect(cancelForTicket).not.toHaveBeenCalled();
+      expect(activeForTicket).not.toHaveBeenCalled();
+    });
   });
 
   it("GivenAnIncompleteStory_WhenMovedForwardToReady_ThenTheDorStillApplies", async () => {
     const t = await service.create(projectId, { type: "feature", title: "x" }, "andy");
-    await rejects(service.moveForward(t.key, "ready", "andy"), "dor_not_met");
+    await rejects(service.moveBySession(t.key, "ready", "andy"), "dor_not_met");
   });
 
   it("GivenAFlaggedTicket_WhenUnflagged_ThenClearedUnlessAQuestionIsOpen", async () => {
