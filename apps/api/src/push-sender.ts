@@ -6,7 +6,7 @@ import {
   type PushSender,
   type PushTarget,
 } from "@andy/contracts";
-import webpush from "web-push";
+import * as webpush from "web-push";
 
 /**
  * The `PushSender` port's Web Push adapter (AI-178, M7.9, ADR-0052). The `web-push` library only
