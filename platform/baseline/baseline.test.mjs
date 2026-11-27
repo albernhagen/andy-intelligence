@@ -151,12 +151,15 @@ describe("deploy caller in the baseline", () => {
     for (const p of DEPLOY_FILES) expect(paths).not.toContain(p);
   });
 
-  it("GivenTheManifest_WhenRead_ThenOnlyTheDeployFilesNeedAKind", () => {
+  it("GivenTheManifest_WhenRead_ThenOnlyTheDeployFilesAndDependabotNeedAKind", () => {
     const kinded = manifest.managed.filter((m) => m.deployKind);
     expect(kinded.map((m) => [m.path, m.deployKind, m.pin])).toEqual([
       [".github/workflows/deploy.yml", "cloud-run", true],
       [".github/workflows/release.yml", "cloud-run", true],
       [".github/workflows/preview.yml", "cloud-run", true],
+      // One source per kind (AI-399): `cloud-run` adds the infra/ Terraform root.
+      [".github/dependabot.yml", "none", undefined],
+      [".github/dependabot.yml", "cloud-run", undefined],
     ]);
   });
 });
@@ -433,5 +436,48 @@ describe("managed-repo caller", () => {
     expect(template.replace(uses(template)[0], "./.github/workflows/claude-executor.yml")).toBe(
       local,
     );
+  });
+});
+
+/** Dependabot by deploy kind (AI-399): a `none` repo gets no entry for a directory it lacks. */
+describe("dependabot.yml in the baseline", () => {
+  const dependabot = (deployKind) =>
+    renderFiles(manifest, read, { sha: "f".repeat(40), ref: "v1.0.0", deployKind }).managed.filter(
+      (f) => f.path === ".github/dependabot.yml",
+    );
+  const body = (text) => text.slice(text.indexOf("version: 2"));
+
+  it("GivenANoneProject_WhenRendered_ThenOneDependabotFileWithNoTerraformOrDocker", () => {
+    const files = dependabot("none");
+    expect(files).toHaveLength(1);
+    expect(files[0].content).toContain("dependency-type: development");
+    expect(files[0].content).toContain("dependency-type: production");
+    expect(files[0].content).not.toMatch(/package-ecosystem: (terraform|docker)/);
+  });
+
+  it("GivenACloudRunProject_WhenRendered_ThenTheNoneEntriesPlusAMonthlyTerraformGroupForInfra", () => {
+    const [none] = dependabot("none");
+    const files = dependabot("cloud-run");
+    expect(files).toHaveLength(1);
+    const content = files[0].content;
+    expect(content).toContain(body(none.content));
+    const terraform = content.slice(content.indexOf("package-ecosystem: terraform"));
+    expect(terraform).toContain("directory: /infra");
+    expect(terraform).toContain("interval: monthly");
+    expect(terraform).toContain('patterns: ["*"]');
+    expect(terraform).toContain("default-days: 7");
+  });
+
+  it("GivenEitherKind_WhenRendered_ThenActionsAreMonthlyAndNpmWeekly", () => {
+    for (const kind of ["none", "cloud-run"]) {
+      const [{ content }] = dependabot(kind);
+      const actions = content.slice(content.indexOf("package-ecosystem: github-actions"));
+      expect(actions.slice(0, actions.indexOf("groups:")), kind).toContain("interval: monthly");
+      const npm = content.slice(
+        content.indexOf("package-ecosystem: npm"),
+        content.indexOf("package-ecosystem: github-actions"),
+      );
+      expect(npm, kind).toContain("interval: weekly");
+    }
   });
 });

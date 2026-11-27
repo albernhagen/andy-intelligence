@@ -14,6 +14,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 
 ## Pending decisions (Andy)
 
+- Epic AI-154: Dependency agent is on hold (ADR-0116: Dependency agent merged as its design; none of AI-157, AI-158, AI-163 to AI-167 starts) until Andy judges whether the AI-399: Dependabot configuration is enough.
 - AI-322 UX review: approve the ranked list in [`build-log/2026-11-21-ux-review.md`](build-log/2026-11-21-ux-review.md) (AI-325 to AI-343, all in Ideas) before any is built.
 - `autoMerge` on for project `AI`: after a trial of five tickets where the gate's `would_auto_merge` calls are compared with the coordinator's (Andy, 2026-11-10).
 - Context sources design (open question 12).

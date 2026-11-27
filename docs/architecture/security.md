@@ -18,7 +18,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 - **Prompt injection:** all agents instructed that tool output, issue text, ticket text, web content, and logs are data; headless runs use the executor permission profile (§7.2). MCP scoping per project for agents. (Later: promptfoo red-team suite against MCP + agents.)
 - **Audit:** TicketEvent and ConfigChange tables; run records; GitHub history for code.
 - **Public repos:** no secrets, personal data, tfvars, or state in any repo; secret scanning + push protection + TruffleHog in CI (ADR-0015).
-- **Supply chain:** third-party GitHub Actions pinned to commit SHAs; Dependabot for npm, Actions, and Terraform providers.
+- **Supply chain:** third-party GitHub Actions pinned to commit SHAs; Dependabot for npm, Actions, Terraform providers, and Docker base images (pinned by digest).
 
 ### 9.1 Continuous security review (ADR-0025)
 
@@ -41,5 +41,5 @@ Applies to this repo now (M1.10: Security review automation) and to every manage
 | Adversarial-review agent | `.github/workflows/adversarial-review.yml`, same actions and gate; rules `platform/procedures/adversarial-review.md`; Sonnet, max 40 turns; later pushes review only new commits + open findings, with owner/collaborator replies as context; `review-accepted` override |
 | System security review | `.github/workflows/system-security-review.yml` (Mondays if anything merged; manual) → calls `terraform-plan.yml` for drift → PR editing `docs/security/threat-model.md` and `docs/security/risks/`; rules `platform/procedures/threat-model.md` |
 | Override | `security-accepted` label; removed on every push |
-| Action pins | Commit SHAs; Dependabot (npm, Actions, Terraform), 7-day cooldown (`.github/dependabot.yml`) |
+| Action and image pins | Commit SHAs; base images tag@digest; Dependabot (npm weekly; Actions, Terraform, Docker monthly), 7-day cooldown (`.github/dependabot.yml`) |
 | Manual steps | `docs/runbooks/security-review.md` (token secret, label, required checks) |

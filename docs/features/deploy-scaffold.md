@@ -8,6 +8,7 @@ AI-109: M6.22, ADR-0114. When a repo is registered, its baseline PR carries what
 | `cloud-run` | `prod-only`                           | A Terraform root in `infra/`: `project-env` once (prod, with PR previews) and `project-budget` once; plus `.terraform-version`. The workflows come with `finish` ([deploy caller](deploy-caller.md)) |
 | `cloud-run` | `dev-and-prod`                        | The same root with two environments: dev (first, previews) and prod (promote from dev's registry), each with its own budget                                                                          |
 
+- **Dependabot:** a `cloud-run` project's managed `.github/dependabot.yml` adds a monthly Terraform group for `infra/`; a `none` project's has no entry for a directory it lacks (AI-399).
 - **Seed files:** the root is the project's own once written; the baseline never rewrites it. Modules are pinned to the baseline commit (`git::…//infra/modules/<name>?ref=<sha>`).
 - **No IDs in the repo:** real project IDs, the billing account and the alert email go in the gitignored `infra/terraform.tfvars`; `terraform.tfvars.example` has fake values.
 - **CI:** the root's `tests/plan.tftest.hcl` plans it with the example values and mocked providers (baseline `terraform-check`), here under `template/infra/` and in the managed repo under `infra/`.
