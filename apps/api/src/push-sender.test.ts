@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { PushTarget } from "@andy/contracts";
 import { pushSenderContract } from "@andy/contracts/testing";
-import webpush from "web-push";
+import * as webpush from "web-push";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DisabledPushSender,
