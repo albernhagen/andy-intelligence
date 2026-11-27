@@ -14,6 +14,9 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+        # Playwright gets a PR of its own: the screenshot job's browser image (pinned by digest in
+        # a workflow) must move with it, and the job fails naming the fix until it does (AI-394).
+        exclude-patterns: ["@playwright/test", "playwright", "playwright-core"]
     ignore:
       # @types/node majors track the Node runtime in .nvmrc; bump both together by hand.
       - dependency-name: "@types/node"

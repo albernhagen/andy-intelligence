@@ -1,6 +1,6 @@
 # Threat model: Review pipeline
 
-How PR review findings reach the control plane (ADR-0097: review findings become config proposals). Risk: [R5](risks/R5.md). PRs that change this area update this file.
+How PR review findings reach the control plane (ADR-0097: review findings become config proposals). Risks: [R5](risks/R5.md), [R-AI-394](risks/R-AI-394.md). PRs that change this area update this file.
 
 ## Trust boundaries and entry points
 
@@ -19,3 +19,13 @@ How PR review findings reach the control plane (ADR-0097: review findings become
 - **Untrusted input.** The PR description and its file names are data. `parseTable` (`scripts/screenshot-table.mjs`) accepts only rows of the exact shape the script writes: a safe `__screenshots__/*.png` path and `raw.githubusercontent.com` URLs of this repo pinned to 40-hex SHAs. Nothing reaches a shell; the job summary is rebuilt from the parsed rows, never copied from the description. A changed stored image whose file name isn't safe fails the check and is never printed (no workflow-command injection); the repo name and PR number from the event file are checked before they form an API URL.
 - **No new permission.** The job keeps `contents: read`; it lists the PR's files with the job token, and on a refusal retries without it (public repo). Private repos skip the rule.
 - **Residual.** As before, the check runs the PR's own copy of its scripts, so a PR could weaken it. ADR-0120 keeps `platform/actions/**` for Andy but not `scripts/release-note-check.mjs` or `scripts/screenshot-table.mjs`; the review agents still read such a change.
+
+## Which PRs the review agents skip (AI-394)
+
+The security and adversarial review agents skip, and their checks pass with the reason, for: drafts, forks, runs Dependabot starts (no secrets), docs-only changes (ADR-0030), and Dependabot minor or patch bumps. Rule: `scripts/review-scope.mjs`, called by `platform/actions/agent-review-prepare`.
+
+- **What counts as a bump.** The PR author (`pull_request.user.login`, set by GitHub, not the PR) is `dependabot[bot]`, and the merged change, base to head, is only `package.json` files and lockfiles, none under `.github/`, `infra/`, `platform/` or `template/`. Each changed `package.json` keeps every field but the dependency lists byte-for-byte (so no `scripts`, overrides or `packageManager` change), adds or removes no dependency, and moves each version as a plain range within its major (`0.x`: within its minor). Anything else, or any failure to read the change, runs the agents.
+- **Later pushes.** The rule reads the PR's whole change on every run, so a person or agent pushing code, a workflow or a major bump to a Dependabot PR brings the agents back.
+- **Still run on every bump:** CI (`check`, including the lockfile-sources check: npm registry and integrity only), dependency review, CodeQL, the secret scan.
+- **No new permission or credential.** The step reads git and the event payload only.
+- **Residual (R-AI-394).** Lockfiles aren't read by an agent: a minor or patch release that is itself malicious is caught only by the 7-day cooldown, dependency review and CodeQL.

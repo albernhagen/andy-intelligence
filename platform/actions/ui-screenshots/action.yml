@@ -5,7 +5,8 @@ description: >-
   uploads the actual, expected and diff images as the `ui-screenshots` artifact. With `base-ref`
   set (a PR), a docs-only change (scripts/review-scope.mjs, the review agents' rule) reports a pass
   without running; if the change can't be read, it runs. Run after actions/checkout (fetch-depth 2
-  on a PR), in the Playwright container image so renders match the stored ones.
+  on a PR), in the Playwright container image so renders match the stored ones; the image's version
+  must match the locked `@playwright/test` (scripts/playwright-image.mjs), or the job fails first.
 
 inputs:
   working-directory:
@@ -36,6 +37,12 @@ runs:
         if [ "$run" = run=false ]; then
           echo "UI screenshots: skipped, docs-only change." | tee -a "$GITHUB_STEP_SUMMARY"
         fi
+    # The browsers come from the job's image, so its version must match the locked package
+    # (AI-394); a mismatch fails here in seconds, naming the fix, instead of at every test.
+    - name: Playwright image matches the package
+      if: steps.scope.outputs.run == 'true'
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/../../../scripts/playwright-image.mjs" "$GITHUB_WORKSPACE"
     - if: steps.scope.outputs.run == 'true'
       uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
     - if: steps.scope.outputs.run == 'true'
