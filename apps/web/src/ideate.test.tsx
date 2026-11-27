@@ -56,7 +56,8 @@ describe("ideate from the board", () => {
     const task = screen.getByRole("region", { name: "Ideate agent task" });
     expect(await within(task).findByText(`Created epic ${epic.key} in Ideas.`)).toBeTruthy();
     expect(within(task).getByText("succeeded")).toBeTruthy();
-    expect(await screen.findByText("Weekly summary email")).toBeTruthy();
+    // In Ideas the epic's card sits under its own header (AI-400), so its title shows twice.
+    await waitFor(() => expect(document.querySelector(`[data-ticket="${epic.key}"]`)).toBeTruthy());
   });
 
   it("GivenARejectedResult_WhenTheTaskEnds_ThenTheReasonShowsAsTheTaskRecordedIt", async () => {

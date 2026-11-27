@@ -580,7 +580,8 @@ describe("board grouped by epic", () => {
 
     await harness.user.click(groupToggle());
 
-    expect(rowsIn("Backlog")).toEqual(["epic:none", "AI-1"]);
+    // Ideas has its own milestone and epic groups (AI-400), grouped or not.
+    expect(rowsIn("Backlog")).toEqual(["AI-1"]);
     expect(rowsIn("Ready")).toEqual(["epic:AI-1", "AI-2", "AI-4", "epic:none", "AI-3"]);
     const header = document.querySelector('[data-epic="AI-1"]')!;
     expect(header.textContent).toContain("Epics on the board");
@@ -660,7 +661,7 @@ describe("board grouped by epic", () => {
     await seeded();
 
     expect(groupToggle().getAttribute("aria-checked")).toBe("true");
-    expect(rowsIn("Backlog")).toContain("epic:none");
+    expect(rowsIn("Ready")).toContain("epic:none");
   });
 });
 
@@ -682,5 +683,213 @@ describe("Verifying lane (AI-181)", () => {
 
     const lane = await screen.findByRole("region", { name: "Verifying" });
     expect(await within(lane).findByText(t.key)).toBeTruthy();
+  });
+});
+
+/** AI-400: Board: Ideas grouped by milestone and epic, parked groups collapsed, and a filter box. */
+describe("Ideas grouped by milestone and epic, and the filter box", () => {
+  const AT = "2026-11-26T12:00:00.000Z";
+
+  /**
+   * M4 (approved) holds AI-1 "Board polish", whose child AI-3 "Group ideas" is an idea; M6
+   * (parked) holds AI-2 "Releases", whose child AI-4 "Promote" is an idea. AI-5 "Loose idea" has
+   * no epic. AI-6 "Ready polish" is a child of AI-1 in Ready.
+   */
+  async function seeded(extra?: (h: ReturnType<typeof renderApp>) => Promise<void>) {
+    const harness = renderApp();
+    const { tracker, milestones, service } = harness;
+    await tracker.createProject({ name: "AI", key: "AI" });
+    for (const [id, order, name, status] of [
+      ["m4", 4, "M4: Epics", "approved"],
+      ["m6", 6, "M6: Releases", "parked"],
+    ] as const)
+      await milestones.create({
+        id,
+        projectId: "ai",
+        name,
+        outcome: `${name} works`,
+        order,
+        status,
+        createdAt: AT,
+        updatedAt: AT,
+      });
+    const polish = await service.create("ai", { type: "epic", title: "Board polish" }, "andy");
+    await tracker.updateTicket("ai", polish.id, { fields: { milestoneId: "m4" } }, "andy");
+    const releases = await service.create("ai", { type: "epic", title: "Releases" }, "andy");
+    await tracker.updateTicket("ai", releases.id, { fields: { milestoneId: "m6" } }, "andy");
+    await service.create("ai", { title: "Group ideas", parentId: polish.id }, "andy");
+    await service.create("ai", { title: "Promote", parentId: releases.id }, "andy");
+    await service.create("ai", { title: "Loose idea" }, "andy");
+    const ready = await service.create(
+      "ai",
+      { ...readyStory, title: "Ready polish", parentId: polish.id },
+      "andy",
+    );
+    await service.move("ai", ready.id, "ready", "andy");
+    await extra?.(harness);
+    await harness.router.navigate({ to: "/p/ai" });
+    await screen.findByText("AI-5");
+    await waitFor(() => expect(header("M4: Epics")).toBeTruthy());
+    return harness;
+  }
+
+  /** Ideas' rows: `m:<milestone>`, `e:<epic key>` (with `none`), and card keys. */
+  const ideaRowsShown = () =>
+    [
+      ...screen
+        .getByRole("region", { name: "Backlog" })
+        .querySelectorAll("[data-idea-group], [data-ticket]"),
+    ].map((el) =>
+      el.hasAttribute("data-idea-group")
+        ? `${el.getAttribute("data-level") === "milestone" ? "m" : "e"}:${el.getAttribute("data-label")}`
+        : el.getAttribute("data-ticket"),
+    );
+  const header = (label: string) =>
+    document.querySelector<HTMLElement>(`[data-idea-group][data-label="${label}"]`);
+  const toggle = (label: string) => within(header(label)!).getByRole("button");
+  const filterBox = () => screen.getByRole("searchbox", { name: "Filter tickets" });
+  const keysIn = (lane: string) =>
+    [...screen.getByRole("region", { name: lane }).querySelectorAll("[data-ticket]")].map((el) =>
+      el.getAttribute("data-ticket"),
+    );
+
+  it("GivenIdeasUnderMilestonesAndEpics_WhenTheBoardShows_ThenTheyAreGroupedByMilestoneThenEpicWithCounts", async () => {
+    await seeded();
+
+    expect(ideaRowsShown()).toEqual([
+      "m:M4: Epics",
+      "e:AI-1",
+      "AI-1",
+      "AI-3",
+      "m:M6: Releases",
+      "m:none",
+      "e:none",
+      "AI-5",
+    ]);
+    expect(header("M4: Epics")!.textContent).toMatch(/2$/);
+    expect(header("M6: Releases")!.textContent).toMatch(/2$/);
+    expect(header("AI-1")!.textContent).toContain("Board polish");
+    // The lane counts every idea, collapsed ones too.
+    expect(screen.getByRole("region", { name: "Backlog" }).querySelector("h3")!.textContent).toBe(
+      "Backlog 5",
+    );
+  });
+
+  it("GivenAParkedMilestone_WhenTheBoardLoads_ThenItsGroupIsCollapsedAndOpensOnClick", async () => {
+    const harness = await seeded();
+
+    expect(toggle("M6: Releases").getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("AI-4")).toBeNull();
+
+    await harness.user.click(toggle("M6: Releases"));
+
+    expect(ideaRowsShown()).toContain("AI-4");
+    expect(toggle("M6: Releases").getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("GivenGroupsCollapsedAndOpened_WhenTheBoardIsOpenedAgain_ThenTheChoicesAreKept", async () => {
+    const harness = await seeded();
+    await harness.user.click(toggle("M4: Epics"));
+    await harness.user.click(toggle("M6: Releases"));
+
+    await harness.router.navigate({ to: "/p/ai/inbox" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Backlog" })).toBeNull());
+    await harness.router.navigate({ to: "/p/ai" });
+    await screen.findByText("AI-5");
+
+    expect(toggle("M4: Epics").getAttribute("aria-expanded")).toBe("false");
+    expect(ideaRowsShown()).not.toContain("AI-3");
+    expect(ideaRowsShown()).toContain("AI-4");
+  });
+
+  it("GivenAGroupWithMoreThanTenIdeas_WhenTheBoardShows_ThenTenShowAndShowAllRevealsTheRest", async () => {
+    const harness = await seeded(async ({ service }) => {
+      for (let i = 1; i <= 11; i++) await service.create("ai", { title: `Idea ${i}` }, "andy");
+    });
+
+    const loose = () => ideaRowsShown().slice(ideaRowsShown().indexOf("e:none") + 1);
+    expect(loose()).toHaveLength(10);
+    expect(header("none")!.textContent).toMatch(/12$/);
+
+    await harness.user.click(screen.getByRole("button", { name: "Show all 12" }));
+
+    expect(loose()).toHaveLength(12);
+    expect(screen.queryByRole("button", { name: /^Show all/ })).toBeNull();
+  });
+
+  it("GivenTextInTheFilterBox_WhenTyped_ThenEveryLaneShowsOnlyMatchesByKeyTitleOrEpicTitle", async () => {
+    const harness = await seeded();
+
+    // "polish": AI-1's title, AI-3 by its epic's title, AI-6's own title (in Ready).
+    await harness.user.type(filterBox(), "polish");
+
+    await waitFor(() => expect(keysIn("Backlog")).toEqual(["AI-1", "AI-3"]));
+    expect(keysIn("Ready")).toEqual(["AI-6"]);
+    expect(harness.router.state.location.search).toMatchObject({ q: "polish" });
+
+    await harness.user.clear(filterBox());
+    await harness.user.type(filterBox(), "ai-4");
+    // The parked group opens while the filter shows one of its tickets.
+    await waitFor(() => expect(keysIn("Backlog")).toEqual(["AI-4"]));
+    expect(keysIn("Ready")).toEqual([]);
+  });
+
+  it("GivenAFilter_WhenEscapeIsPressedInTheBox_ThenItClearsAndEveryTicketShowsAgain", async () => {
+    const harness = await seeded();
+    await harness.user.type(filterBox(), "loose");
+    await waitFor(() => expect(keysIn("Backlog")).toEqual(["AI-5"]));
+
+    await harness.user.keyboard("{Escape}");
+
+    await waitFor(() => expect(keysIn("Backlog")).toEqual(["AI-1", "AI-3", "AI-5"]));
+    expect((filterBox() as HTMLInputElement).value).toBe("");
+    expect(harness.router.state.location.search).not.toHaveProperty("q");
+  });
+
+  it("GivenAFilterInTheUrl_WhenTheBoardLoads_ThenTheBoxHoldsItAndCmdKStillOpensThePalette", async () => {
+    const harness = renderApp();
+    await harness.tracker.createProject({ name: "AI", key: "AI" });
+    await harness.service.create("ai", { title: "Alpha" }, "andy");
+    await harness.service.create("ai", { title: "Beta" }, "andy");
+    await harness.router.navigate({ to: "/p/ai", search: { q: "beta" } });
+    await screen.findByText("AI-2");
+
+    expect((filterBox() as HTMLInputElement).value).toBe("beta");
+    expect(screen.queryByText("AI-1")).toBeNull();
+
+    filterBox().focus();
+    await harness.user.keyboard("{Meta>}k{/Meta}");
+    expect(await screen.findByRole("dialog", { name: "Search and commands" })).toBeTruthy();
+  });
+
+  it("GivenACollapsedParkedGroup_WhenAnIdeaIsDraggedOntoUpNext_ThenItEntersUpNext", async () => {
+    const harness = await seeded(async ({ service }) => {
+      await service.create("ai", { title: "Queued" }, "andy", { upNext: true });
+    });
+    // Rows: AI-7 (Up next), then AI-1, AI-3 (M4), AI-5; AI-4 sits in M6, collapsed.
+    expect(keysIn("Backlog")).toEqual(["AI-7", "AI-1", "AI-3", "AI-5"]);
+
+    await drag(harness.user, "AI-3", 0, -2);
+
+    await waitFor(async () =>
+      expect((await harness.tracker.listTickets("ai")).find((t) => t.key === "AI-3")).toMatchObject(
+        { stage: "backlog", upNextRank: expect.any(String) },
+      ),
+    );
+  });
+
+  it("GivenACollapsedParkedGroup_WhenAnUpNextCardIsDraggedOntoAnIdea_ThenItLandsInIdeas", async () => {
+    const harness = await seeded(async ({ service }) => {
+      await service.create("ai", { title: "Queued" }, "andy", { upNext: true });
+    });
+
+    await drag(harness.user, "AI-7", 0, 3);
+
+    await waitFor(async () =>
+      expect((await harness.tracker.listTickets("ai")).find((t) => t.key === "AI-7")).toMatchObject(
+        { stage: "backlog", upNextRank: null },
+      ),
+    );
+    expect(toggle("M6: Releases").getAttribute("aria-expanded")).toBe("false");
   });
 });

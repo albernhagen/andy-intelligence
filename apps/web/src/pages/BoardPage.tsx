@@ -34,11 +34,14 @@ import { EpicControls } from "@/components/board/EpicControls";
 import { WorkViewChips, WorkViewMenu } from "@/components/board/WorkViewChips";
 import {
   EpicGroupHeader,
+  IdeaGroupHeader,
   Lane,
   LaneZone,
   ReadyFilterMenu,
   ReadySortToggle,
+  ShowAllIdeas,
 } from "@/components/board/Lane";
+import { BoardFilter } from "@/components/board/BoardFilter";
 import { readySearch } from "@/lib/ready";
 import { QueryError } from "@/components/Status";
 import { Button } from "@/components/ui/button";
@@ -65,9 +68,17 @@ import {
   groupByEpic,
   inEpic,
   loadGroupByEpic,
+  matchesText,
   sameGroup,
   saveGroupByEpic,
 } from "@/lib/board-groups";
+import {
+  groupIdeas,
+  ideaGroupKey,
+  ideaRows,
+  loadIdeaCollapse,
+  saveIdeaCollapse,
+} from "@/lib/idea-groups";
 import {
   useBoard,
   useBoardMove,
@@ -89,7 +100,9 @@ import { Segmented } from "@/components/ui/segmented";
  * other a forced one (ADR-0057). Backlog has two parts (ADR-0075): a drop into Up next starts refine, Ideas costs nothing. Moves and reorders show at once and roll back with the API's
  * message on the card. Group by epic (AI-86) puts a header per epic inside each lane; the epic
  * filter shows one epic's tickets. Work view chips (AI-187) narrow it to one fixed view, kept in
- * the URL (`?view=`); both filters combine. Child routes (the ticket panel) render in the Outlet.
+ * the URL (`?view=`); both filters combine. Ideas are always grouped by milestone, then epic,
+ * parked milestones collapsed (AI-400); the filter box (`?q=`, under Options on a phone) narrows every lane by key, title
+ * or epic title. Child routes (the ticket panel) render in the Outlet.
  * On a phone (AI-337) the board shows one stage at a time under stage tabs, the chips become one
  * View menu and the other controls fold under Options; moving between stages is the panel's Move.
  */
@@ -98,7 +111,7 @@ export function BoardPage() {
   const board = useBoard(projectId);
   const [showArchived, setShowArchived] = useState(false);
   const search = useSearch({ from: "/p/$projectId" });
-  const { sort } = search;
+  const { sort, q } = search;
   const filters = readySearch(search);
   // Parsed again here: the router keeps unknown values in the URL, and they mean all tickets.
   const view = parseWorkView(search.view);
@@ -116,14 +129,23 @@ export function BoardPage() {
     [board.data, showArchived],
   );
   const allById = useMemo(() => new Map((board.data ?? []).map((t) => [t.id, t])), [board.data]);
-  // Counts follow the epic filter, so a chip's number is what clicking it shows.
-  const inScope = useMemo(() => tickets.filter((t) => inEpic(t, epicId)), [tickets, epicId]);
+  // Counts follow the epic filter and the filter box, so a chip's number is what clicking it shows.
+  const inScope = useMemo(
+    () => tickets.filter((t) => inEpic(t, epicId) && matchesText(t, q, allById)),
+    [tickets, epicId, q, allById],
+  );
   const counts = useMemo(() => workViewCounts(inScope, allById), [inScope, allById]);
   const needsYou = useMemo(() => needsYouParts(inScope), [inScope]);
   // Folded under Options on a phone, a filter on still shows: its count on the button.
-  const optionsOn = [epicId !== null, grouped, showArchived].filter(Boolean).length;
+  const optionsOn = [epicId !== null, grouped, showArchived, Boolean(q)].filter(Boolean).length;
   const pickView = (next: WorkView | null) =>
-    void navigate({ search: { sort, ...filters, view: next ?? undefined } });
+    void navigate({ search: { sort, ...filters, q, view: next ?? undefined } });
+  // Each keystroke replaces the URL rather than adding a history entry.
+  const filterBy = (text: string) =>
+    void navigate({
+      search: { sort, ...filters, view: view ?? undefined, q: text.trim() ? text : undefined },
+      replace: true,
+    });
 
   const chips = board.data && !isPhone && (
     <WorkViewChips
@@ -179,6 +201,10 @@ export function BoardPage() {
         <div
           className={`flex flex-wrap items-center gap-x-4 gap-y-2 ${isPhone ? (optionsOpen ? "w-full" : "hidden") : ""}`}
         >
+          {/* On a phone under Options with the rest, counted on its button while it has text. */}
+          {board.data && (
+            <BoardFilter value={q ?? ""} onChange={filterBy} className="max-sm:w-full" />
+          )}
           <EpicControls
             epics={epics}
             grouped={grouped}
@@ -224,6 +250,7 @@ export function BoardPage() {
           grouped={grouped}
           epicId={epicId}
           view={view}
+          query={q}
           phone={isPhone}
         />
       )}
@@ -283,6 +310,7 @@ function Lanes({
   grouped,
   epicId,
   view,
+  query,
   phone,
 }: {
   tickets: BoardTicket[];
@@ -298,6 +326,8 @@ function Lanes({
   epicId: string | null;
   /** Show only the tickets in this work view; null shows every ticket. */
   view: WorkView | null;
+  /** The filter box's text (AI-400): only matching tickets show, in every lane. */
+  query: string | undefined;
   /** One stage at a time, picked by tabs (AI-337). */
   phone: boolean;
 }) {
@@ -305,8 +335,18 @@ function Lanes({
   const move = useBoardMove(projectId);
   const rank = useRankTicket(projectId);
   const setUpNext = useSetUpNext(projectId);
-  // Group headers show each epic's milestone (AI-311); read only while grouped.
-  const milestones = useMilestones(projectId, grouped).data;
+  // Group headers show each epic's milestone (AI-311); Ideas group by it (AI-400).
+  const milestones = useMilestones(projectId).data;
+  const milestoneList = useMemo(() => milestones ?? [], [milestones]);
+  // Ideas groups the viewer collapsed or opened (default: parked closed), kept per browser.
+  const [ideaChoices, setIdeaChoices] = useState(() => loadIdeaCollapse(projectId));
+  const [shownInFull, setShownInFull] = useState<ReadonlySet<string>>(new Set());
+  /** Collapses an open group, opens a collapsed one. */
+  const toggleIdeaGroup = (key: string, open: boolean) => {
+    const next = { ...ideaChoices, [key]: open };
+    setIdeaChoices(next);
+    saveIdeaCollapse(projectId, next);
+  };
   // A drop shows at once: the card's new stage and rank until the API answers.
   const [pending, setPending] = useState<
     Record<string, { stage: Stage; rank: string; upNextRank: string | null }>
@@ -347,7 +387,9 @@ function Lanes({
   const byId = useMemo(() => new Map(shown.map((t) => [t.id, t])), [shown]);
   const allById = useMemo(() => new Map(all.map((t) => [t.id, t])), [all]);
   // A filter hides cards only: drops still plan against whole lanes, as with the epic filter.
-  const inView = (t: BoardTicket) => !view || workViews(t, allById).includes(view);
+  const inView = (t: BoardTicket) =>
+    (!view || workViews(t, allById).includes(view)) && matchesText(t, query, allById);
+  const filtering = Boolean(query?.trim());
   const next = nextUp(
     lanes.ready.filter((t) => t.summary.worker === "agent"),
     byId,
@@ -380,6 +422,16 @@ function Lanes({
       overCard.stage === ticket.stage &&
       (overCard.upNextRank === null) === (ticket.upNextRank === null) &&
       !sameGroup(ticket, overCard, allById)
+    )
+      return;
+    // Ideas are always grouped (AI-400): the same holds between its milestone and epic groups.
+    if (
+      overCard &&
+      ticket.stage === "backlog" &&
+      overCard.stage === "backlog" &&
+      ticket.upNextRank === null &&
+      overCard.upNextRank === null &&
+      ideaGroupKey(ticket, all, milestoneList) !== ideaGroupKey(overCard, all, milestoneList)
     )
       return;
     // Sorted by score, a card's place isn't its queue place: a drop on Ready means the lane (the
@@ -452,18 +504,29 @@ function Lanes({
     );
     // Backlog shows two parts (Up next, then Ideas); each is grouped on its own.
     const split = stage === "backlog" ? splitBacklog(lanes.backlog) : null;
-    const parts = (split ? [split.upNext, split.ideas] : [shownIn(stage)]).map((cards) =>
-      groupCards(
-        cards.filter(
-          (t) =>
-            inEpic(t, epicId) &&
-            inView(t) &&
-            (stage !== "ready" || matchesReadyFilters(t, filters)),
-        ),
-      ),
+    const keep = (cards: BoardTicket[]) =>
+      cards.filter(
+        (t) =>
+          inEpic(t, epicId) && inView(t) && (stage !== "ready" || matchesReadyFilters(t, filters)),
+      );
+    const parts = (split ? [split.upNext] : [shownIn(stage)]).map((cards) =>
+      groupCards(keep(cards)),
     );
-    // `ids` follows the order shown, so dnd-kit sorts what you see.
-    const ordered = parts.flat().flatMap((g) => g.cards);
+    const ideas = split ? keep(split.ideas) : [];
+    const ideaList = split
+      ? ideaRows(groupIdeas(ideas, all, milestoneList), {
+          isCollapsed: (key, byDefault) => ideaChoices[key] ?? byDefault,
+          shownInFull,
+          filtering,
+        })
+      : [];
+    // `ids` follows the order shown, so dnd-kit sorts what you see; cards in collapsed Ideas
+    // groups aren't shown, so they aren't sortable (a drop on Ideas still lands there).
+    const ordered = [
+      ...parts.flat().flatMap((g) => g.cards),
+      ...ideaList.flatMap((r) => (r.kind === "card" ? [r.card] : [])),
+    ];
+    const total = parts.flat().reduce((n, g) => n + g.cards.length, 0) + ideas.length;
     const list = (groups: EpicGroup<BoardTicket>[]) =>
       groups.map(({ epic, cards }) => (
         <Fragment key={epic?.id ?? "none"}>
@@ -479,11 +542,45 @@ function Lanes({
       ));
     const count = (groups: EpicGroup<BoardTicket>[]) =>
       groups.reduce((n, g) => n + g.cards.length, 0);
+    const ideaGroups = ideaList.map((row) => {
+      if (row.kind === "card") return card(row.card);
+      if (row.kind === "more")
+        return (
+          <ShowAllIdeas
+            key={`more:${row.key}`}
+            total={row.total}
+            onClick={() => setShownInFull((s) => new Set(s).add(row.key))}
+          />
+        );
+      const toggle = filtering ? undefined : () => toggleIdeaGroup(row.group.key, row.open);
+      return row.kind === "milestone" ? (
+        <IdeaGroupHeader
+          key={`m:${row.group.key}`}
+          level="milestone"
+          groupKey={row.group.key}
+          milestone={row.group.milestone}
+          count={row.group.count}
+          open={row.open}
+          onToggle={toggle}
+        />
+      ) : (
+        <IdeaGroupHeader
+          key={`e:${row.group.key}`}
+          level="epic"
+          groupKey={row.group.key}
+          epic={row.group.epic}
+          count={row.group.cards.length}
+          open={row.open}
+          onToggle={toggle}
+        />
+      );
+    });
     const lane = (
       <Lane
         key={stage}
         stage={stage}
         ids={ordered.map((t) => t.id)}
+        count={total}
         collapsed={collapsed}
         onToggle={collapsible ? toggle : undefined}
         highlight={overLane === stage}
@@ -499,6 +596,7 @@ function Lanes({
                   void navigate({
                     search: {
                       ...filters,
+                      q: query,
                       view: view ?? undefined,
                       sort: sortedByScore ? undefined : "score",
                     },
@@ -513,6 +611,7 @@ function Lanes({
                     search: {
                       sort: sortedByScore ? "score" : undefined,
                       view: view ?? undefined,
+                      q: query,
                       ...next,
                     },
                   })
@@ -531,14 +630,14 @@ function Lanes({
               hint="Drag a ticket here to start refine."
             />
             {list(parts[0]!)}
-            <LaneZone id={IDEAS_ZONE} label="Ideas" count={count(parts[1]!)} />
-            {list(parts[1]!)}
+            <LaneZone id={IDEAS_ZONE} label="Ideas" count={ideas.length} />
+            {ideaGroups}
           </>
         )}
         {!collapsed && !split && list(parts[0]!)}
       </Lane>
     );
-    return { stage, count: ordered.length, lane };
+    return { stage, count: total, lane };
   });
 
   return (

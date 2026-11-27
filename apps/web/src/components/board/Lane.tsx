@@ -1,7 +1,14 @@
 import { useState, type ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ArrowDownUp, ChevronsLeftRight, ChevronsRightLeft, ListFilter } from "lucide-react";
+import {
+  ArrowDownUp,
+  ChevronDown,
+  ChevronRight,
+  ChevronsLeftRight,
+  ChevronsRightLeft,
+  ListFilter,
+} from "lucide-react";
 import {
   Confidence,
   Risk,
@@ -89,6 +96,93 @@ export function EpicGroupHeader({
       ) : (
         <span className="font-medium">No epic</span>
       )}
+    </li>
+  );
+}
+
+/**
+ * A collapsible group header on Ideas (AI-400): a milestone (its name and status, or "No
+ * milestone") or, indented under it, an epic (key and title, or "No epic"), with the group's
+ * ticket count. Not a drop target: a drop near it lands on Ideas, as before. While the filter box
+ * has text every group is open and the header is a plain label (`onToggle` absent).
+ */
+export function IdeaGroupHeader({
+  level,
+  groupKey,
+  milestone = null,
+  epic = null,
+  count,
+  open,
+  onToggle,
+}: {
+  level: "milestone" | "epic";
+  groupKey: string;
+  milestone?: Pick<Milestone, "name" | "status"> | null;
+  epic?: { key: string; title: string } | null;
+  count: number;
+  open: boolean;
+  onToggle?: () => void;
+}) {
+  const Chevron = open ? ChevronDown : ChevronRight;
+  const label =
+    level === "milestone" ? (
+      milestone ? (
+        <MilestoneChip milestone={milestone} className="max-w-full" />
+      ) : (
+        <span className="font-medium">No milestone</span>
+      )
+    ) : epic ? (
+      <>
+        <span className="font-medium text-foreground">{epic.key}</span>
+        <span className="min-w-0 flex-1 truncate" title={epic.title}>
+          {epic.title}
+        </span>
+      </>
+    ) : (
+      <span className="font-medium">No epic</span>
+    );
+  const body = (
+    <>
+      {onToggle && <Chevron className="size-3.5 shrink-0" aria-hidden />}
+      <span className="flex min-w-0 flex-1 items-center gap-1">{label}</span>
+      <span className="shrink-0 tabular-nums">{count}</span>
+    </>
+  );
+  const row = "flex w-full min-h-6 items-center gap-1 rounded-md px-1 py-0.5 text-left text-xs";
+  return (
+    <li
+      data-idea-group={groupKey}
+      data-level={level}
+      data-label={level === "milestone" ? (milestone?.name ?? "none") : (epic?.key ?? "none")}
+      className={`text-muted-foreground ${level === "epic" ? "pl-3" : ""}`}
+    >
+      {onToggle ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={onToggle}
+          className={`${row} hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring max-sm:min-h-11`}
+        >
+          {body}
+        </button>
+      ) : (
+        <div className={row}>{body}</div>
+      )}
+    </li>
+  );
+}
+
+/** "Show all N" under an open Ideas group that holds more than it shows (AI-400). */
+export function ShowAllIdeas({ total, onClick }: { total: number; onClick: () => void }) {
+  return (
+    <li className="pl-3">
+      <button
+        type="button"
+        onClick={onClick}
+        className="rounded-md px-1 text-xs text-muted-foreground hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring max-sm:min-h-11 sm:h-6"
+      >
+        Show all {total}
+      </button>
     </li>
   );
 }
@@ -191,6 +285,7 @@ export function Lane({
   highlight,
   top,
   fill = false,
+  count = ids.length,
   children,
 }: {
   stage: Stage;
@@ -201,6 +296,8 @@ export function Lane({
   /** Above the cards, e.g. Backlog's quick add. */
   top?: ReactNode;
   fill?: boolean;
+  /** The lane's ticket count; more than `ids` when Ideas groups are collapsed (AI-400). */
+  count?: number;
   children: ReactNode;
 }) {
   const { setNodeRef } = useDroppable({ id: stage });
@@ -222,10 +319,10 @@ export function Lane({
           type="button"
           onClick={onToggle}
           aria-expanded={false}
-          aria-label={`Show ${label}, ${ids.length}`}
+          aria-label={`Show ${label}, ${count}`}
           className="flex h-full w-full flex-col items-center gap-2 rounded-lg py-3 text-sm hover:bg-foreground/5 focus-visible:outline-2 focus-visible:outline-ring"
         >
-          <span className="text-xs text-muted-foreground tabular-nums">{ids.length}</span>
+          <span className="text-xs text-muted-foreground tabular-nums">{count}</span>
           <span className="font-medium [writing-mode:vertical-rl]">{label}</span>
           <ChevronsLeftRight className="size-3.5 text-muted-foreground" aria-hidden />
         </button>
@@ -244,7 +341,7 @@ export function Lane({
       <h3
         className={`${fill ? "sr-only" : "flex"} h-6 items-center gap-1.5 px-1 text-sm font-medium`}
       >
-        {label} <span className="text-xs text-muted-foreground tabular-nums">{ids.length}</span>
+        {label} <span className="text-xs text-muted-foreground tabular-nums">{count}</span>
         {onToggle && (
           <button
             type="button"

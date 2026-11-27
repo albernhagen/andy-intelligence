@@ -158,6 +158,24 @@ test("board grouped by epic", async ({ page }) => {
   await expect(page).toHaveScreenshot("board-grouped.png", { fullPage: true });
 });
 
+/** AI-400: Ideas grouped by milestone, then epic; the parked milestone's group collapsed. */
+test("board: Ideas grouped, a parked group collapsed", async ({ page }) => {
+  await open(page, "/p/ops", "Monthly restore drill");
+  await expect(page.locator('[data-idea-group][data-label="M2: Backups"] button')).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(page).toHaveScreenshot("board-ideas.png", { fullPage: true });
+});
+
+/** AI-400: the filter box narrows every lane by key, title or epic title. */
+test("board: filter box in use", async ({ page }) => {
+  await open(page, "/p/ops", "Monthly restore drill");
+  await page.getByRole("searchbox", { name: "Filter tickets" }).fill("restore");
+  await expect(page.getByText("Rotate backup keys")).toHaveCount(0);
+  await expect(page).toHaveScreenshot("board-filter.png", { fullPage: true });
+});
+
 test("agent task page from the story panel", async ({ page }) => {
   await page.clock.setFixedTime(SEED_NOW);
   await open(page, "/p/ai/t/AI-3", "Waiting for you: 1 question");

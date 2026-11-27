@@ -126,7 +126,11 @@ describe("milestone on the board's epic groups (AI-311)", () => {
     const header = document.querySelector<HTMLElement>(`[data-epic="${child.key}"]`)!;
     await waitFor(() => expect(chip(header)?.textContent).toBe("M6: Dev → prod releases · Parked"));
     const backlog = screen.getByRole("region", { name: "Backlog" });
-    const looseHeader = backlog.querySelector<HTMLElement>(`[data-epic="none"]`)!;
+    // The loose epic sits in Ideas, which groups by milestone on its own (AI-400): no chip.
+    const looseHeader = backlog.querySelector<HTMLElement>(
+      '[data-idea-group][data-level="milestone"][data-label="none"]',
+    )!;
+    expect(looseHeader.textContent).toContain("No milestone");
     expect(chip(looseHeader)).toBeNull();
   });
 });

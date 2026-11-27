@@ -7,7 +7,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 ### 7.5 UI (React + Vite + shadcn/ui + Tailwind, TanStack Router/Query/Table, dnd-kit, shadcn charts)
 v1.x screens:
 - **Needs-you inbox** (questions, gate reviews, pending config changes, quota warnings) — home screen.
-- **Phone** (M7: Mobile, ADR-0052): the SPA installed from Safari, phone layout for the inbox, ticket detail, releases and quota banner; push deep-links to the item; answer, approve, promote, pause from the phone.
+- **Phone** (M7: Mobile, ADR-0052): the SPA installed from Safari, phone layout for the inbox, ticket detail, releases and quota banner; push deep-links to the item.
 - **Quota & spend** (per provider gauges with reset times; paid spend vs caps; built: header gauge, banner on warn/pause/unknown).
 - **Project settings** (AI-46, built): `/p/:projectId/settings`, header link; switches explained, saved by PATCH; setup checklist first (AI-95). `/projects` opens the current project's; `/projects/new` adds one.
 - **What's new** (ADR-0121, AI-341): `…/whats-new`, digest exceptions first.
@@ -21,14 +21,14 @@ v1.x screens:
 
 **Built in M1.3: UI: tickets + inbox:**
 - Routes: `/p/:projectId` board; `/p/:projectId/t/:ticketRef` ticket panel (ref = key, e.g. `AI-2`; an id or wrong project redirects).
-- Moves: a button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" (recorded). Cancel (optional reason), Archive/Unarchive. The API enforces rules; errors show inline.
+- Moves: a button per move in `TRANSITIONS` (`packages/domain`), plus "Force move…" (recorded). Cancel, Archive/Unarchive. The API enforces rules; errors show inline.
 - Client: `openapi-fetch` typed by `src/lib/api.gen.ts`, generated from the API's OpenAPI document by `typecheck` (`gen:api`), not committed. Every write refetches all queries.
 - Tests render the UI against the in-process API.
 - Not yet: the kill switch item.
 
 **Built in AI-26: Design source and app shell (M3, ADR-0059):**
 - `apps/web/design.md` and the tokens in `index.css` (status roles `attention`, `running`, `success`; a `Badge` variant per marker).
-- One shell (`AppShell.tsx`, the router's root): project picker (key + name, each project's waiting count, All projects, Add project), Board / Inbox / Project settings / Settings, "Needs you N" across projects.
+- One shell (`AppShell.tsx`): project picker (key + name, each project's waiting count, All projects, Add project), Board / Inbox / Project settings / Settings, "Needs you N" across projects.
 - Scope in the URL: `/p/:projectId/…` or `/all/…` (`/all/board` asks for a project). Last scope in `localStorage`; `/` redirects to its inbox. Every screen has its own URL (`routes.test.tsx`).
 - Inbox (AI-30): one card per ticket (type, key, linked title, stage) holding its open questions, or "Flagged for you" when it has none; under All projects, a counted heading per project.
   - Order (`inboxCards`, `lib/needs-you.ts`): Backlog tickets whose only Definition of Ready gap is their questions, then tickets past Backlog, then other Backlog; ties by rank, then urgency. Done, Cancelled and archived last, under "Stale".
@@ -37,11 +37,12 @@ v1.x screens:
 
 **Built in AI-28: Board v2 (M3, ADR-0059 row "Board"):**
 - One read, `GET /api/projects/:id/board`: tickets with questions, run in flight, latest PR (≤ 50 history reads, ADR-0028).
-- Cards: type icon, key, title, markers (size, worker (ADR-0082), questions, run step and minutes, PR, "Blocked by"). Ready is numbered; the first unblocked agent card says "Next".
+- Cards: type, key, title, markers (size, worker, questions, run step, PR, "Blocked by"). Ready is numbered; the first unblocked agent card says "Next".
 - Drag (mouse, touch, keyboard; card under pointer, AI-396) within a lane sets `rank`; across lanes moves (forced if not allowed, not onto Cancelled), then ranks. Optimistic; refusals roll back with the reason. A drop never opens the ticket (AI-25).
-- Quick add atop Backlog. Up next above Ideas (ADR-0075). Done: a counted strip; Cancelled, archived behind a toggle.
+- Quick add atop Backlog; Up next above Ideas (ADR-0075). Done: a counted strip; Cancelled, archived behind a toggle.
 - Group by epic (AI-86, remembered): per lane, a header per epic (key, title, done of total), No epic last; rank stays per lane. Epic filter.
 - Work view chips (AI-187): All plus five views, counted; one at a time, `?view=`, with the epic filter.
+- Ideas (AI-400): by milestone, then epic; parked collapsed; 10 per group. Filter box (`?q=`).
 
 **Built in AI-29: Ticket panel (M3, ADR-0059):**
 - The ticket route is the board's child (`<Outlet />`): a 640px panel, full page under 900px; Esc closes.
