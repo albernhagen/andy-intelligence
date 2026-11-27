@@ -92,22 +92,29 @@ Plain Node, tested, run from the repo root. `--help` on each. Keep throwaway scr
 
 ## 8. Running sessions in the cloud
 
-Cloud sessions run at claude.ai/code on an Anthropic VM, included in the plan with the same usage limits. Every statement below marked _(untested)_ comes from Anthropic's docs on 2026-11-20; AI-151 replaces the marks with what a real session showed.
+Cloud sessions run at claude.ai/code on an Anthropic VM, included in the plan with the same usage limits. The statements below are what one cloud session observed on 2026-11-26 (AI-151: Prove a cloud worker end to end and fix the runbook to match); where it could not observe something, the line says so.
 
 ### Andy's steps, once (AI-150)
 
 1. **Connect GitHub.** At claude.ai/code, connect GitHub and install the Claude GitHub App (github.com/apps/claude) on the `albernhagen` account with access to `andy-intelligence`.
-2. **Environment.** New-session screen → environment selector under the message box → "Default" → settings icon. Setup script: `bash scripts/cloud-setup.sh`. Network access: "Limited", "Allow package managers" checked; add `storage.googleapis.com` under "Allowed domains" only if cloud workers should run the Firestore emulator suite. Environment variables and network secrets: empty; never put a secret there. "Save changes".
-3. **Ticket connector.** The `andy-intelligence` connector connected in claude.ai (Customize → Connectors); approve its first tool call when a session asks.
+2. **Environment.** New-session screen → environment selector under the message box → "Default" → settings icon. Setup script: `if [ -d andy-intelligence ]; then bash andy-intelligence/scripts/cloud-setup.sh; fi` (the script starts in the folder above the checkout: `bash scripts/cloud-setup.sh` failed with exit 127 and the session started without its install). This command worked when run by hand in that session but is not yet confirmed by a fresh session's start: the next cloud worker confirms it, then this sentence goes. The `if` is a choice: "Default" serves sessions on every repo, so the script skips, exit 0, when there is no `andy-intelligence` folder. A skip is silent, so every cloud worker checks the install first (brief paragraph below). Network access: "Limited", "Allow package managers" checked; add `storage.googleapis.com` under "Allowed domains" only if cloud workers should run the Firestore emulator suite. Environment variables and network secrets: empty; never put a secret there. "Save changes".
+3. **Ticket connector.** The `andy-intelligence` connector connected in claude.ai (Customize → Connectors). The session's first call (`status`) answered; the worker cannot see whether Andy was asked to approve it.
 
 Then Andy tells the coordinator "run AI-151 in the cloud".
 
 ### What the coordinator and workers do differently
 
 - The coordinator starts a cloud worker only when Andy asks for the cloud in words.
-- A cloud session starts from the branch on GitHub (the default branch from the web), never from unpushed local work: push first and name the branch in the brief. Idle VMs are reclaimed: history kept, background processes lost _(untested)_.
-- Cloud workers send the coordinator no note when a turn ends: watch their PRs with `survey`.
-- The cloud GitHub proxy rejects `gh pr` and `gh issue` (GraphQL) _(untested)_. Briefs say: open and read the PR with `gh api` (REST, for example `gh api repos/albernhagen/andy-intelligence/pulls -f head=... -f base=main -f title=... -f body=...`) or the session's "Create PR" button.
-- `~/.claude/CLAUDE.md` and user-scope skills do not load; the repo's `AGENTS.md`, `.claude/settings.json` hooks and `.claude/skills/` do _(untested)_. Put everything a worker needs in the brief or the repo.
-- The image has Node 22 (`.nvmrc` says 24; `package.json` accepts 22 or later), about 4 vCPUs and 16 GB _(untested)_: the full suite is slower than on the Mac.
-- `scripts/cloud-setup.sh` (`corepack enable`, `pnpm install --frozen-lockfile`, `pnpm build`) needs no secret and fails loudly; it must finish in under five minutes so the environment caches it _(untested)_.
+- A cloud session starts from the branch on GitHub (the default branch from the web), never from unpushed local work: push first and name the branch in the brief. The clone is shallow (50 commits) and sits on a session branch `claude/<name>`; `main` can move after the clone, so the worker fetches it before cutting its branch. After `main` moved again, the fetched `main` shared no history with the branch and the pre-push hook failed with `no merge base`: `git fetch --deepen=100 origin main` fixed it.
+- The worker process restarted once mid-session: conversation and files were kept, the command in flight lost its result. An idle VM being reclaimed was not observed.
+- Cloud workers send the coordinator no note when a turn ends: watch their PRs with `survey`. The PR description is the worker's whole report.
+- GitHub from the VM goes through a proxy. `gh pr` and `gh issue` fail with `HTTP 403: GitHub GraphQL is not available from Claude Code sessions`. `gh api` (REST) works for opening a PR, reading it, its checks and its comments, and commenting. `gh auth status` says the token is invalid (the proxy adds the real one): ignore it. The session also has GitHub MCP tools limited to this repo.
+- `~/.claude/CLAUDE.md` does not exist on the VM. The repo's `AGENTS.md`, the `.claude/settings.json` format hook and `.claude/skills/` (`discover`, `inbox`) loaded. So did Andy's account-level skills and every connector connected in claude.ai (Gmail, Calendar, Drive, Docs, Sheets, Hevy), not only `andy-intelligence`: see R-AI-149-2. Put everything a worker needs in the brief or the repo.
+- The image has Node 22.23.5 (`.nvmrc` says 24; `package.json` accepts 22 or later; nothing broke), pnpm 10.28.0 through corepack, 4 vCPUs and 15 GB. `pnpm lint` 24 s, `pnpm typecheck` 39 s, `pnpm test` 138 s (5958 passed, 33 skipped), `pnpm build` 2 s after setup, `pnpm context:check` under 1 s: all passed.
+- `scripts/cloud-setup.sh` (`corepack enable`, `pnpm install --frozen-lockfile`, `pnpm build`) needs no secret and fails loudly. Run by hand it took 7 s. Whether the environment caches its result was not observed, because the stored setup script had failed.
+
+### Brief paragraph for a cloud worker
+
+Paste into the brief, with the ticket's key and branch filled in:
+
+> You run as a cloud session. First check the setup script ran: if `node_modules` is missing, run `bash scripts/cloud-setup.sh` and say so in the PR. The coordinator gets no note from you and reads your PR instead, so the PR description is your only report: put in it everything you observed and every failure with its output. `gh pr` and `gh issue` are rejected; use `gh api` (REST), with `R=repos/albernhagen/andy-intelligence`. Open the PR: `git push -u origin <branch>`, then `gh api $R/pulls -f title='<KEY>: <ticket title>' -f head='<branch>' -f base=main -f body="$(cat <file>)"`. Change the description: `gh api -X PATCH $R/pulls/<n> -f body="$(cat <file>)"`. Read checks: `gh api $R/commits/<head sha>/check-runs --jq '.check_runs[] | "\(.name) \(.status) \(.conclusion)"'`. Read both review verdicts: `gh api $R/issues/<n>/comments --jq '.[].body'`; the security review's comment starts `<!-- security-review -->`, the adversarial review's `<!-- adversarial-review -->`, and each counts only when its `<!-- reviewed-sha: ... -->` equals your head. Answer every finding with `gh api $R/issues/<n>/comments -f body=...`. Do not merge. A step only Andy can do goes in the description under "For Andy" as a question, never a workaround.

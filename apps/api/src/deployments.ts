@@ -77,6 +77,11 @@ export interface DeploymentCallbackDeps {
   registeredProject: (repo: string) => Promise<Project | null>;
   /** Promote and rollback requests (AI-199); without it a release's `request` is kept unchecked. */
   releaseRequests?: ReleaseRequestStore;
+  /**
+   * After a finish is recorded (AI-188: M6.7): the verification run acts on a deploy to the
+   * project's first environment. Never throws; the answer doesn't wait on its outcome's success.
+   */
+  onFinished?: (deployment: Deployment, project: Project) => Promise<unknown>;
   now?: () => Date;
 }
 
@@ -317,6 +322,14 @@ export function registerDeploymentCallbacks(
         // `dispatched` too: a claim that raced the run's bookkeeping must still end (ADR-0160).
         await followRequest(done.request, done.status, ["dispatched", "started"], {});
       }
+      if (deps.onFinished) {
+        await deps.onFinished(done, caller.project).catch((err: unknown) =>
+          log("WARNING", "deployment finish hook failed", {
+            deploymentId: done.id,
+            error: String(err),
+          }),
+        );
+      }
       return c.json({ deploymentId: done.id, status: done.status }, 200);
     } catch (err) {
       if (err instanceof WorkTrackerError && err.code === "conflict") {
@@ -338,5 +351,11 @@ export const publicRoutes: RouteModule = (app, s) => {
     registeredProject: (repo) => repoIndex.projectFor(repo),
     ...(s.deps.releaseRequests ? { releaseRequests: s.deps.releaseRequests } : {}),
     now: s.now,
+    ...(s.verification
+      ? {
+          onFinished: (deployment: Deployment, project: Project) =>
+            s.verification!.deploymentFinished(deployment, project),
+        }
+      : {}),
   });
 };

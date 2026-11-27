@@ -27,6 +27,8 @@ describe("scope", () => {
     ["/settings/github", null],
     // AI-379: the setup path is no destination, so the bottom bar doesn't mark Board.
     ["/p/ai/setup", null],
+    // AI-189: M6.10: Releases sits under What's new, so Board isn't marked either.
+    ["/p/ai/releases", null],
   ])("GivenPath%s_WhenParsed_ThenSectionIs%s", (path, section) => {
     expect(sectionFromPath(path)).toBe(section);
   });

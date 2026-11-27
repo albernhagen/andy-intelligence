@@ -12,6 +12,7 @@ import {
 import type { BoardTicket, Stage, Ticket, TicketType, Worker } from "@andy/contracts";
 import { scoreMarkers, startScore } from "@andy/domain";
 import { Badge } from "@/components/ui/badge";
+import { DRAG_PREVIEW_CLASS, MOVE_TRANSITION } from "@/components/DragPreview";
 import { QueryError } from "@/components/Status";
 import { WorkerBadges } from "@/components/WorkerControls";
 import { plural, runLabel } from "@/lib/board";
@@ -26,11 +27,9 @@ export const TYPE_ICONS: Record<TicketType, LucideIcon> = {
   spike: FlaskConical,
 };
 
-/**
- * How cards slide aside while one is dragged and settle on drop (design.md "Motion"): the base
- * duration and the standard easing. index.css turns it off under `prefers-reduced-motion`.
- */
-export const MOVE_TRANSITION = { duration: 150, easing: "cubic-bezier(0.2, 0, 0, 1)" };
+export { MOVE_TRANSITION };
+
+const CARD_CLASS = "flex flex-col gap-1 rounded-lg border p-2 text-sm";
 
 export interface CardProps {
   ticket: BoardTicket;
@@ -66,8 +65,6 @@ export function BoardCard({
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     transition,
   };
-  const Icon = t.type ? TYPE_ICONS[t.type] : CircleDashed;
-  const { openQuestions, run, pullRequest } = t.summary;
 
   return (
     <li className="space-y-1">
@@ -84,53 +81,83 @@ export function BoardCard({
         style={style}
         data-ticket={t.key}
         data-nav-item
-        className={`flex flex-col gap-1 rounded-lg border border-border bg-raised p-2 text-sm hover:border-foreground/30 focus-visible:outline-2 focus-visible:outline-ring ${
-          isDragging ? "relative z-10 shadow-md" : ""
+        data-dragging={isDragging || undefined}
+        // While dragged, the card stays as a placeholder of its size: a dashed outline with its
+        // text hidden but still read out; the copy under the pointer is BoardCardPreview.
+        className={`${CARD_CLASS} focus-visible:outline-2 focus-visible:outline-ring ${
+          isDragging
+            ? "border-dashed border-foreground/30 bg-transparent [&>*]:opacity-0"
+            : "border-border bg-raised hover:border-foreground/30"
         }`}
       >
-        <span className="flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
-          {position !== null && (
-            <>
-              <span className="font-medium text-foreground" aria-label={`Position ${position}`}>
-                {position}
-              </span>
-              <span aria-hidden>·</span>
-            </>
-          )}
-          <span title={typeLabel(t.type)}>
-            <Icon className="size-3.5" aria-hidden />
-          </span>
-          <span className="font-mono">{t.key}</span>
-          {next ? (
-            <Badge variant="success" className="ml-auto">
-              Next
-            </Badge>
-          ) : (
-            t.type && (
-              <span className="ml-auto" aria-hidden>
-                {typeLabel(t.type)}
-              </span>
-            )
-          )}
-        </span>{" "}
-        <span className="font-medium">{t.title}</span>
-        <Markers
-          ticket={t}
-          openQuestions={openQuestions}
-          needsAttention={t.needsAttention}
-          run={run ? runLabel(run, now) : null}
-          pullRequest={pullRequest}
-          blockers={blockers}
-          archived={t.archived}
-          worker={t.summary.worker}
-          stage={t.stage}
-          type={t.type}
-          sentBack={t.upNextRank === null ? t.sentBackReason : null}
-        />
+        <CardBody ticket={t} blockers={blockers} position={position} next={next} now={now} />
         <span className="sr-only">{typeLabel(t.type)}</span>
       </Link>
       {error && <QueryError error={error} />}
     </li>
+  );
+}
+
+type BodyProps = Pick<CardProps, "ticket" | "blockers" | "position" | "next" | "now">;
+
+/** What a card shows, on the board and in its dragged copy. */
+function CardBody({ ticket: t, blockers, position, next, now }: BodyProps) {
+  const Icon = t.type ? TYPE_ICONS[t.type] : CircleDashed;
+  const { openQuestions, run, pullRequest } = t.summary;
+  return (
+    <>
+      <span className="flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
+        {position !== null && (
+          <>
+            <span className="font-medium text-foreground" aria-label={`Position ${position}`}>
+              {position}
+            </span>
+            <span aria-hidden>·</span>
+          </>
+        )}
+        <span title={typeLabel(t.type)}>
+          <Icon className="size-3.5" aria-hidden />
+        </span>
+        <span className="font-mono">{t.key}</span>
+        {next ? (
+          <Badge variant="success" className="ml-auto">
+            Next
+          </Badge>
+        ) : (
+          t.type && (
+            <span className="ml-auto" aria-hidden>
+              {typeLabel(t.type)}
+            </span>
+          )
+        )}
+      </span>{" "}
+      <span className="font-medium">{t.title}</span>
+      <Markers
+        ticket={t}
+        openQuestions={openQuestions}
+        needsAttention={t.needsAttention}
+        run={run ? runLabel(run, now) : null}
+        pullRequest={pullRequest}
+        blockers={blockers}
+        archived={t.archived}
+        worker={t.summary.worker}
+        stage={t.stage}
+        type={t.type}
+        sentBack={t.upNextRank === null ? t.sentBackReason : null}
+      />
+    </>
+  );
+}
+
+/**
+ * The copy of a card drawn under the pointer while it is dragged (AI-396): the card as it looks
+ * on the board, lifted. Hidden from screen readers; dnd-kit announces the drag instead.
+ */
+export function BoardCardPreview(props: BodyProps) {
+  return (
+    <div aria-hidden data-drag-overlay className={`${CARD_CLASS} bg-raised ${DRAG_PREVIEW_CLASS}`}>
+      <CardBody {...props} />
+    </div>
   );
 }
 

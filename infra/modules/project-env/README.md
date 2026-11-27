@@ -17,6 +17,7 @@ Called by a template root in the managed repo (AI-109: M6.22); Andy plans and ap
 | `<service>-run`, `<service>-pr-run`                | Runtime identities: logs and traces in this project; `runtime_project_roles` for the main one only. No access to another environment                                                                                                                                                       |
 | Promote read (optional)                            | `promote_source_repository` on prod in `dev-and-prod`: this project's Cloud Run service agent reads the dev repo, so promote ships the same digest; the main deployer gets writer there, to check the digest exists (AI-390) and tag it `release-*` (AI-389)                               |
 | Log exclusion, usage alerts                        | Successful `/health` and `/assets/` request logs dropped; the six M1.15 usage alerts to `alert_email`                                                                                                                                                                                      |
+| Prod alerts (`prod_alerts_enabled`, default on)    | Module [`project-alerts`](../project-alerts): uptime check on `health_path` and a 5xx alert to `alert_email` (AI-209: M6.19). No uptime check when `allow_unauthenticated` is off. Turn off for dev                                                                                        |
 
 Threat model: [`docs/security/infrastructure.md`](../../../docs/security/infrastructure.md), risks R-AI-201 to R-AI-201-4.
 

@@ -174,6 +174,15 @@ export const PullRequestLink = z.object({
   number: z.number().int().positive(),
   url: z.url(),
   state: z.enum(["open", "closed", "merged"]),
+  /**
+   * The merge commit on the default branch (AI-188: M6.7), so a deployment can tell which
+   * Verifying tickets it contains; absent or null for links before it, or when not merged.
+   */
+  mergeSha: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .nullable()
+    .optional(),
 });
 export type PullRequestLink = z.infer<typeof PullRequestLink>;
 
@@ -439,6 +448,8 @@ export const NewRun = Run.pick({
   baseBranch: true,
   idea: true,
   routeSkips: true,
+  deploymentId: true,
+  verifyTicketIds: true,
 });
 export type NewRun = z.input<typeof NewRun>;
 

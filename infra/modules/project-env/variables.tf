@@ -198,3 +198,21 @@ variable "usage_alert_thresholds" {
   description = "M1.15 usage alerts, same defaults as infra/control-plane. Firestore alerts never fire in a project without Firestore."
   default     = {}
 }
+
+variable "prod_alerts_enabled" {
+  type        = bool
+  description = "Prod uptime check on health_path and 5xx alert to alert_email (AI-209: M6.19, module project-alerts). Turn off for a dev environment. About $0.20/month: two alert conditions."
+  default     = true
+}
+
+variable "health_path" {
+  type        = string
+  description = "Path the prod uptime check expects a 2xx from."
+  default     = "/health"
+}
+
+variable "prod_error_threshold_per_5m" {
+  type        = number
+  description = "Prod alert when the main service returns more than this many 5xx responses in 5 minutes (1 to 1000)."
+  default     = 5
+}

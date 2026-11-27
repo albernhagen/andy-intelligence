@@ -64,6 +64,10 @@ run "given_example_values_when_planned_then_two_environments_each_with_a_budget"
     error_message = "Only dev, the first environment, gets PR previews."
   }
   assert {
+    condition     = length(module.dev.alert_policy_names) == 0 && length(module.prod.alert_policy_names) == 2
+    error_message = "Only prod gets the uptime and 5xx alerts (AI-209: M6.19)."
+  }
+  assert {
     condition = (
       google_project_service.dev_billingbudgets.project == "example-dev-000000" &&
       google_project_service.prod_billingbudgets.project == "example-prod-000000"

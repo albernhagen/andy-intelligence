@@ -57,22 +57,30 @@ export function WhatsNewPage() {
       <PageHeader
         title="What's new"
         actions={
-          whatsNew.data &&
-          whatsNew.data.milestones.length > 0 && (
-            <Select value={epic ?? ALL} onValueChange={(v) => setEpic(v === ALL ? null : v)}>
-              <SelectTrigger aria-label="Epic" className="w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All epics</SelectItem>
-                {whatsNew.data.milestones.map((m) => (
-                  <SelectItem key={m.key} value={m.key}>
-                    {m.key}: {m.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )
+          <>
+            <Link
+              to="/p/$projectId/releases"
+              params={{ projectId }}
+              className="inline-flex items-center text-sm text-muted-foreground underline-offset-2 hover:underline max-sm:min-h-11"
+            >
+              Releases
+            </Link>
+            {whatsNew.data && whatsNew.data.milestones.length > 0 && (
+              <Select value={epic ?? ALL} onValueChange={(v) => setEpic(v === ALL ? null : v)}>
+                <SelectTrigger aria-label="Epic" className="w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All epics</SelectItem>
+                  {whatsNew.data.milestones.map((m) => (
+                    <SelectItem key={m.key} value={m.key}>
+                      {m.key}: {m.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </>
         }
       >
         <Segmented

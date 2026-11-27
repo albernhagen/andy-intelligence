@@ -69,6 +69,7 @@ const PullRequestPayload = z.object({
     number: z.number(),
     state: z.string(),
     merged: z.boolean().nullish(),
+    merge_commit_sha: z.string().nullish(),
     draft: z.boolean().nullish(),
     title: z.string(),
     body: z.string().nullish(),
@@ -176,6 +177,10 @@ function build(event: RecordedEvent, base: { repo: string }, payload: unknown): 
           headSha: pr.head.sha,
           baseRef: pr.base.ref,
           url: pr.html_url,
+          // Only a merge's commit (AI-188); GitHub also fills it with a test merge while open.
+          ...(pr.merged && /^[0-9a-f]{40}$/.test(pr.merge_commit_sha ?? "")
+            ? { mergeSha: pr.merge_commit_sha }
+            : {}),
         },
       };
     }

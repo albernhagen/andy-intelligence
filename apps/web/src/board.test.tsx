@@ -2,6 +2,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { WorkTrackerError } from "@andy/contracts";
 import { STAGES } from "@/lib/tickets";
+import { DROP_ANIMATION } from "@/components/DragPreview";
+import { dragCopySource } from "@/test/drag-layout";
 import { readyStory, renderApp } from "@/test/harness";
 
 /**
@@ -16,6 +18,8 @@ const CARD_STEP = 60;
 const LANES = STAGES.filter((s) => s !== "verifying");
 
 function fakeRect(el: Element): DOMRect {
+  const source = dragCopySource(el);
+  if (source) return fakeRect(source);
   const lane = el.closest("[data-stage]");
   const i = lane ? LANES.indexOf(lane.getAttribute("data-stage") as never) : -1;
   if (i < 0) return new DOMRect(0, 0, 0, 0);
@@ -49,7 +53,8 @@ async function drag(
   const card = document.querySelector<HTMLElement>(`[data-ticket="${key}"]`)!;
   card.focus();
   await user.keyboard(" ");
-  if (columns) await user.keyboard("{ArrowRight}".repeat((columns * COLUMN_WIDTH) / 25));
+  const across = columns < 0 ? "{ArrowLeft}" : "{ArrowRight}";
+  if (columns) await user.keyboard(across.repeat((Math.abs(columns) * COLUMN_WIDTH) / 25));
   const vertical = rows < 0 ? "{ArrowUp}" : "{ArrowDown}";
   if (rows) await user.keyboard(vertical.repeat(Math.round((Math.abs(rows) * CARD_STEP) / 25)));
   await user.keyboard(" ");
@@ -226,6 +231,66 @@ describe("board drop keeps the board in view (AI-25)", () => {
   });
 });
 
+/** AI-396: the dragged card stays visible under the pointer. */
+describe("board drag preview", () => {
+  const overlay = () => document.querySelector<HTMLElement>("[data-drag-overlay]");
+
+  async function pickUp(user: ReturnType<typeof renderApp>["user"], key: string) {
+    document.querySelector<HTMLElement>(`[data-ticket="${key}"]`)!.focus();
+    await user.keyboard(" ");
+  }
+
+  it("GivenABacklogCard_WhenItIsPickedUp_ThenACopyOfItShowsUnderThePointer", async () => {
+    const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
+
+    await pickUp(harness.user, ticket.key);
+
+    const copy = await waitFor(() => {
+      expect(overlay()).not.toBeNull();
+      return overlay()!;
+    });
+    expect(copy.textContent).toContain(ticket.key);
+    expect(copy.textContent).toContain("Spike");
+    // A picture of the card, not a second link or card for the drag code and screen readers.
+    expect(copy.getAttribute("aria-hidden")).toBe("true");
+    expect(copy.querySelector("a, [data-ticket]")).toBeNull();
+  });
+
+  it("GivenACardIsDragged_WhenItIsOverAnotherLane_ThenItsSlotIsAPlaceholderAndThatLaneIsHighlighted", async () => {
+    const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
+
+    await pickUp(harness.user, ticket.key);
+    await harness.user.keyboard("{ArrowRight}".repeat(COLUMN_WIDTH / 25));
+
+    const backlog = screen.getByRole("region", { name: "Backlog" });
+    const placeholder = backlog.querySelector(`[data-ticket="${ticket.key}"]`)!;
+    expect(placeholder.hasAttribute("data-dragging")).toBe(true);
+    expect(placeholder.className).toContain("border-dashed");
+    const ready = screen.getByRole("region", { name: "Ready" });
+    await waitFor(() => expect(ready.hasAttribute("data-drop-over")).toBe(true));
+    expect(ready.className).toContain("bg-selected");
+    expect(backlog.hasAttribute("data-drop-over")).toBe(false);
+  });
+
+  it("GivenACardIsDragged_WhenItIsDroppedOrTheDragIsCancelled_ThenTheCopyIsGoneWithin200ms", async () => {
+    const { harness, ticket } = await boardWith({ type: "chore", title: "Spike" });
+
+    await pickUp(harness.user, ticket.key);
+    await waitFor(() => expect(overlay()).not.toBeNull());
+    await harness.user.keyboard("{Escape}");
+    await waitFor(() => expect(overlay()).toBeNull(), { timeout: 200 });
+    expect(document.querySelector("[data-dragging]")).toBeNull();
+
+    await pickUp(harness.user, ticket.key);
+    await waitFor(() => expect(overlay()).not.toBeNull());
+    await harness.user.keyboard("{ArrowRight}".repeat(COLUMN_WIDTH / 25) + " ");
+    await waitFor(() => expect(overlay()).toBeNull(), { timeout: 200 });
+    expect(document.querySelector("[data-drop-over]")).toBeNull();
+    // Where a browser animates the drop, the settle is shorter than that limit.
+    expect(DROP_ANIMATION.duration).toBeLessThanOrEqual(200);
+  });
+});
+
 /** AI-28: Board v2: status on cards, ordered Ready lane, reorder within a lane, quick add. */
 describe("board v2", () => {
   async function openBoard(harness: ReturnType<typeof renderApp>, waitFor = "AI-1") {
@@ -319,6 +384,29 @@ describe("board v2", () => {
       );
       expect(stored.map((t) => t.key)).toEqual(["AI-3", "AI-1", "AI-2"]);
     });
+  });
+
+  it("GivenAnInProgressCard_WhenDroppedOnUpNext_ThenItLandsInIdeasWithNoUpNextRank", async () => {
+    const harness = await project();
+    await harness.service.create("ai", { title: "Queued" }, "andy", { upNext: true });
+    const stale = await harness.service.create("ai", { title: "Stale" }, "andy");
+    await harness.tracker.updateTicket(
+      "ai",
+      stale.id,
+      { stage: { to: "in_progress", reason: null } },
+      "andy",
+    );
+    await openBoard(harness, "AI-2");
+
+    // In progress is two columns right of Backlog; row 0 lands on Up next's first card.
+    await drag(harness.user, "AI-2", -2);
+
+    await waitFor(async () =>
+      expect(await harness.tracker.getTicket("ai", stale.id)).toMatchObject({
+        stage: "backlog",
+        upNextRank: null,
+      }),
+    );
   });
 
   it("GivenAnIdea_WhenMovedToUpNext_ThenTheBoardSplitsAndItEntersUpNext", async () => {

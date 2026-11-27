@@ -96,6 +96,7 @@ describe("previousSucceeded", () => {
     url: null,
     request: null,
     release: null,
+    verification: null,
   });
   const target = dep("t", "2026-11-20T12:00:00.000Z", "succeeded");
 
@@ -464,6 +465,7 @@ describe("canKeepRelease", () => {
     url: null,
     request: null,
     release: null,
+    verification: null,
   });
   const prev = dep("p", "2026-11-20T10:00:00.000Z", "succeeded");
   const target = dep("t", "2026-11-20T12:00:00.000Z", "succeeded");

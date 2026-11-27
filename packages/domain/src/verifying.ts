@@ -14,10 +14,11 @@ import type {
 
 /**
  * The one system-wide switch. Off: a merge moves its ticket to Done as before, for every project.
- * It stays off until the verify task (AI-188: M6.7: Verification run) ships, so no ticket waits
- * in a stage nothing moves it out of; AI-188 turns it on by setting this to true in its PR.
+ * On since AI-188: M6.7: Verification run, whose verify task moves tickets out of Verifying
+ * (ADR-0159). Andy turned it on by merging that PR; turning it off is a one-line revert to false
+ * (runbook `verification.md`), after which tickets already in Verifying are moved by hand.
  */
-export const VERIFYING_SWITCH = false;
+export const VERIFYING_SWITCH = true;
 
 /** A ticket in Verifying this long is flagged Needs-you (ADR-0114). */
 export const VERIFYING_NEEDS_YOU_MS = 2 * 60 * 60 * 1000;

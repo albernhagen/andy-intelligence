@@ -76,6 +76,7 @@ export function runContext(context) {
       MAX_TURNS_CAP: "200",
       MAX_BUDGET_USD_CAP: "50",
       SUMMARIZE_MAX_TURNS: "3",
+      VERIFY_MAX_TURNS: "30",
       MAX_PROMPT_CHARS: "200000",
       MAX_PACKAGES: "5",
       ACTIONS_ID_TOKEN_REQUEST_TOKEN: "req",

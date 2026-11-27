@@ -49,6 +49,8 @@ module "dev" {
   alert_email           = var.alert_email
   runtime_project_roles = var.runtime_project_roles
   preview_enabled       = true
+  # Uptime and 5xx alerts are for prod only (AI-209: M6.19).
+  prod_alerts_enabled = false
 }
 
 module "prod" {

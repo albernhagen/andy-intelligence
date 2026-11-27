@@ -30,6 +30,8 @@ async function seeded(
   return harness;
 }
 
+const overlay = () => document.querySelector<HTMLElement>("[data-drag-overlay]");
+
 const rows = () =>
   [...document.querySelectorAll("li[data-milestone]")].map((el) =>
     el.getAttribute("data-milestone"),
@@ -109,5 +111,42 @@ describe("roadmap reorder", () => {
       ]),
     );
     await waitFor(() => expect(rows()).toEqual(["m1", "m3", "m2"]));
+  });
+
+  // AI-396: the dragged row stays visible under the pointer.
+  it("GivenThreeMilestones_WhenARowIsPickedUpByItsHandle_ThenACopyShowsAPlaceholderStaysAndTheListIsHighlighted", async () => {
+    const harness = await seeded();
+
+    screen.getByRole("button", { name: "Drag M2: Self-hosting to reorder" }).focus();
+    await harness.user.keyboard(" ");
+
+    const copy = await waitFor(() => {
+      expect(overlay()).not.toBeNull();
+      return overlay()!;
+    });
+    expect(copy.textContent).toContain("M2: Self-hosting");
+    expect(copy.getAttribute("aria-hidden")).toBe("true");
+    expect(document.querySelector('li[data-milestone="m2"]')!.hasAttribute("data-dragging")).toBe(
+      true,
+    );
+    await waitFor(() => expect(document.querySelector("ul[data-drop-over]")).not.toBeNull());
+  });
+
+  it("GivenARowIsDragged_WhenTheDragIsCancelledOrDropped_ThenTheCopyIsGoneWithin200ms", async () => {
+    const harness = await seeded();
+    const handle = () => screen.getByRole("button", { name: "Drag M2: Self-hosting to reorder" });
+
+    handle().focus();
+    await harness.user.keyboard(" ");
+    await waitFor(() => expect(overlay()).not.toBeNull());
+    await harness.user.keyboard("{Escape}");
+    await waitFor(() => expect(overlay()).toBeNull(), { timeout: 200 });
+
+    handle().focus();
+    await harness.user.keyboard(" ");
+    await waitFor(() => expect(overlay()).not.toBeNull());
+    await harness.user.keyboard(" ");
+    await waitFor(() => expect(overlay()).toBeNull(), { timeout: 200 });
+    expect(document.querySelector("[data-dragging], ul[data-drop-over]")).toBeNull();
   });
 });
