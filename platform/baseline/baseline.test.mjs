@@ -3,13 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { configFor, deployKindFor, loadConfig, parseArgs, parseGhResponse } from "./baseline.mjs";
-import { pinActions, renderFiles } from "./files.mjs";
+import { pinActions, renderFiles, seedsToWrite } from "./files.mjs";
 import {
   ENVIRONMENT_VARIABLES,
   PREFIX,
   PREVIEW_VARIABLES,
   SMOKE_VARIABLE,
 } from "../../scripts/cloud-run-caller.mjs";
+import { planBaselinePr } from "./plan.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const manifest = JSON.parse(
@@ -479,5 +480,80 @@ describe("dependabot.yml in the baseline", () => {
       );
       expect(npm, kind).toContain("interval: weekly");
     }
+  });
+});
+
+/**
+ * AI-401: a `cloud-run` project starts with a starter Dockerfile (seeded once, like infra/) whose
+ * base image is pinned by digest, and its Dependabot file watches it; a `none` project gets neither.
+ */
+describe("starter Dockerfile in the baseline", () => {
+  const SHA = "d".repeat(40);
+  const render = (deployKind) =>
+    renderFiles(manifest, read, { sha: SHA, ref: "v1.0.0", deployKind });
+  const file = (files, p) => files.find((f) => f.path === p)?.content;
+  const dockerfile = () => file(render("cloud-run").seed, "Dockerfile") ?? "";
+  const dependabot = (deployKind) => file(render(deployKind).managed, ".github/dependabot.yml");
+
+  it("GivenACloudRunProject_WhenRendered_ThenTheSeedHasADockerfileWhoseBaseImagesArePinnedByDigest", () => {
+    const froms = [...dockerfile().matchAll(/^FROM\s+(\S+)/gm)].map((m) => m[1]);
+    expect(froms.length).toBeGreaterThan(0);
+    for (const image of froms) expect(image).toMatch(/^[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}$/);
+  });
+
+  it("GivenACloudRunProject_WhenRendered_ThenTheImageRunsAsTheNonRootNodeUser", () => {
+    const users = [...dockerfile().matchAll(/^USER\s+(\S+)/gm)].map((m) => m[1]);
+    expect(users.at(-1)).toBe("node");
+  });
+
+  it("GivenACloudRunProject_WhenItsDependabotFileIsRendered_ThenAMonthlyDockerEntryWatchesTheRoot", () => {
+    const content = dependabot("cloud-run");
+    const docker = content.slice(content.indexOf("package-ecosystem: docker"));
+    expect(docker).toMatch(/^package-ecosystem: docker\n/);
+    expect(docker).toMatch(/^\s+directory: \/$/m);
+    expect(docker).toContain("interval: monthly");
+    expect(docker).toContain("open-pull-requests-limit: 5");
+    expect(docker).toContain("default-days: 7");
+    expect(docker).toContain('update-types: ["version-update:semver-major"]');
+  });
+
+  it("GivenALaterBaselineRunAndAChangedDockerfile_WhenSeeded_ThenItIsLeftAsItIs", () => {
+    const { seed } = render("cloud-run");
+    const exists = (p) => p === "Dockerfile";
+    const paths = seedsToWrite(seed, exists).map((f) => f.path);
+    expect(paths).not.toContain("Dockerfile");
+    // A project's own Docker setup gets no seeded .dockerignore next to it (one group).
+    expect(paths).not.toContain(".dockerignore");
+    const plan = planBaselinePr(
+      { ...render("cloud-run"), starter: [] },
+      new Map([
+        ["package.json", "{}"],
+        ["Dockerfile", "FROM scratch\n"],
+      ]),
+      { source: manifest.source, sha: SHA, ref: "v1.0.0", date: "2026-11-26" },
+    );
+    expect(plan.files.map((f) => f.path)).not.toContain("Dockerfile");
+  });
+
+  it("GivenANoneProject_WhenRendered_ThenNeitherADockerfileNorADockerEntry", () => {
+    const rendered = render("none");
+    const paths = [...rendered.seed, ...rendered.starter].map((f) => f.path);
+    for (const p of ["Dockerfile", ".dockerignore", "src/main.ts", "src/server.ts"])
+      expect(paths).not.toContain(p);
+    expect(dependabot("none")).not.toContain("package-ecosystem: docker");
+  });
+
+  it("GivenACloudRunStarter_WhenRendered_ThenTheDockerfileServesItsBuiltEntryOnTheCloudRunPort", () => {
+    const starter = render("cloud-run").starter;
+    const main = file(starter, "src/main.ts") ?? "";
+    const server = file(starter, "src/server.ts") ?? "";
+    // project-env sets no container port, so Cloud Run sends PORT (8080 by default); its uptime
+    // check and the deploy rollback ask /health for a 2xx.
+    expect(main).toContain("process.env.PORT ?? 8080");
+    expect(server).toContain('"/health"');
+    expect(read("infra/modules/project-env/services.tf")).not.toMatch(/container_port/);
+    expect(dockerfile()).toMatch(/^CMD \[.*"dist\/main\.js"\]$/m);
+    expect(dockerfile()).toMatch(/^EXPOSE 8080$/m);
+    expect(dockerfile()).toMatch(/^RUN pnpm build/m);
   });
 });
