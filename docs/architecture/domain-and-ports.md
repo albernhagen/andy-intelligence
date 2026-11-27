@@ -4,7 +4,7 @@ Overview and reading map: [ARCHITECTURE.md](ARCHITECTURE.md). Section numbers ma
 
 ## 5. Domain model (Firestore documents)
 
-All records carry `project_id` where applicable. Zod schemas in `packages/contracts` validate every read and write; tickets and their events nest under their project (`projects/{p}/tickets/{t}/events/{e}`). Ticket numbers come from a per-project counter (`counters/tickets-{p}`), in the ticket's transaction. Queries need no composite index (ADR-0121); results are sorted in memory.
+All records carry `project_id` where applicable. Zod schemas in `packages/contracts` validate every read and write; tickets and their events nest under their project (`projects/{p}/tickets/{t}/events/{e}`). Ticket numbers come from a per-project counter (`counters/tickets-{p}`), in the ticket's transaction; ADR numbers from `counters/adr-{p}` (`last`, plus sessions' `holds`: AI-384). Queries need no composite index (ADR-0121); results are sorted in memory.
 
 **Rollups** (cost per ticket/epic/model/provider) are **computed on read with Firestore aggregation queries** in v1.x; no denormalized counters.
 

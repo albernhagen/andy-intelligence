@@ -63,7 +63,7 @@ After the deploy, reconnect the connector so Claude lists `move_ticket`.
 
 1. Create a smoke-test task and force-move it to `ready` in the UI (reason "smoke test"); say its key is `AI-50`.
 2. "Move AI-50 to in_progress." (`move_ticket`). Expect stage `in_progress`; the history shows an unforced move by `andy`.
-3. "Move AI-50 to done." Expect a tool error (only one step forward) and no change.
+3. "Move AI-50 to done." Expect a tool error (forward is one step at a time) and no change.
 4. Open a draft PR on a branch named `AI-50-smoke` (or with `https://ai.andybernhagen.com/p/ai/t/AI-50` as the description's first line), then mark it ready for review. Expect `pr_linked` in the history, then stage `ready_for_review` by `system`. Cloud Logging: `webhook ticket update`.
 5. Close the PR without merging. Expect stage `in_progress` and the ticket in the Needs-you inbox.
 6. Force-move the ticket to `done` in the UI and delete the branch.
@@ -74,6 +74,7 @@ A move that failed shows as `webhook ticket update failed` (severity ERROR) in C
 
 - One person: remove the email from `allowed_emails` and apply; every token stops working on the next request.
 - All tokens: delete the `oauthGrants` collection in the Firestore console. Claude asks to reconnect.
+- Confirm nothing survived: wait about 10 seconds, reload `oauthGrants` and delete any document that appeared. A refresh already in flight when you deleted can still write a new access token (1 h) and, in a token's last 7 days, a new refresh token (AI-211: MCP OAuth: revoke a stolen token's chains together). Empty on the second look means revoked.
 
 ## Troubleshooting
 

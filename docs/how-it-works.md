@@ -39,7 +39,7 @@ What is built on `main` now, moved from `README.md` so its "How it works today" 
 
 - with auto-build on, Ready tickets start from the top, up to the project's "Agent tasks at once" dial (default 2, max 4), 4 across projects (1 at quota warn) and 5 agent PRs waiting for Andy; "Paused" stops new starts, and so does the quota reserve.
 - Project settings, the board and MCP `status` show why dispatch is idle (ADR-0079).
-- A ticket whose `touches` overlap a build in flight waits ("Waiting: overlaps AI-12 in flight") while the next starts; MCP `list_in_flight` shows each task's ticket, branch, PR and files (a build's ticket panel shows its branch and files), and each build gets its own ADR number (ADR-0080).
+- A ticket whose `touches` overlap a build in flight waits ("Waiting: overlaps AI-12 in flight") while the next starts; MCP `list_in_flight` shows each task's ticket, branch, PR and files (a build's ticket panel shows its branch and files), and each build gets its own ADR number (ADR-0080); sessions get theirs from the same sequence with MCP `reserve_adr_number` (AI-384).
 - Blockers can be in any project (AI-96).
 - **Clear quota idle** (banner, Project settings, MCP `clear_quota_idle`) discards a quota reading you don't believe, logged with who and when; the digest lists it (AI-74).
 - When `main` moves, each open agent PR lacking it gets a sync task: merge `main`, resolve conflicts, rerun checks, push; an unsettled conflict goes to Needs you; no auto-merge while a sync is pending (ADR-0083).

@@ -59,6 +59,7 @@ import {
   RoadmapReader,
   bumpOnWrite,
   type EpicBranchOpener,
+  AdrNumbers,
 } from "@andy/domain";
 import {
   InMemoryMergeQueueStore,
@@ -703,6 +704,12 @@ export function createServices(raw: AppDeps): Services {
       mergeQueue,
     ),
     milestones: deps.milestones ?? null,
+    // AI-384: MCP `reserve_adr_number`, on the same counter and ADR-folder read as build runs.
+    adrNumbers: new AdrNumbers(
+      deps.tracker,
+      connection ? new ConnectedCodeHost(connection) : null,
+      now,
+    ),
     mergeHolds,
     // AI-295: one reader each for the Dashboards routes and MCP `dashboard`.
     dashboard: new DashboardReader(deps.tracker, deps.runs, tickets),

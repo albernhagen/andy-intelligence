@@ -34,6 +34,8 @@ import {
   type QuotaWindow,
   type Ticket,
   type TicketEvent,
+  type AdrHoldRequest,
+  type AdrHoldResult,
 } from "../entities";
 import {
   ProjectPatch,
@@ -74,13 +76,16 @@ import {
   type UpdateBranchResult,
 } from "../ports";
 import {
+  applyAdrHold,
   applyTicketChange,
+  type AdrCounterState,
   buildProject,
   buildQuestion,
   buildTicket,
   compareRanks,
   event,
   notFound,
+  releaseAdrHoldsFrom,
 } from "../ports/work-tracker-support";
 import { applyRunPatch, buildRun, newestFirst } from "../ports/run-support";
 
@@ -91,7 +96,7 @@ export class InMemoryWorkTracker implements WorkTracker {
   private readonly events = new Map<string, TicketEvent[]>();
   private readonly questions = new Map<string, Question>();
   private readonly counters = new Map<string, number>();
-  private readonly adrCounters = new Map<string, number>();
+  private readonly adrCounters = new Map<string, AdrCounterState>();
   constructor(private readonly now: () => Date = () => new Date()) {}
 
   async createProject(input: NewProject): Promise<Project> {
@@ -121,9 +126,32 @@ export class InMemoryWorkTracker implements WorkTracker {
 
   async reserveAdrNumber(projectId: string, atLeast: number): Promise<number> {
     if (!this.projects.has(projectId)) throw notFound("project", projectId);
-    const next = Math.max(atLeast, this.adrCounters.get(projectId) ?? 0) + 1;
-    this.adrCounters.set(projectId, next);
+    const counter = this.adrCounter(projectId);
+    const next = Math.max(atLeast, counter.last) + 1;
+    this.adrCounters.set(projectId, { ...counter, last: next });
     return next;
+  }
+
+  async holdAdrNumber(
+    projectId: string,
+    atLeast: number,
+    req: AdrHoldRequest,
+  ): Promise<AdrHoldResult> {
+    if (!this.projects.has(projectId)) throw notFound("project", projectId);
+    const { state, result } = applyAdrHold(this.adrCounter(projectId), atLeast, req);
+    this.adrCounters.set(projectId, state);
+    return structuredClone(result);
+  }
+
+  async releaseAdrHolds(projectId: string, holder: string): Promise<number[]> {
+    if (!this.projects.has(projectId)) throw notFound("project", projectId);
+    const { state, released } = releaseAdrHoldsFrom(this.adrCounter(projectId), holder);
+    this.adrCounters.set(projectId, state);
+    return released;
+  }
+
+  private adrCounter(projectId: string): AdrCounterState {
+    return this.adrCounters.get(projectId) ?? { last: 0, holds: [] };
   }
 
   async createTicket(projectId: string, input: NewTicket, actor: EventActor): Promise<Ticket> {

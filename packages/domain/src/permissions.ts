@@ -32,6 +32,7 @@ export const OWNER_ACTIONS = {
   change_milestones: "create, edit or order milestones, or attach an epic to one",
   merge_pr: "merge a pull request through merge_pr",
   release: "promote or roll back a release",
+  reserve_adr_number: "reserve an ADR number",
   epic_check: "turn an epic's check on or off, or close an epic waiting for it",
 } as const;
 

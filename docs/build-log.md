@@ -5,7 +5,7 @@ Status lives in **tickets in project `AI`** (ADR-0047 phase 1). This page keeps 
 ## Where to look
 
 - **Tickets:** the UI at `https://ai.andybernhagen.com`, or the MCP `status` tool (connector `andy-intelligence`): no key → counts per stage; a key (e.g. `AI-1`) → stage, Definition of Ready gaps, questions, history.
-- **Moving a ticket:** Andy, in the UI, any move; cancel and archive also over MCP `cancel_ticket` / `archive_ticket`. Sessions and agents: MCP `move_ticket`, one step forward. PRs move their ticket (AI-14): name the key in the branch, or start the description with the ticket link; opened → Ready for review, merged → Done, from any open stage (ADR-0067); closed unmerged → In progress + Needs-you.
+- **Moving a ticket:** Andy, in the UI, any move; cancel and archive also over MCP `cancel_ticket` / `archive_ticket`. Sessions and agents: MCP `move_ticket`, one step forward or back any number of stages, not out of Done or Cancelled (ADR-0163). PRs move their ticket (AI-14): name the key in the branch, or start the description with the ticket link; opened → Ready for review, merged → Done, from any open stage (ADR-0067); closed unmerged → In progress + Needs-you.
 - **Milestones:** scope and Done when in [`architecture/milestones.md`](architecture/milestones.md) (ARCHITECTURE §12); each milestone's tickets on the roadmap. Terms: [`architecture/glossary.md`](architecture/glossary.md).
 
 ## Milestone map (ADR-0060: Milestones in completion order)

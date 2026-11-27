@@ -188,10 +188,10 @@ describe("syncEpicStages (ADR-0164)", () => {
     const epic = await newEpic("Checked", null, true);
     await moveTo(await newTicket(epic.id), "done");
     expect((await get(epic)).stage).toBe("ready_for_review");
-    await expect(service.moveForward(epic.key, "done", "agent:run-1")).rejects.toMatchObject({
+    await expect(service.moveBySession(epic.key, "done", "agent:run-1")).rejects.toMatchObject({
       code: "forbidden",
     });
-    const closed = await service.moveForward(epic.key, "done", "user:owner");
+    const closed = await service.moveBySession(epic.key, "done", "user:owner");
     expect(closed.stage).toBe("done");
     expect((await get(epic)).stage).toBe("done");
   });
@@ -199,7 +199,7 @@ describe("syncEpicStages (ADR-0164)", () => {
   it("GivenAClosedCheckedEpic_WhenATicketIsAdded_ThenItReopensAndWaitsAgainLater", async () => {
     const epic = await newEpic("Checked", null, true);
     await moveTo(await newTicket(epic.id), "done");
-    await service.moveForward(epic.key, "done", "andy");
+    await service.moveBySession(epic.key, "done", "andy");
     const late = await newTicket(epic.id, "Late");
     await moveTo(late, "ready");
     expect((await get(epic)).stage).toBe("in_progress");
@@ -353,8 +353,16 @@ describe("epic moves are refused (ADR-0164)", () => {
     ).rejects.toMatchObject({ code: "invalid_transition" });
   });
 
-  it("GivenAnEpic_WhenMoveTicketStepsItForward_ThenItIsRefused", async () => {
-    await expect(service.moveForward(epic.key, "ready", "user:owner")).rejects.toThrow(
+  it("GivenAnEpic_WhenMoveTicketStepsItForwardOrBack_ThenItIsRefused", async () => {
+    await expect(service.moveBySession(epic.key, "ready", "user:owner")).rejects.toThrow(
+      "its state follows its tickets",
+    );
+    // AI-397's backward moves skip `move`, so they are checked too.
+    await service.create("ai", { title: "Child", parentId: epic.id }, "andy");
+    const child = (await service.findByKey("AI-2"))!;
+    await service.move("ai", child.id, "in_progress", "andy", { force: true });
+    expect((await service.findByKey(epic.key)).stage).toBe("in_progress");
+    await expect(service.moveBySession(epic.key, "backlog", "user:owner")).rejects.toThrow(
       "its state follows its tickets",
     );
   });

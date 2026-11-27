@@ -13,6 +13,7 @@ import {
   type Run,
 } from "@andy/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AdrNumbers } from "./adr-numbers";
 import { BuildDispatcher } from "./build-dispatch";
 import { MAX_BUILD_RUNS_PER_TICKET, branchFor } from "./builds";
 import { MAX_ACTIVE_RUNS_GLOBAL, MAX_PRS_WAITING_PER_PROJECT } from "./dispatch-caps";
@@ -383,6 +384,17 @@ describe("BuildDispatcher", () => {
       expect([runA.reservedAdr, runB.reservedAdr]).toEqual([83, 84]);
       expect(runA.prompt).toContain("Your ADR number, if you need one: ADR-0083");
       expect(runA.prompt).toContain(`risk IDs carry the ticket key: R-${a.key} `);
+    });
+
+    it("GivenASessionHoldsAnAdrNumber_WhenABuildStarts_ThenTheBuildSkipsIt", async () => {
+      host.files.set("docs/architecture/adr/0082-y.md", "y");
+      const { dispatcher } = wire();
+      const held = await tracker.createTicket(projectId, { title: "Held" }, "system");
+      const a = await inReady("A");
+      const session = new AdrNumbers(tracker, host);
+      expect(await session.reserveForTicket("user:andy", held.key)).toMatchObject({ number: 83 });
+      await dispatcher.next(projectId);
+      expect((await builds(a.id))[0]!.reservedAdr).toBe(84);
     });
 
     it("GivenNoAdrFiles_WhenABuildStarts_ThenNoNumberIsReserved", async () => {

@@ -57,7 +57,8 @@ import {
 import { buildBaseBranch } from "./night-branch";
 import type { EpicMode } from "./epic-mode";
 import { MAX_ACTIVE_RUNS_GLOBAL, isInFlight, wasDispatched } from "./dispatch-caps";
-import { blockingRun, editingRuns, highestAdrNumber, runTouches } from "./dispatch-conflicts";
+import { highestAdrOnDefaultBranch } from "./adr-numbers";
+import { blockingRun, editingRuns, runTouches } from "./dispatch-conflicts";
 import { isDispatchable, resolveWorker } from "./worker";
 import { cascadesFrom, withEpicOverrides } from "./overrides";
 import { resolveExecutor, wantedExecutor } from "./executor";
@@ -138,9 +139,6 @@ export const DEFAULT_ROUTE: Route = TIER_ROUTES.fast;
 function oldestFirst(a: Run, b: Run): number {
   return (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id);
 }
-
-/** Where a repo keeps its ADRs (`NNNN-*.md`); build runs' numbers are reserved above them (ADR-0080, ADR-0104). */
-export const ADR_DIR = "docs/architecture/adr";
 
 /**
  * How each provider is billed (ARCHITECTURE §5 Provider). The executor takes the run's
@@ -2112,6 +2110,11 @@ export class RunService {
     }
   }
 
+  /** The ticket's runs queued or running (ADR-0163: a session's backward move waits for them). */
+  async activeForTicket(projectId: string, ticketId: string): Promise<Run[]> {
+    return (await this.runs.listActive(projectId)).filter((r) => r.ticketId === ticketId);
+  }
+
   /**
    * Cancels the ticket's runs in flight (AI-15: Cancel and archive tickets): stops each one at
    * the executor, then marks it cancelled. Throws `cancel_failed` if the executor can't stop a
@@ -2119,7 +2122,7 @@ export class RunService {
    * that finished meanwhile is left as it is. Returns the runs it cancelled.
    */
   async cancelForTicket(projectId: string, ticketId: string): Promise<Run[]> {
-    const active = (await this.runs.listActive(projectId)).filter((r) => r.ticketId === ticketId);
+    const active = await this.activeForTicket(projectId, ticketId);
     const cancelled: Run[] = [];
     for (const run of active) {
       const handle = handleOf(run);
@@ -2402,14 +2405,12 @@ export class RunService {
   /**
    * The next ADR number for a build run (ADR-0080), reserved atomically on the project's counter:
    * above the highest `NNNN-*.md` in the ADR folder on the default branch and every number
-   * reserved before. Null, never a guess, when the repo has no ADR files or they can't be listed.
+   * reserved before, sessions' holds included (`AdrNumbers`, AI-384). Null, never a guess, when the repo has no ADR files or they can't be listed.
    */
   private async reserveAdr(projectId: string, repo: string): Promise<number | null> {
     if (!this.codeHost) return null;
     try {
-      const info = await this.codeHost.getRepo(repo);
-      const files = info ? await this.codeHost.listFiles(repo, ADR_DIR, info.defaultBranch) : null;
-      const highest = files === null ? null : highestAdrNumber(files);
+      const highest = await highestAdrOnDefaultBranch(this.codeHost, repo);
       if (highest === null) return null;
       if (highest >= ADR_NUMBER_MAX) return null;
       const next = await this.tracker.reserveAdrNumber(projectId, highest);
