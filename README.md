@@ -67,7 +67,7 @@ node scripts/coordinator/<tool>.mjs --help  # coordinator tools (runbook coordin
 | pre-commit | `prettier --check`, `eslint`, `terraform fmt -check`, actionlint (skipped if absent)  |
 | pre-push   | `pnpm typecheck`, tests the push affects on a quarter of the cores (ADR-0113, AI-219) |
 
-Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claude/settings.json`): Prettier + ESLint `--fix` on that file; unfixable lint errors go to the agent. CI runs these plus build and actionlint. Format failure on commit: `pnpm format`, re-stage. `--no-verify` is for emergencies only.
+Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claude/settings.json`): Prettier + ESLint `--fix` on that file; unfixable lint errors go to the agent. CI runs these plus build and actionlint; job `check` waits on parallel parts (lint, typecheck, two test shards, build) and passes only when all succeed (AI-402). Format failure on commit: `pnpm format`, re-stage. `--no-verify` is for emergencies only.
 
 Security checks on PRs, the project baseline and running locally: [`docs/develop-checks.md`](docs/develop-checks.md).
 
@@ -100,7 +100,7 @@ Design rules: [`apps/web/design.md`](apps/web/design.md). One shell on every scr
 
 - API client: `openapi-fetch` typed by `apps/web/src/lib/api.gen.ts`, generated (not committed) by `pnpm typecheck` or `pnpm --filter @andy/web gen:api`.
 - Tests (`apps/web/src/**/*.test.tsx`, jsdom) render the UI against the real API in-process (`createApp` + fakes), so they also exercise auth and the ticket rules.
-- Screenshot checks (`apps/web/e2e/`, Playwright) against the API over seeded fakes: every screen in `apps/web/src/router.tsx` at 1280×800 and 390×844 (`e2e/screens.ts`), the shell, inbox, board, ticket panel and project settings also dark, plus state-specific images. A new route with no entry in `e2e/screens.ts` fails `pnpm test`. CI job `ui-screenshots` fails on a diff and uploads the actual images; a docs-only PR passes without running; its Playwright image (pinned by digest in `ui-screenshots.yml`) must match the locked `@playwright/test`, or it fails first naming the fix (`scripts/playwright-image.mjs`; Dependabot bumps Playwright in its own PR); a PR changing a stored image needs the before-and-after table (release-note check, AI-353). Stored images are Linux renders:
+- Screenshot checks (`apps/web/e2e/`, Playwright) against the API over seeded fakes: every screen in `apps/web/src/router.tsx` at 1280×800 and 390×844 (`e2e/screens.ts`), the shell, inbox, board, ticket panel and project settings also dark, plus state-specific images. A new route with no entry in `e2e/screens.ts` fails `pnpm test`. CI job `ui-screenshots` runs them on two Playwright workers sharing one dev server, so a check never changes the fake API (it intercepts writes, AI-402), fails on a diff and uploads the actual images; a docs-only PR passes without running; its Playwright image (pinned by digest in `ui-screenshots.yml`) must match the locked `@playwright/test`, or it fails first naming the fix (`scripts/playwright-image.mjs`; Dependabot bumps Playwright in its own PR); a PR changing a stored image needs the before-and-after table (release-note check, AI-353). Stored images are Linux renders:
 
 ```sh
 pnpm --filter @andy/web screenshots:update   # in Docker: write changed images, then commit them
