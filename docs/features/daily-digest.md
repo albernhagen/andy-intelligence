@@ -7,6 +7,6 @@ A model-written summary of yesterday on top (days end at midnight Mountain time;
 - **Open PRs** (up to 20): each with one sentence per wait reason the merge gate recorded (`mergeVerdict`); no code-host call.
 - **Next up** (up to 10): Ready tickets in dispatch order, each starts now, next or skipped with why, then why nothing more starts: a dry run of the dispatcher's checks (`next-up.ts`) that starts nothing.
 
-Each says when cut short. Not shown: which check failed, why a session's PR waits, night-launch limits, a plan awaiting Andy, spend caps.
+Each says when cut short. Not shown: which check failed, why a session's PR waits, night-launch limits, a plan awaiting Andy, spend caps; the build-run cap of a ticket unchanged in the window (its item says so).
 
 **How to use:** What's new in a project shows its exceptions first, then Open PRs and Next up, with a 24 hours window (`/p/AI/digest` opens it; AI-341); MCP `digest` with `project`, optional `hours`, `until`; `GET /api/projects/ai/digest`; retry a failed summary: What's new → **Retry once**, MCP `retry_digest_summary`

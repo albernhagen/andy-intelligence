@@ -125,6 +125,20 @@ describe("DigestReader handover", () => {
     expect(d.handover!.idle).toBe("Dispatch is at the global cap (4 agent tasks at once)");
   });
 
+  it("GivenAReadyTicketUntouchedForDays_WhenRead_ThenItsItemSaysTheBuildRunCapWasntChecked", async () => {
+    const { reader } = wire();
+    await tracker.updateProject(projectId, { autoBuild: false });
+    const old = await inReady("Old");
+    ms += 3 * 86_400_000;
+    const fresh = await inReady("Fresh");
+
+    const d = await reader.digest(projectId, digestWindow(now()));
+
+    const byKey = new Map(d.handover!.nextUp.map((i) => [i.ticketKey, i.reason]));
+    expect(byKey.get(old.key)).toBe("Build-run cap not checked: its agent tasks weren't read");
+    expect(byKey.get(fresh.key)).toBeNull();
+  });
+
   it("GivenAPastWindow_WhenRead_ThenNoHandover", async () => {
     const { reader } = wire();
     await inReady("One");
@@ -215,7 +229,8 @@ describe("buildDigest handover text", () => {
         "AI digest · last 24 hours: nothing happened.",
         "",
         "Next up (1)",
-        "- Next: AI-1: Board",
+        // Untouched in the window, so its agent tasks weren't read (no reads per ticket).
+        "- Next: AI-1: Board · Build-run cap not checked: its agent tasks weren't read",
         "- Nothing starts on its own: auto-build is off, so Andy starts each build",
       ].join("\n"),
     );

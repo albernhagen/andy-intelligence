@@ -179,9 +179,7 @@ export function nextUp(input: NextUpInput): NextUp {
       items.push({ ...label(ticket), status: "skipped", reason: why });
       continue;
     }
-    const note = planRequired(project.planApproval, ticket)
-      ? "Starts with a plan run (plan approval is on), unless an approved plan exists"
-      : null;
+    const note = noteFor(ticket, project, input.ticketRuns);
     if (verdict !== "start") {
       items.push({ ...label(ticket), status: "next", reason: note });
       continue;
@@ -199,6 +197,25 @@ export function nextUp(input: NextUpInput): NextUp {
     truncated: ready.length > DIGEST_NEXT_UP_MAX,
     idle: idleLine(off, verdict, project, ready.length, wouldStart.size),
   };
+}
+
+/**
+ * How the item starts, and what the dry run couldn't check: a ticket's agent tasks are read only
+ * when it changed in the window (no reads per ticket here), so for the rest the build-run cap is
+ * unchecked. The dispatcher flags a ticket at that cap Needs-you on its first refusal.
+ */
+function noteFor(
+  ticket: Ticket,
+  project: DispatchProject,
+  ticketRuns: ReadonlyMap<string, readonly Run[]>,
+): string | null {
+  const notes = [
+    planRequired(project.planApproval, ticket)
+      ? "Starts with a plan run (plan approval is on), unless an approved plan exists"
+      : null,
+    ticketRuns.has(ticket.id) ? null : "Build-run cap not checked: its agent tasks weren't read",
+  ].filter((n): n is string => n !== null);
+  return notes.length ? notes.join("; ") : null;
 }
 
 /** Why nothing starts on its own before any cap is asked, or null when dispatch runs. */
