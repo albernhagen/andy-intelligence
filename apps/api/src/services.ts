@@ -35,6 +35,7 @@ import {
   EmailNotifications,
   wakeAfterRunEnd,
   notifyOnNeedsYou,
+  syncEpicStages,
   NightLaunches,
   EpicBranches,
   MorningPullRequests,
@@ -136,6 +137,7 @@ export const METERED_READS = {
     "listTicketsChangedSince",
     "getTicketByKey",
     "countByStage",
+    "countChildrenByStage",
     "listEvents",
     "getLatestPullRequest",
     "getQuestion",
@@ -188,9 +190,11 @@ export function createServices(raw: AppDeps): Services {
     : input;
   // AI-222: every write bumps its project's counter, so cached board and list reads stay fresh.
   const versions = notified.projectVersions;
-  const deps = versions
+  const bumped = versions
     ? { ...notified, ...bumpOnWrite(notified.tracker, notified.runs, versions) }
     : notified;
+  // ADR-0164: every ticket write keeps its epic's stage in step; the epic's write bumps too.
+  const deps = { ...bumped, tracker: syncEpicStages(bumped.tracker) };
   const readCache = versions ? new ProjectReadCache(versions) : null;
   // AI-317: the board and ticket list refresh from changed tickets, not the whole project.
   const snapshots = readCache ? new TicketSnapshots(deps.tracker) : null;

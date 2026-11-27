@@ -40,6 +40,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
+import { Switch } from "@/components/ui/switch";
 import { PanelSelect } from "@/components/PanelSelect";
 import {
   ticketQueryKey,
@@ -336,11 +337,12 @@ function Next({ ticket: t }: { ticket: Ticket }) {
                 variant="outline"
               />
             )}
-            <Readiness {...pathOf(t)} />
+            {/* An epic never moves (ADR-0164), so its Definition of Ready decides nothing. */}
+            {t.type !== "epic" && <Readiness {...pathOf(t)} />}
           </>
         }
       />
-      <ReadinessMissing {...pathOf(t)} />
+      {t.type !== "epic" && <ReadinessMissing {...pathOf(t)} />}
       <OpenQuestions {...pathOf(t)} />
     </section>
   );
@@ -500,10 +502,28 @@ function Rail({ ticket: t }: { ticket: Ticket }) {
         patch={(v) => ({ parentId: v === "" ? null : v })}
       />
       {t.type !== "epic" && <TicketMilestone ticket={t} />}
+      {t.type === "epic" && <NeedsCheckField ticket={t} />}
       <BlockedBy ticket={t} tickets={tickets} />
       <HowItRuns ticket={t} tickets={tickets} />
       <CancelArchiveControls ticket={t} />
     </aside>
+  );
+}
+
+/** ADR-0164: with it on, the epic waits for Andy's check when its last ticket is Done. */
+function NeedsCheckField({ ticket: t }: { ticket: Ticket }) {
+  const s = useTicketSave(t, "Needs your check");
+  return (
+    <div className="space-y-1">
+      <Switch
+        label="Needs your check"
+        description="Waits for you when its last ticket is Done"
+        checked={t.needsCheck}
+        disabled={s.pending}
+        onCheckedChange={(on) => s.save({ needsCheck: on })}
+      />
+      {s.error}
+    </div>
   );
 }
 

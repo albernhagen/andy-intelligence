@@ -31,7 +31,7 @@ const epicFields = {
   outcome: z.string().nullable(),
   doneWhen: z.array(z.string()),
   stage: Stage,
-  state: z.enum(["not_started", "in_progress", "done"]),
+  state: z.enum(["not_started", "in_progress", "waiting_for_check", "done"]),
   progress: z.object({ done: Count, total: Count }),
   counts: z.object({
     needsYou: Count,

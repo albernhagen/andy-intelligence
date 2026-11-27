@@ -36,6 +36,7 @@ export const MilestoneMap = z
         key: z.string(),
         title: z.string(),
         stage: Stage,
+        state: z.enum(["not_started", "in_progress", "waiting_for_check", "done"]),
         progress: z.object({ done: z.number().int(), total: z.number().int() }),
         done: z.array(z.string()),
         inReview: z.array(MapItem),

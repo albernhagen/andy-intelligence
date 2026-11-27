@@ -12,6 +12,7 @@ import {
   DomainError,
   inboxCards,
   waitingCounts,
+  epicStateOf,
   readEpicRollup,
   statusLineTickets,
   ticketMilestoneHold,
@@ -55,6 +56,9 @@ const EditInput = {
   }).shape,
   outcome: TicketFields.shape.outcome.describe(
     "Epics only: what is true when the epic is done, at most 300 characters; null clears it.",
+  ),
+  needsCheck: TicketFields.shape.needsCheck.describe(
+    "Epics only (ADR-0164): true makes the epic wait for Andy's check when its last ticket is Done, instead of closing itself; he closes it with move_ticket to done.",
   ),
   blockedBy: z
     .array(TicketKey)
@@ -132,7 +136,12 @@ export async function statusLineOf<S extends TicketStatus>(
         )
       : Promise.resolve(undefined),
   ]);
-  return { ...status, statusLine: line, ...(epic && { epic }) };
+  // ADR-0164: the epic's state, as the roadmap and milestone page name it.
+  return {
+    ...status,
+    statusLine: line,
+    ...(epic && { epic: { ...epic, state: epicStateOf(ticket.stage) } }),
+  };
 }
 
 async function lineFor(

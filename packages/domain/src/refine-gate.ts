@@ -338,9 +338,11 @@ export class RefineGate {
     const fills = refocus ? {} : refineFills(ticket, output);
     const open = (await this.tracker.listQuestions({ ticketId: ticket.id, status: "open" })).length;
     const dor = checkDor({ ...ticket, ...fills, refineAssumptions }, open);
-    const toReady = open === 0 && dor.met;
+    const readyNow = open === 0 && dor.met;
+    // ADR-0164: an epic's stage follows its tickets, so refine never moves it.
+    const toReady = readyNow && ticket.type !== "epic";
     // Nothing to ask and still not ready: another run would learn nothing new, so Andy decides.
-    const needsAttention = open > 0 || !toReady;
+    const needsAttention = !readyNow;
     await this.tracker.updateTicket(
       ticket.projectId,
       ticket.id,

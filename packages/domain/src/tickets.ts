@@ -32,6 +32,7 @@ import { inboxCards, waitingCounts } from "./inbox-order";
 import {
   blockerKeys,
   blockerProblem,
+  needsCheckProblem,
   outcomeProblem,
   parentProblem,
   projectOfKey,
@@ -156,7 +157,7 @@ export class TicketService {
     { upNext = false }: { upNext?: boolean } = {},
   ): Promise<Ticket> {
     const parsed = NewTicket.parse(input);
-    const badOutcome = outcomeProblem(parsed);
+    const badOutcome = outcomeProblem(parsed) ?? needsCheckProblem(parsed);
     if (badOutcome) throw new DomainError("invalid_field", badOutcome);
     await this.checkMergeModeOverride(projectId, parsed.overrides?.mergeMode);
     const parentId = parsed.parentId && (await this.parentIdOf(projectId, parsed.parentId));
@@ -382,6 +383,10 @@ export class TicketService {
     ifUpdatedAt?: string,
   ): Promise<Ticket> {
     const current = await this.require(projectId, ticketId);
+    // ADR-0164: turning the check off closes a waiting epic, so only the owner changes it.
+    if (fields.needsCheck !== undefined && fields.needsCheck !== current.needsCheck) {
+      requireCan(actor, "epic_check", projectId);
+    }
     await this.checkMergeModeOverride(projectId, fields.overrides?.mergeMode);
     if (fields.parentId && fields.parentId !== current.parentId) {
       const chain = await parentChain(this.tracker, projectId, fields.parentId);
@@ -392,7 +397,7 @@ export class TicketService {
       fields = { ...fields, blockedBy: await this.checkedBlockers(current, fields.blockedBy) };
     }
     const merged = { ...current, ...stripUndefined(fields) };
-    const badOutcome = outcomeProblem(merged);
+    const badOutcome = outcomeProblem(merged) ?? needsCheckProblem(merged);
     if (badOutcome) throw new DomainError("invalid_field", badOutcome);
     const dor = checkDor(merged, await this.openQuestionCount(ticketId));
     const updated = await this.tracker.updateTicket(
@@ -628,6 +633,7 @@ export class TicketService {
     if (to === "cancelled") {
       throw new DomainError("invalid_transition", "cancel the ticket instead of moving it");
     }
+    if (ticket.type === "epic") checkEpicMove(ticket, to, actor);
     if (ticket.stage === "cancelled") requireCan(actor, "reopen_ticket", projectId);
     if (force) {
       // ADR-0057: the reason is optional; `forced: true` in history is the audit trail.
@@ -841,6 +847,8 @@ export class TicketService {
    */
   async moveBySession(key: string, to: Stage, actor: EventActor): Promise<Ticket> {
     const ticket = await this.findByKey(key);
+    // ADR-0164: backward moves skip `move`, so the epic rule is checked here too.
+    if (ticket.type === "epic") checkEpicMove(ticket, to, actor);
     if (isForwardMove(ticket.stage, to)) return this.move(ticket.projectId, ticket.id, to, actor);
     if (to === ticket.stage) {
       throw new DomainError("invalid_transition", `${key} is already in ${to}`);
@@ -1129,4 +1137,21 @@ export class TicketService {
 
 function stripUndefined<T extends object>(value: T): Partial<T> {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+/**
+ * ADR-0164: an epic's stage follows its tickets, so nobody moves it, forced or not. Two moves
+ * stay: reopening a Cancelled epic, and the owner closing one that waits for his check
+ * (`needsCheck`, Ready for review → Done).
+ */
+function checkEpicMove(epic: Ticket, to: Stage, actor: EventActor): void {
+  if (epic.stage === "cancelled" && to === "backlog") return;
+  if (epic.needsCheck && epic.stage === "ready_for_review" && to === "done") {
+    requireCan(actor, "epic_check", epic.projectId);
+    return;
+  }
+  throw new DomainError(
+    "invalid_transition",
+    `${epic.key} is an epic: its state follows its tickets, so it can't be moved`,
+  );
 }

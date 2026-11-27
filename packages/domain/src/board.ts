@@ -134,6 +134,15 @@ export function showsVerifyingLane(
   return (project?.deployKind ?? "none") !== "none" || tickets.some((t) => t.stage === "verifying");
 }
 
+/**
+ * The tickets that get a card (AI-403): every type but `epic`. An epic's stage follows its
+ * tickets (ADR-0164), so it shows as a group header instead, and lane counts leave it out. The
+ * web board and MCP `board` both filter with it, so they can't drift.
+ */
+export function boardCards<T extends Pick<Ticket, "type">>(tickets: readonly T[]): T[] {
+  return tickets.filter((t) => t.type !== "epic");
+}
+
 /** Whether a ticket shows on the board: archived ones only with `showArchived` (AI-15). */
 export function onBoard(ticket: Pick<BoardTicket, "archived">, showArchived: boolean): boolean {
   return showArchived || !ticket.archived;

@@ -26,8 +26,11 @@ async function openPanel(fields: Record<string, unknown>) {
 
 /** Opens every folded part of the panel, so the check sees all its controls. */
 async function openEverything(h: ReturnType<typeof renderApp>, panel: HTMLElement) {
-  await h.user.click(within(panel).getByRole("button", { name: "Move…" }));
-  await h.user.click(within(panel).getByRole("button", { name: "Force move…" }));
+  // An epic has no moves (ADR-0164): its stage follows its tickets.
+  if (within(panel).queryByRole("button", { name: "Move…" })) {
+    await h.user.click(within(panel).getByRole("button", { name: "Move…" }));
+    await h.user.click(within(panel).getByRole("button", { name: "Force move…" }));
+  }
   const howItRuns = within(panel).getByRole("group", { name: "How it runs" });
   await h.user.click(howItRuns.querySelector("summary")!);
   await within(howItRuns).findByRole("radiogroup", { name: "Worker" });

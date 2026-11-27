@@ -195,6 +195,7 @@ export class FirestoreWorkTracker implements WorkTracker {
         .filter(
           (t) => filter.needsAttention === undefined || t.needsAttention === filter.needsAttention,
         )
+        .filter((t) => filter.parentId === undefined || t.parentId === filter.parentId)
         .sort((a, b) => compareRanks(a.rank, b.rank));
     }
     // v2 documents may still store `monitoring` for Done until their next write (ticketV2toV3),
@@ -209,6 +210,8 @@ export class FirestoreWorkTracker implements WorkTracker {
     // would skip them, so `archived: false` filters in memory. `needsAttention` filters in memory
     // too: v1 documents store it as `needsYou` until their next write (ticketV1toV2).
     if (filter.archived === true) query = query.where("archived", "==", true);
+    // ADR-0164: an epic's children. Equality filters only, so no composite index is needed.
+    if (filter.parentId !== undefined) query = query.where("parentId", "==", filter.parentId);
     const tickets = (await query.get()).docs
       .map((d) => d.data())
       .filter((t) => filter.archived !== false || !t.archived)
@@ -232,21 +235,49 @@ export class FirestoreWorkTracker implements WorkTracker {
   /**
    * Count aggregations, equality filters only (no composite index). Older documents have no
    * `archived` field, so unarchived = all − archived; v2 Done may be stored as `monitoring`.
+   * Epics are left out (ADR-0164): unarchived epics are counted the same way and subtracted.
    */
   async countByStage(projectId: string): Promise<Record<Stage, number>> {
     const tickets = this.tickets(projectId);
-    const count = async (stored: string) => {
-      const byStage = tickets.where("stage", "==", stored);
+    const unarchived = async (query: Query<Ticket>) => {
       const [all, archived] = await Promise.all([
-        byStage.count().get(),
-        byStage.where("archived", "==", true).count().get(),
+        query.count().get(),
+        query.where("archived", "==", true).count().get(),
       ]);
       return all.data().count - archived.data().count;
+    };
+    const count = async (stored: string) => {
+      const byStage = tickets.where("stage", "==", stored);
+      const [all, epics] = await Promise.all([
+        unarchived(byStage),
+        unarchived(byStage.where("type", "==", "epic")),
+      ]);
+      return all - epics;
     };
     const counted = await Promise.all(
       Stage.options.map(async (stage) => {
         const stored = stage === "done" ? STORED_AS_DONE : [stage];
         const counts = await Promise.all(stored.map(count));
+        return [stage, counts.reduce((a, b) => a + b, 0)] as const;
+      }),
+    );
+    return Object.fromEntries(counted) as Record<Stage, number>;
+  }
+
+  /**
+   * ADR-0164: one count aggregation per stored stage, equality filters only (no composite index);
+   * archived children count too. v2 Done may be stored as `monitoring`.
+   */
+  async countChildrenByStage(projectId: string, parentId: string): Promise<Record<Stage, number>> {
+    const children = this.tickets(projectId).where("parentId", "==", parentId);
+    const counted = await Promise.all(
+      Stage.options.map(async (stage) => {
+        const stored = stage === "done" ? STORED_AS_DONE : [stage];
+        const counts = await Promise.all(
+          stored.map(
+            async (s) => (await children.where("stage", "==", s).count().get()).data().count,
+          ),
+        );
         return [stage, counts.reduce((a, b) => a + b, 0)] as const;
       }),
     );

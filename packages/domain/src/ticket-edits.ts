@@ -13,6 +13,14 @@ export function outcomeProblem(ticket: Pick<Ticket, "type" | "outcome">): string
     : "only an epic has an outcome; set the type to epic first";
 }
 
+/** Why the ticket can't carry `needsCheck` (ADR-0164: epics only), or null when it can. */
+export function needsCheckProblem(ticket: Pick<Ticket, "type" | "needsCheck">): string | null {
+  if (!ticket.needsCheck || ticket.type === "epic") return null;
+  return ticket.type
+    ? `only an epic waits for the owner's check; this ticket is a ${ticket.type} (turn needsCheck off to change an epic's type)`
+    : "only an epic waits for the owner's check; set the type to epic first";
+}
+
 /** Where a reordered ticket goes: directly above or below another ticket's key. */
 export type ReorderAnchor = { above: string } | { below: string };
 

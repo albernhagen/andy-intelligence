@@ -198,7 +198,8 @@ describe("epic roll-up API and MCP status (AI-85)", () => {
 
     const status = await mcpStatus(epic.key);
 
-    expect(status.epic).toEqual(json);
+    // ADR-0164: MCP adds the epic's state, read from its stage as the roadmap reads it.
+    expect(status.epic).toEqual({ ...json, state: "not_started" });
   });
 
   it("GivenAFeatureKey_WhenMcpStatusIsCalled_ThenNoEpicRollUp", async () => {
