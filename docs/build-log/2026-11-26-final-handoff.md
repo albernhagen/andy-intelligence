@@ -52,5 +52,5 @@ Keep project AI's deploy kind at `none` until the Verifying stage is proven on t
 - GitHub does not enforce code-owner review on kept paths (AI-380); only `mergeVerdict` refuses them.
 - Desktop sessions need the Mac awake. Cloud sessions avoid that; a clean start with the corrected setup command is not yet proven.
 - AI-393: Every project has a logo is Done, but copying the logo to the project's repo and drafting options have no ticket.
-- Cloud worker sessions get every connector connected in claude.ai (Gmail, Calendar, Drive), not only `andy-intelligence` (risk R-AI-149-2); Andy has not decided whether to turn the others off.
+- Cloud worker sessions get every connector connected in claude.ai (Gmail, Calendar, Drive), not only `andy-intelligence` (risk R-AI-149-2); Andy decided on 2026-11-26 to keep them; the risk stays open.
 - Two Dependabot PRs stay open: PR #437 (needs AI-394) and PR #428 (web-push 4.0 breaks its import; only M7: Mobile uses it).

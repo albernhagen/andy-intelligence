@@ -18,7 +18,6 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - `autoMerge` on for project `AI`: after a trial of five tickets where the gate's `would_auto_merge` calls are compared with the coordinator's (Andy, 2026-11-10).
 - Context sources design (open question 12).
 - Final review and handoff, where everything stands and what is next: [2026-11-26-final-handoff.md](build-log/2026-11-26-final-handoff.md) (earlier: [2026-11-23 outcome](build-log/2026-11-23-review-outcome.md)).
-- AI-151: Prove a cloud worker end to end and fix the runbook to match: cloud workers get every connector connected in claude.ai (Gmail, Calendar, Drive and more), not only `andy-intelligence`. Keep, or turn the others off for worker sessions (risk R-AI-149-2; question in the PR).
 - AI-380: GitHub does not enforce code-owner review on kept paths here; only code (`mergeVerdict`) refuses them. Keep that, or make GitHub a backstop: PRs opened by a non-owner identity (works only if the runbook `onboard-a-repo.md` §1b cause check shows `REVIEW_REQUIRED`), or 1 required approval with the App approving non-kept PRs before it merges.
 
 ## Blocked on Andy
