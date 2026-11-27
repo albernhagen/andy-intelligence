@@ -6,9 +6,9 @@ You never handle the App's private key or webhook secret: GitHub hands them to t
 
 The App's URLs come from `PUBLIC_URL` (`https://ai.andybernhagen.com`, ADR-0044). If you connected before the custom domain, change the App's Homepage, Setup and Webhook URLs by hand (runbook `custom-domain.md` §6).
 
-| App                                                      | Permissions                                                                                                         | Webhook events                                                   | Credentials                                                                                            |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Control plane (default name `andy-intelligence-control`) | read: metadata, checks · write: contents, pull requests, actions (agent tasks, [`agent-runs.md`](agent-runs.md) §1) | `pull_request`, `check_run`, `workflow_run` → `/webhooks/github` | Secret Manager (`github-app-private-key`, `github-webhook-secret`); IDs in Firestore `config/codeHost` |
+| App                                                      | Permissions                                                                                                                         | Webhook events                                                   | Credentials                                                                                            |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Control plane (default name `andy-intelligence-control`) | read: metadata, checks · write: contents, pull requests, actions (agent tasks, [`agent-runs.md`](agent-runs.md) §1), workflows (§7) | `pull_request`, `check_run`, `workflow_run` → `/webhooks/github` | Secret Manager (`github-app-private-key`, `github-webhook-secret`); IDs in Firestore `config/codeHost` |
 
 ## 1. Apply Terraform (`infra/control-plane`)
 
@@ -70,6 +70,17 @@ New versions take effect within 5 minutes (the API's cache); no redeploy.
 | Private key               | App settings → **Generate a private key** → `gcloud secrets versions add github-app-private-key --data-file=<downloaded .pem> --project andy-intelligence-512400` → delete the file → after 5 minutes delete the old key in App settings → `gcloud secrets versions disable <old> --secret github-app-private-key`. |
 | Webhook secret            | `openssl rand -hex 32 \| tr -d '\n' \| pbcopy`, then `pbpaste \| gcloud secrets versions add github-webhook-secret --data-file=-` → paste into App settings → Webhook secret → clear the clipboard (`pbcopy < /dev/null`). Deliveries in the next 5 minutes may fail; redeliver them.                               |
 | Start over with a new App | Delete the App on GitHub, delete Firestore `config/codeHost`, wait 5 minutes, then step 2.                                                                                                                                                                                                                          |
+
+## 7. Grant the `workflows` permission (ADR-0116)
+
+Andy, 2026-11-26. Lets GitHub accept the App's merges of PRs that edit `.github/workflows/**` (Dependabot Actions bumps). Code still keeps those PRs for you until AI-164: Dependency agent: verify GitHub Actions pin SHAs ships.
+
+1. GitHub → your avatar → **Settings** → **Developer settings** → **GitHub Apps** → `andy-intelligence-control` → **Edit**.
+2. **Permissions & events** → **Repository permissions** → **Workflows** → **Access: Read and write** → **Save changes**.
+3. Accept it on each installation: GitHub → **Settings** → **Applications** → **Installed GitHub Apps** → `andy-intelligence-control` → **Configure** → the banner about updated permissions → **Review request** → **Accept new permissions**. Until accepted, that installation's tokens don't have it. One installation covers every repo it lists.
+4. Check: the same Configure page lists "Read and write access to … workflows".
+
+Reconnecting GitHub from the UI (§2) creates an App without `workflows` until AI-164 adds it to `APP_PERMISSIONS`: repeat this section after a reconnect. To revoke, set Workflows back to **No access**.
 
 ## Troubleshooting
 

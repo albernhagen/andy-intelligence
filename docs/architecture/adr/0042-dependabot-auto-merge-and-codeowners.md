@@ -1,6 +1,6 @@
 ---
 title: Dependabot auto-merges npm patches, stable minors; CODEOWNERS asks Andy
-status: accepted; amended by 0124 (CODEOWNERS lists only the kept paths, no `*` line: AI-217)
+status: accepted; amended by 0124 (CODEOWNERS lists only the kept paths, no `*` line: AI-217), 0116 (proposed: the control plane classifies and merges Dependabot PRs with the App token, Actions pin bumps included, and bot merges deploy)
 date: 2026-11-03
 amends: 0031
 ---
