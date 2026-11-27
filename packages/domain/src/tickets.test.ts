@@ -661,6 +661,29 @@ describe("TicketService", () => {
       expect(await stageOf(t.id)).toBe("ready");
     });
 
+    it("GivenAnInProgressTicketWithoutTheDor_WhenASessionMovesItBackToReady_ThenRefusedAndNoBuildIsWoken", async () => {
+      const dispatchNext = vi.fn(async () => null);
+      service = new TicketService(tracker, null, dispatchNext);
+      const t = await service.create(projectId, { type: "feature", title: "x" }, "andy");
+      await service.move(projectId, t.id, "in_progress", "andy", { force: true });
+      dispatchNext.mockClear();
+      await rejects(service.moveBySession(t.key, "ready", "agent:r1"), "dor_not_met");
+      expect(await stageOf(t.id)).toBe("in_progress");
+      expect(dispatchNext).not.toHaveBeenCalled();
+      expect((await service.moveBySession(t.key, "backlog", "agent:r1")).stage).toBe("backlog");
+    });
+
+    it("GivenASameStageOrCancelledTarget_WhenASessionMovesTheTicket_ThenRefusedWithItsOwnReason", async () => {
+      const t = await at("in_progress");
+      await expect(service.moveBySession(t.key, "in_progress", "agent:r1")).rejects.toThrow(
+        "is already in in_progress",
+      );
+      await expect(service.moveBySession(t.key, "cancelled", "agent:r1")).rejects.toThrow(
+        "use cancel_ticket",
+      );
+      expect(await stageOf(t.id)).toBe("in_progress");
+    });
+
     it("GivenADoneOrCancelledTicket_WhenASessionMovesItBack_ThenRefusedAsAndysAndUnchanged", async () => {
       const done = await at("done");
       await expect(service.moveBySession(done.key, "in_progress", "agent:r1")).rejects.toThrow(

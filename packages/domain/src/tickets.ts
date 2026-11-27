@@ -833,15 +833,21 @@ export class TicketService {
   }
 
   /**
-   * A session's move by ticket key (the MCP `move_ticket` tool), never forced: one step forward
-   * (Definition of Ready checked into Ready), or back to any earlier stage (ADR-0163). Only Andy
-   * moves a ticket out of Done or Cancelled, and a backward move waits while an agent task or an
-   * open PR is on the ticket, so neither is orphaned. It takes no Up next option: a ticket moved
+   * A session's move by ticket key (the MCP `move_ticket` tool), never forced: one step forward,
+   * or back to any earlier stage (ADR-0163; out of Verifying only to In progress). Any move into
+   * Ready checks the Definition of Ready. Only Andy moves a ticket out of Done or Cancelled, and a
+   * backward move waits while an agent task or an open PR is on the ticket, so neither is orphaned. It takes no Up next option: a ticket moved
    * back to Backlog lands in Ideas, because the tracker clears `upNextRank` when it leaves Backlog.
    */
   async moveBySession(key: string, to: Stage, actor: EventActor): Promise<Ticket> {
     const ticket = await this.findByKey(key);
     if (isForwardMove(ticket.stage, to)) return this.move(ticket.projectId, ticket.id, to, actor);
+    if (to === ticket.stage) {
+      throw new DomainError("invalid_transition", `${key} is already in ${to}`);
+    }
+    if (to === "cancelled") {
+      throw new DomainError("invalid_transition", `use cancel_ticket to cancel ${key}`);
+    }
     if (ticket.stage === "done" || ticket.stage === "cancelled") {
       throw new DomainError(
         "invalid_transition",
@@ -851,10 +857,19 @@ export class TicketService {
     if (!isBackwardMove(ticket.stage, to)) {
       throw new DomainError(
         "invalid_transition",
-        `can't move ${key} from ${ticket.stage} to ${to}: forward is one step at a time`,
+        ticket.stage === "verifying"
+          ? `can't move ${key} from verifying to ${to}: back out of Verifying is to in_progress only`
+          : `can't move ${key} from ${ticket.stage} to ${to}: forward is one step at a time`,
       );
     }
     await this.refuseIfInFlight(ticket);
+    // Ready is what the build dispatcher picks from (ADR-0063), so a move back into it needs the
+    // Definition of Ready just as the forward move does.
+    if (to === "ready") {
+      const dor = checkDor(ticket, await this.openQuestionCount(ticket.id));
+      if (!dor.met)
+        throw new DomainError("dor_not_met", "Definition of Ready not met", dor.missing);
+    }
     return this.writeMove(ticket, to, actor, false, null);
   }
 

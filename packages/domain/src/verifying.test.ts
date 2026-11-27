@@ -253,6 +253,21 @@ describe("Verifying on merge (AI-181)", () => {
       stage: "done",
     });
   });
+  it("GivenATicketInVerifying_WhenASessionMovesItBack_ThenOnlyToInProgressFlaggedNeedsYou", async () => {
+    const t = await ticketAt("ready_for_review");
+    await service.move(project.id, t.id, "verifying", "andy");
+    await expect(service.moveBySession("AI-1", "ready_for_review", "agent:r1")).rejects.toThrow(
+      "to in_progress only",
+    );
+    await expect(service.moveBySession("AI-1", "backlog", "agent:r1")).rejects.toThrow(
+      "to in_progress only",
+    );
+    expect(await service.moveBySession("AI-1", "in_progress", "agent:r1")).toMatchObject({
+      stage: "in_progress",
+      needsAttention: true,
+    });
+    expect((await reload(t)).stage).toBe("in_progress");
+  });
 });
 
 describe("VerifyingChecks", () => {

@@ -4,4 +4,4 @@ Claude reads a project's board as the web shows it: every stage's lane in workfl
 
 **How to use:** MCP `board` with `project`, optional `stage` for one lane, `archived: true` to include archived tickets and the Cancelled lane.
 
-**Moving a ticket:** MCP `move_ticket` with `ticket` and `to`. Forward is one stage at a time (Backlog → Ready needs the Definition of Ready); back is any earlier stage in one call, and a ticket moved back to Backlog lands in Ideas. Refused, with the reason: skipping forward, moving out of Done or Cancelled (Andy, in the web app), and moving back while an agent task or an open PR is on the ticket (ADR-0163).
+**Moving a ticket:** MCP `move_ticket` with `ticket` and `to`. Forward is one stage at a time (Backlog → Ready needs the Definition of Ready); back is any earlier stage in one call (into Ready only with the Definition of Ready; out of Verifying only to In progress), and a ticket moved back to Backlog lands in Ideas. Refused, with the reason: skipping forward, moving out of Done or Cancelled (Andy, in the web app), and moving back while an agent task or an open PR is on the ticket (ADR-0163).

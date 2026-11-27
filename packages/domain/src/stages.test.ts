@@ -152,8 +152,13 @@ describe("isBackwardMove (ADR-0163)", () => {
   it("GivenAnOpenStage_WhenTheTargetIsAnyEarlierStage_ThenItIsBackward", () => {
     expect(isBackwardMove("in_progress", "backlog")).toBe(true);
     expect(isBackwardMove("ready_for_review", "ready")).toBe(true);
-    expect(isBackwardMove("verifying", "ready_for_review")).toBe(true);
-    expect(isBackwardMove("verifying", "backlog")).toBe(true);
+  });
+
+  it("GivenVerifying_WhenMovingBack_ThenOnlyInProgressIsBackward", () => {
+    expect(isBackwardMove("verifying", "in_progress")).toBe(true);
+    expect(isBackwardMove("verifying", "ready_for_review")).toBe(false);
+    expect(isBackwardMove("verifying", "ready")).toBe(false);
+    expect(isBackwardMove("verifying", "backlog")).toBe(false);
   });
 
   it("GivenDoneOrCancelled_WhenMovingToAnEarlierStage_ThenItIsNotASessionsBackwardMove", () => {
