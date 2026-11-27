@@ -1,6 +1,6 @@
 ---
 title: "Ticket model: Shortcut-style stories; order is priority, size the estimate"
-status: accepted (direction; built by tickets in project AI before M1.8: Build + gate and M2: Multi-project in parallel), amended by 0080, 0102, 0131
+status: accepted (direction; built by tickets in project AI before M1.8: Build + gate and M2: Multi-project in parallel), amended by 0080, 0102, 0131, 0164 (an epic's stage follows its tickets)
 date: 2026-11-04
 amends: ARCHITECTURE §4.2, §5
 ---

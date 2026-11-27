@@ -338,6 +338,33 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       expect(ids).not.toContain(ticket.id);
     });
 
+    it("GivenAnEpicWithChildren_WhenListedOrCountedByParent_ThenOnlyItsChildrenCountArchivedToo", async () => {
+      const { tracker, project, ticket } = await setup();
+      const epic = await tracker.createTicket(project.id, { title: "E", type: "epic" }, "andy");
+      const a = await tracker.createTicket(project.id, { title: "A", parentId: epic.id }, "andy");
+      const b = await tracker.createTicket(project.id, { title: "B", parentId: epic.id }, "andy");
+      await tracker.updateTicket(
+        project.id,
+        b.id,
+        { stage: { to: "done", reason: null }, fields: { rank: "0" } },
+        "andy",
+      );
+
+      const children = await tracker.listTickets(project.id, { parentId: epic.id });
+
+      expect(children.map((t) => t.id)).toEqual([b.id, a.id]);
+      expect(children.map((t) => t.id)).not.toContain(ticket.id);
+      expect(await tracker.listTickets(project.id, { parentId: epic.id, stage: "done" })).toEqual([
+        expect.objectContaining({ id: b.id }),
+      ]);
+      await tracker.updateTicket(project.id, b.id, { fields: { archived: true } }, "andy");
+      expect(await tracker.countChildrenByStage(project.id, epic.id)).toEqual({
+        ...Object.fromEntries(Stage.options.map((s) => [s, 0])),
+        backlog: 1,
+        done: 1,
+      });
+    });
+
     it("GivenAnArchivedTicket_WhenListedByArchived_ThenOnlyMatchingTicketsAreReturned", async () => {
       const { tracker, project, ticket } = await setup();
       expect(ticket.archived).toBe(false);
@@ -377,6 +404,9 @@ export function workTrackerContract(name: string, make: () => Promise<WorkTracke
       await tracker.updateTicket(project.id, archived, { fields: { archived: true } }, "andy");
       const other = await tracker.createProject({ name: "Other", key: uniqueKey() });
       await tracker.createTicket(other.id, { title: "Elsewhere" }, "andy");
+      // ADR-0164: epics are left out of the counts, in any stage.
+      const epic = await tracker.createTicket(project.id, { title: "E", type: "epic" }, "andy");
+      await moveTo(epic.id, "ready");
 
       expect(await tracker.countByStage(project.id)).toEqual({
         backlog: 1,

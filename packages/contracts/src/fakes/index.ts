@@ -179,6 +179,7 @@ export class InMemoryWorkTracker implements WorkTracker {
       )
       .filter((t) => filter.archived === undefined || t.archived === filter.archived)
       .filter((t) => !filter.upNext || (t.stage === "backlog" && t.upNextRank !== null))
+      .filter((t) => filter.parentId === undefined || t.parentId === filter.parentId)
       .sort((a, b) => compareRanks(a.rank, b.rank))
       .map((t) => structuredClone(t));
   }
@@ -197,10 +198,18 @@ export class InMemoryWorkTracker implements WorkTracker {
     return ticket ? structuredClone(ticket) : null;
   }
 
+  async countChildrenByStage(projectId: string, parentId: string): Promise<Record<Stage, number>> {
+    const counts = Object.fromEntries(Stage.options.map((s) => [s, 0])) as Record<Stage, number>;
+    for (const t of this.tickets.values()) {
+      if (t.projectId === projectId && t.parentId === parentId) counts[t.stage]++;
+    }
+    return counts;
+  }
+
   async countByStage(projectId: string): Promise<Record<Stage, number>> {
     const counts = Object.fromEntries(Stage.options.map((s) => [s, 0])) as Record<Stage, number>;
     for (const t of this.tickets.values()) {
-      if (t.projectId === projectId && !t.archived) counts[t.stage]++;
+      if (t.projectId === projectId && !t.archived && t.type !== "epic") counts[t.stage]++;
     }
     return counts;
   }

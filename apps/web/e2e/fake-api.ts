@@ -16,7 +16,7 @@ import {
   InMemoryWorkTracker,
 } from "@andy/contracts";
 import type { NewTicket, Stage } from "@andy/contracts";
-import { TicketService, buildReleaseNote, rankBetween } from "@andy/domain";
+import { TicketService, buildReleaseNote, rankBetween, syncEpicStages } from "@andy/domain";
 import { createApp, ownerOnlyAccess } from "@andy/api/app";
 import { E2E_TOKEN } from "./token";
 
@@ -40,7 +40,8 @@ const ready = {
 export async function createFakeApp() {
   const tracker = new InMemoryWorkTracker(() => NOW);
   const runs = new InMemoryRunStore(() => NOW);
-  const service = new TicketService(tracker);
+  // Seeds write as the app does (ADR-0164): an epic's stage follows its tickets.
+  const service = new TicketService(syncEpicStages(tracker));
   await tracker.createProject({
     name: "Andy Intelligence",
     key: "AI",

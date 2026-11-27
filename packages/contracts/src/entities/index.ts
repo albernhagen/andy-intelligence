@@ -287,6 +287,11 @@ export const Ticket = z.object({
    * every ticket take their top-level epic's (`milestoneOf`). Null on older documents.
    */
   milestoneId: MilestoneId.nullable().default(null),
+  /**
+   * Epics only (ADR-0164): with it on, an epic whose tickets are all Done waits in Ready for
+   * review ("Waiting for your check") until the owner moves it to Done. Off on older documents.
+   */
+  needsCheck: z.boolean().default(false),
   ...TicketScores,
   createdAt: Timestamp,
   updatedAt: Timestamp,

@@ -32,6 +32,7 @@ export function MilestoneSummary({ milestone: m }: { milestone: Milestone }) {
 const EPIC_STATE: Record<Epic["state"], string> = {
   not_started: "Not started",
   in_progress: "In progress",
+  waiting_for_check: "Waiting for your check",
   done: "Done",
 };
 

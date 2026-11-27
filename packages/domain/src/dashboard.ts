@@ -142,7 +142,9 @@ export function dashboardFigures(
     const weekRuns = runs.filter((r) => inWeek(r.endedAt!));
     const leadTimes: number[] = [];
     let reworks = 0;
-    for (const events of data.ticketEvents.values()) {
+    for (const [ticketId, events] of data.ticketEvents) {
+      // ADR-0164: an epic's moves are its tickets' moves, so they'd count twice.
+      if (ticketsById.get(ticketId)?.type === "epic") continue;
       const moves = events.filter((e) => e.kind === "stage_changed");
       for (const e of moves) {
         if (!inWeek(e.createdAt)) continue;
@@ -217,7 +219,8 @@ function leadTimeHours(moves: readonly TicketEvent[], done: TicketEvent): number
 function stageCounts(data: DashboardData, at: string): Record<Stage, number> {
   const counts = Object.fromEntries(Stage.options.map((s) => [s, 0])) as Record<Stage, number>;
   for (const ticket of data.tickets) {
-    if (ticket.createdAt > at) continue;
+    // ADR-0164: an epic's stage follows its tickets, so counting it would count them twice.
+    if (ticket.createdAt > at || ticket.type === "epic") continue;
     const moves = (data.ticketEvents.get(ticket.id) ?? []).filter(
       (e) => e.kind === "stage_changed",
     );

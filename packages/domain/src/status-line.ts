@@ -54,6 +54,8 @@ export interface StatusInput {
   executor?: ResolvedExecutor;
   /** Why its milestone holds it in Backlog or Ready (AI-306); null or absent: it doesn't. */
   milestoneHold?: string | null;
+  /** An epic: its stage follows its tickets (ADR-0164), so the line says so, not a next move. */
+  epic?: boolean;
 }
 
 const QUESTION_LINE_MAX = 200;
@@ -65,6 +67,16 @@ function questionsWaiting(n: number, question?: string | null): string {
     question.length > QUESTION_LINE_MAX ? `${question.slice(0, QUESTION_LINE_MAX)}…` : question;
   const more = n > 1 ? ` (and ${n - 1} more question${n === 2 ? "" : "s"})` : "";
   return `Waiting for you: ${q}${more}`;
+}
+
+/** An epic's line (ADR-0164): its state, which follows its tickets; Done is handled before. */
+function epicStatus(stage: Stage): { text: string; tone: StatusTone } {
+  if (stage === "ready_for_review") {
+    return { text: "Waiting for your check · its tickets are all Done", tone: "attention" };
+  }
+  return stage === "backlog"
+    ? { text: "Not started · follows its tickets", tone: "default" }
+    : { text: "In progress · follows its tickets", tone: "default" };
 }
 
 export function statusLine(s: StatusInput, now: Date): { text: string; tone: StatusTone } {
@@ -96,6 +108,7 @@ function mainStatus(s: StatusInput, now: Date): { text: string; tone: StatusTone
   }
   // The same words as the run marker on the board card (`runLabel`).
   if (s.run) return { text: join(runLabel(s.run, now.getTime()), pr), tone: "running" };
+  if (s.epic) return epicStatus(s.stage);
   if (s.blockedBy.length > 0) return { text: `Blocked by ${list(s.blockedBy)}`, tone: "danger" };
 
   if (s.worker === "me" && (s.stage === "ready" || s.stage === "in_progress")) {
@@ -330,6 +343,7 @@ export function ticketStatusLine(ticket: Ticket, facts: TicketFacts, now: Date) 
       held: heldLine(ticket),
       executor: facts.executor,
       milestoneHold: facts.milestoneHold ?? null,
+      epic: ticket.type === "epic",
     },
     now,
   );

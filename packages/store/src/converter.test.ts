@@ -28,6 +28,7 @@ const ticket: Ticket = {
   refineAssumptions: [],
   outcome: null,
   milestoneId: null,
+  needsCheck: false,
   risk: null,
   riskReason: null,
   confidence: null,

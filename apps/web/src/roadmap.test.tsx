@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
-import { InMemoryWorkTracker } from "@andy/contracts";
+import { InMemoryWorkTracker, type Stage } from "@andy/contracts";
+import { syncEpicStages } from "@andy/domain";
 import { PAGE_LOAD, renderApp } from "@/test/harness";
 
 /**
@@ -48,29 +49,24 @@ async function seeded(
   await milestone("m3", 3, "M3: Mobile", "parked");
   await milestone("m1", 1, "M1: First flow", "approved");
   await milestone("m2", 2, "M2: Self-hosting", "not_reviewed");
-  const epic = (title: string) => tracker.createTicket("ai", { title, type: "epic" }, "andy");
+  // Written as the app writes (ADR-0164): each epic's stage follows its tickets.
+  const synced = syncEpicStages(tracker);
+  const epic = (title: string) => synced.createTicket("ai", { title, type: "epic" }, "andy");
+  const at = (id: string, to: Stage) =>
+    synced.updateTicket("ai", id, { stage: { to, forced: true, reason: null } }, "andy");
   const done = await epic("First flow");
   const hosting = await epic("Builds itself");
   const mobile = await epic("Phone app");
   const loose = await epic("Parallel work");
-  await tracker.updateTicket(
-    "ai",
-    done.id,
-    { stage: { to: "done", forced: true, reason: null } },
-    "andy",
-  );
-  const child = await tracker.createTicket(
+  const shipped = await synced.createTicket("ai", { title: "Shipped", parentId: done.id }, "andy");
+  await at(shipped.id, "done");
+  const child = await synced.createTicket(
     "ai",
     { title: "Runs a PR", parentId: hosting.id },
     "andy",
   );
-  await tracker.updateTicket(
-    "ai",
-    child.id,
-    { stage: { to: "ready_for_review", forced: true, reason: null } },
-    "andy",
-  );
-  await tracker.createTicket("ai", { title: "Merges a PR", parentId: hosting.id }, "andy");
+  await at(child.id, "ready_for_review");
+  await synced.createTicket("ai", { title: "Merges a PR", parentId: hosting.id }, "andy");
   milestoneOfKey.set(done.key, "m1");
   milestoneOfKey.set(hosting.key, "m2");
   milestoneOfKey.set(mobile.key, "m3");
@@ -229,7 +225,7 @@ describe("every epic on the roadmap", () => {
 
     const item = await waitFor(() => epicRow(done.key)!);
     expect(within(item).getByText("Done")).toBeTruthy();
-    expect(within(item).getByText("0 of 0 done")).toBeTruthy();
+    expect(within(item).getByText("1 of 1 done")).toBeTruthy();
     await harness.user.click(within(item).getByRole("link", { name: new RegExp(done.key) }));
     await waitFor(() => expect(harness.router.state.location.pathname).toBe(`/p/ai/t/${done.key}`));
   });
