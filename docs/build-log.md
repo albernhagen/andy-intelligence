@@ -17,9 +17,7 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - AI-322 UX review: approve the ranked list in [`build-log/2026-11-21-ux-review.md`](build-log/2026-11-21-ux-review.md) (AI-325 to AI-343, all in Ideas) before any is built.
 - `autoMerge` on for project `AI`: after a trial of five tickets where the gate's `would_auto_merge` calls are compared with the coordinator's (Andy, 2026-11-10).
 - Context sources design (open question 12).
-- Night of 2026-11-23, PRs waiting for Andy's merge and the epic PR: [2026-11-24-handover-night.md](build-log/2026-11-24-handover-night.md).
-- Review handover, current state and questions: [2026-11-23-handover-review.md](build-log/2026-11-23-handover-review.md) (earlier: [2026-11-21](build-log/2026-11-21-handover-review.md)).
-
+- Final review and handoff, where everything stands and what is next: [2026-11-26-final-handoff.md](build-log/2026-11-26-final-handoff.md) (earlier: [2026-11-23 outcome](build-log/2026-11-23-review-outcome.md)).
 - AI-151: Prove a cloud worker end to end and fix the runbook to match: cloud workers get every connector connected in claude.ai (Gmail, Calendar, Drive and more), not only `andy-intelligence`. Keep, or turn the others off for worker sessions (risk R-AI-149-2; question in the PR).
 - AI-380: GitHub does not enforce code-owner review on kept paths here; only code (`mergeVerdict`) refuses them. Keep that, or make GitHub a backstop: PRs opened by a non-owner identity (works only if the runbook `onboard-a-repo.md` §1b cause check shows `REVIEW_REQUIRED`), or 1 required approval with the App approving non-kept PRs before it merges.
 
@@ -31,5 +29,5 @@ Generated from tickets, never edited here (AI-148). Every ticket sits under a mi
 - M3: New UI and MCP: local executor part 7 (runbook, live proof) needs Andy's Mac (ADR-0089).
 - AI-111: M5.4: First managed project live needs a second repo (runbook `managed-project.md`).
 - The OpenRouter and Claude API keys (AI-266, AI-267, AI-269).
-- What's new: `release-note` as a required check; `terraform apply` of `infra/control-plane` for PR #217.
-- M4 questions, each in its ticket body: AI-128: M4.15: Pluggable design skills (build now or move to Later), AI-129: M4.23: First overnight run trial (which epic and budget).
+- What's new: `release-note` as a required check.
+- AI-129: M4.23: First overnight run trial: which epic and budget (question in its ticket body); after the first managed project.
