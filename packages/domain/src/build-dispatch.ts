@@ -18,7 +18,7 @@ import {
   type WorkTracker,
 } from "@andy/contracts";
 import { MilestoneHolds, type MilestoneReader } from "./milestone-holds";
-import { MAX_BUILD_RUNS_PER_TICKET, isAndysWork, unfinishedBlockers } from "./builds";
+import { MAX_BUILD_RUNS_PER_TICKET, unfinishedBlockers } from "./builds";
 import { isInFlight, mayDispatch, waitsForSlot, wasDispatched } from "./dispatch-caps";
 import { blockingRun, editingRuns } from "./dispatch-conflicts";
 import { checkDor } from "./dor";
@@ -27,9 +27,8 @@ import { dispatchQuotaLevel, subscriptionQuotaLevels } from "./route-fallback";
 import type { EffectiveRouting } from "./route-resolver";
 import { blockersDoneAt, replanNote, staleBlocker, writtenPlan } from "./replan";
 import type { RouteFallback, RunService } from "./runs";
-import { isDispatchable } from "./worker";
-import { epicOf, withEpicOverrides } from "./overrides";
-import { ACTIONS_ROUTE, routeTakes, type DispatchRoute } from "./executor";
+import { ACTIONS_ROUTE, type DispatchRoute } from "./executor";
+import { readySkip } from "./next-up";
 import { DomainError } from "./tickets";
 import {
   NIGHT_END_TEXT,
@@ -173,13 +172,9 @@ export class BuildDispatcher {
     // listTickets is sorted by rank: the first waiting ticket is the top of the order.
     for (const ticket of tickets.filter((t) => t.stage === "ready")) {
       if (verdict !== "start") break;
-      // An epic never runs (ADR-0058); refine can leave one in Ready. Andy's own work never builds.
-      // AI-116: an epic's overrides hold its children too, unless a child has its own pick.
-      const effective = withEpicOverrides(ticket, epicOf(ticket, tickets));
-      if (ticket.type === "epic" || isAndysWork(effective)) continue;
-      if (!isDispatchable(effective, project)) continue; // AI-32: Who does the work (ADR-0082).
-      if (!routeTakes(route, ticket, project, runnerPresent)) continue; // ADR-0089.
-      if (ticket.archived || ticket.needsAttention) continue;
+      // Epics, Andy's own work, other workers and executors, archived and Needs-you tickets: the
+      // filter the digest's next-up dry run shares (AI-385).
+      if (readySkip(ticket, tickets, project, route, runnerPresent)) continue;
       const hold = await holds.reasonFor(ticket, tickets);
       if (hold) {
         milestoneHeld = true;

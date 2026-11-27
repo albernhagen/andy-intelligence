@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import type { WhatsNew, WhatsNewMilestone, WhatsNewNote } from "@andy/contracts";
 import { mergedByText } from "@andy/domain";
 import { DailySummary } from "@/components/DailySummary";
+import { Handover } from "@/components/Handover";
 import { PageHeader } from "@/components/PageHeader";
 import { ListSkeleton } from "@/components/PageSkeleton";
 import { QueryError } from "@/components/Status";
@@ -97,6 +98,7 @@ export function WhatsNewPage() {
         <div className="grid items-start gap-4 lg:grid-cols-[1fr_20rem]">
           <aside className="space-y-3 lg:order-2">
             <Exceptions projectId={projectId} />
+            <HandoverSections projectId={projectId} />
             {whatsNew.data && <Status whatsNew={whatsNew.data} projectId={projectId} />}
           </aside>
           <div className="min-w-0 lg:order-1">
@@ -382,4 +384,11 @@ function Exceptions({ projectId }: { projectId: string }) {
       </Button>
     </section>
   );
+}
+
+/** Open PRs and next up (AI-385): the digest's handover for now, from the same read. */
+function HandoverSections({ projectId }: { projectId: string }) {
+  const digest = useDigest(projectId, 24);
+  const handover = digest.data?.handover;
+  return handover ? <Handover handover={handover} projectId={projectId} /> : null;
 }
