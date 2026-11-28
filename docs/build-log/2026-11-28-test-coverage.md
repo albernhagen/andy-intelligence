@@ -9,3 +9,5 @@
 - New managed projects start at 80% lines, statements and functions, and 70% branches (`template/starter/vitest.config.ts`). A brand-new project is near 100%, so measured-minus-2 would be too tight there.
 
 **Measured (lines / branches):** api 95 / 82, local-runner 78 / 68, web 92 / 85, contracts 100 / 96, domain 96 / 90, github 95 / 72, store 11 / 7 (its tests run on the Firestore emulator, outside `check`), platform 66 / 71, scripts 79 / 74. Scripts that tests run as child processes don't count toward coverage, which is why `scripts` and `platform` read low.
+
+**Test shards dropped (Andy, same day):** the suite runs as one `check-test` job again, not two vitest shards (AI-402). Coverage floors are checked in that same run, with no merge job or artifacts. `check` takes about 2 minutes longer here (each shard took about 2m15s); managed repos are small.

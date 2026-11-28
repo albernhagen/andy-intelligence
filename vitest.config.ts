@@ -31,9 +31,7 @@ export default defineConfig({
       ],
       exclude: ["**/*.test.*", "**/*testlib*", "**/src/test/**", "**/*.gen.ts", "**/*.d.ts"],
       reporter: ["text-summary", "json-summary", "json"],
-      // A test shard sees only part of the suite, so the `ci-check` action sets COVERAGE_FLOORS=off
-      // there and checks the floors once, on the merged shards.
-      thresholds: process.env.COVERAGE_FLOORS === "off" ? {} : floors,
+      thresholds: floors,
     },
     projects: [
       "packages/*",

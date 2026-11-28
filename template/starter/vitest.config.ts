@@ -12,12 +12,7 @@ export default defineConfig({
       // main.ts only starts the server; its pieces are tested in server.test.ts.
       exclude: ["src/**/*.test.ts", "src/main.ts"],
       reporter: ["text-summary", "json-summary", "json"],
-      // CI runs the tests in shards and checks the floors once, on the merged result: a shard
-      // runs with COVERAGE_FLOORS=off.
-      thresholds:
-        process.env.COVERAGE_FLOORS === "off"
-          ? {}
-          : { lines: 80, statements: 80, functions: 80, branches: 70 },
+      thresholds: { lines: 80, statements: 80, functions: 80, branches: 70 },
     },
   },
 });
