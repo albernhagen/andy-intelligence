@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
+import { BASELINE_CLI } from "@andy/domain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CommandLine, ExternalButton } from "@/components/setup/HandStep";
@@ -81,13 +82,10 @@ function BeforeYouAdd({ repo }: { repo: string }) {
         Before you add a project: the repo and the GitHub App
       </h3>
       <p className="text-sm">
-        1. Create the repo; a new, empty one: onboard it now (from an andy-intelligence checkout).
+        1. Create the repo; a new, empty one: onboard it now (needs gh and Node 22, no checkout).
       </p>
       <CommandLine label="Create the repo" text={`gh repo create ${name} --public`} />
-      <CommandLine
-        label="Onboard a new repo"
-        text={`node platform/baseline/baseline.mjs onboard ${name} --ref v1.1.0`}
-      />
+      <CommandLine label="Onboard a new repo" text={`${BASELINE_CLI} onboard ${name}`} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm">2. Install the GitHub App on the repo.</p>
         {github.data?.installUrl ? (

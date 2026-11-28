@@ -29,8 +29,6 @@ export const AGENT_RUN_WORKFLOW = ".github/workflows/agent-run.yml";
 export const PROTECT_MAIN_RULESET = "protect-main";
 /** The environment agent tasks read their token from (runbook agent-environment.md). */
 export const AGENT_ENVIRONMENT = "agent";
-/** The baseline tag new repos are onboarded at (runbook onboard-a-repo.md §3). */
-export const ONBOARD_REF = "v1.1.0";
 
 /** Folders the API lists (one read each, ADR-0028): the limits' files and the baseline's. */
 export const ONBOARDING_DIRS = ["", ".github", ".github/workflows", ".claude", "scripts"] as const;
@@ -98,7 +96,9 @@ export function isMarkable(key: OnboardingStepKey): key is MarkableStepKey {
   return MARKABLE.has(key);
 }
 
-const baseline = (cmd: string) => `node platform/baseline/baseline.mjs ${cmd}`;
+/** The baseline CLI, run from GitHub with no checkout, pinned to a tag (AI-409, R-AI-409); equals platform/baseline/files.mjs `BASELINE_CLI` (tested). */
+export const BASELINE_CLI = "npx -y github:albernhagen/andy-intelligence#v1.2.0";
+const baseline = (cmd: string) => `${BASELINE_CLI} ${cmd}`;
 const done = (label: string): OnboardingCheck => ({ label, status: "done", detail: null });
 const check = (label: string, ok: boolean, detail: string): OnboardingCheck =>
   ok ? done(label) : { label, status: "not_yet", detail };
@@ -285,7 +285,7 @@ function specs(f: OnboardingFacts): Record<OnboardingStepKey, StepSpec> {
         "Create the repo (a new, empty one: run onboard now), then install the GitHub App on it.",
       commands: [
         { label: "Create the repo", text: `gh repo create ${repo} --public` },
-        { label: "Onboard a new repo", text: baseline(`onboard ${repo} --ref ${ONBOARD_REF}`) },
+        { label: "Onboard a new repo", text: baseline(`onboard ${repo}`) },
       ],
       link: link("Install the GitHub App", f.appInstallUrl),
       how: "live",

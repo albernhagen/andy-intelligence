@@ -1,25 +1,23 @@
-import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  CLI,
+  cliTag,
   configFor,
   deployKindFor,
   loadConfig,
+  defaultRef,
   manifestAt,
+  nextSteps,
+  readAt,
+  readSource,
+  resolveRef,
   parseArgs,
   parseGhResponse,
+  repoOfRemote,
 } from "./baseline.mjs";
-import { cleanGitEnv } from "../../scripts/git-env.mjs";
 import { pinActions, renderFiles, seedsToWrite } from "./files.mjs";
 import {
   ENVIRONMENT_VARIABLES,
@@ -36,47 +34,104 @@ const manifest = JSON.parse(
 const read = (p) => readFileSync(path.join(ROOT, p), "utf8");
 
 describe("manifestAt", () => {
-  // A throwaway repo: commit 1 has no manifest, commit 2 an older one, commit 3 a newer one.
-  const repo = mkdtempSync(path.join(tmpdir(), "manifest-at-"));
-  const git = (...args) =>
-    execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", env: cleanGitEnv() }).trim();
-  const commit = (message) => {
-    git("add", "-A");
-    git(
-      "-c",
-      "user.name=t",
-      "-c",
-      "user.email=t@example.invalid",
-      "commit",
-      "-q",
-      "--allow-empty",
-      "-m",
-      message,
-    );
-    return git("rev-parse", "HEAD");
+  // A fake source: the older commit has a manifest with one file, the oldest has none.
+  const files = { older: { "platform/baseline/manifest.json": '{"managed":[{"path":"a"}]}' } };
+  const read = (file, sha) => {
+    if (sha === "unknown") throw new Error("read: HTTP 422");
+    return files[sha]?.[file] ?? null;
   };
-  const writeManifest = (managed) => {
-    mkdirSync(path.join(repo, "platform/baseline"), { recursive: true });
-    writeFileSync(path.join(repo, "platform/baseline/manifest.json"), JSON.stringify({ managed }));
-  };
-  git("init", "-q");
-  const none = commit("no manifest");
-  writeManifest([{ path: "a" }]);
-  const older = commit("older");
-  writeManifest([{ path: "a" }, { path: "b" }]);
-  commit("newer");
   const current = () => ({ managed: "current" });
 
   it("GivenOlderCommit_WhenRead_ThenThatCommitsManifest", () => {
-    expect(manifestAt(older, repo, current)).toEqual({ managed: [{ path: "a" }] });
+    expect(manifestAt("older", read, current)).toEqual({ managed: [{ path: "a" }] });
   });
 
   it("GivenCommitWithoutManifest_WhenRead_ThenCurrentManifest", () => {
-    expect(manifestAt(none, repo, current)).toEqual({ managed: "current" });
+    expect(manifestAt("oldest", read, current)).toEqual({ managed: "current" });
   });
 
-  it("GivenUnknownCommit_WhenRead_ThenThrows", () => {
-    expect(() => manifestAt("0".repeat(40), repo, current)).toThrow(/ls-tree/);
+  it("GivenAReadFailure_WhenRead_ThenThrows", () => {
+    expect(() => manifestAt("unknown", read, current)).toThrow(/HTTP 422/);
+  });
+});
+
+describe("GitHub API reads", () => {
+  const SHA = "a".repeat(40);
+  const stub = (status, data) => {
+    const calls = [];
+    const api = (method, apiPath) => {
+      calls.push(apiPath);
+      return { status, data };
+    };
+    return { api, calls };
+  };
+  const b64 = (text) => Buffer.from(text).toString("base64");
+
+  it("GivenAFile_WhenRead_ThenDecodedFromTheRef", () => {
+    const { api, calls } = stub(200, { content: b64("hello") });
+    expect(readSource(".github/workflows/ci.yml", SHA, api)).toBe("hello");
+    expect(calls[0]).toBe(
+      `repos/albernhagen/andy-intelligence/contents/.github/workflows/ci.yml?ref=${SHA}`,
+    );
+  });
+
+  it("GivenAMissingFile_WhenRead_ThenNullAndReadAtThrows", () => {
+    const { api } = stub(404, {});
+    expect(readSource("x.yml", SHA, api)).toBeNull();
+    expect(() => readAt(SHA, api)("x.yml")).toThrow("x.yml isn't in");
+  });
+
+  it("GivenAnErrorOrNoContent_WhenRead_ThenThrows", () => {
+    expect(() => readSource("x", SHA, stub(500, {}).api)).toThrow("HTTP 500");
+    expect(() => readSource("big", SHA, stub(200, { content: null }).api)).toThrow("HTTP 200");
+  });
+
+  it("GivenABranchWithSlashOrOriginPrefix_WhenResolved_ThenCommitSha", () => {
+    const { api, calls } = stub(200, { sha: SHA });
+    expect(resolveRef("origin/m1.16/project-baseline", api)).toBe(SHA);
+    expect(calls[0]).toBe("repos/albernhagen/andy-intelligence/commits/m1.16%2Fproject-baseline");
+  });
+
+  it("GivenAnUnknownRef_WhenResolved_ThenThrowsPushItFirst", () => {
+    expect(() => resolveRef("nope", stub(422, {}).api)).toThrow("push it first");
+    expect(() => resolveRef("x", stub(200, { sha: "short" }).api)).toThrow("isn't a commit");
+  });
+
+  it("GivenThePinnedCli_WhenDefaulted_ThenItsOwnTagElseThrows", () => {
+    expect(defaultRef("npx -y github:a/b#v1.2.0")).toBe("v1.2.0");
+    expect(cliTag(CLI)).toMatch(/^v\d+\.\d+\.\d+$/);
+    expect(() => defaultRef("npx -y github:a/b")).toThrow("pass --ref");
+  });
+});
+
+describe("repoOfRemote", () => {
+  it("GivenHttpsOrSshRemote_WhenParsed_ThenOwnerRepo", () => {
+    expect(repoOfRemote("https://github.com/albernhagen/medi.git\n")).toBe("albernhagen/medi");
+    expect(repoOfRemote("git@github.com:albernhagen/medi.git")).toBe("albernhagen/medi");
+    expect(repoOfRemote("https://github.com/albernhagen/my.repo")).toBe("albernhagen/my.repo");
+  });
+
+  it("GivenANonGitHubRemote_WhenParsed_ThenNull", () => {
+    expect(repoOfRemote("https://gitlab.com/a/b.git")).toBeNull();
+  });
+});
+
+describe("nextSteps", () => {
+  it("GivenAnOpenedPr_WhenListed_ThenMergeBeforeApply", () => {
+    const text = nextSteps("pr", "a/b");
+    expect(text).toContain("merge the baseline PR");
+    expect(text.indexOf("merge")).toBeLessThan(text.indexOf(`${CLI} apply a/b --dry-run`));
+    expect(text).toContain(`${CLI} check a/b`);
+  });
+
+  it("GivenAPushedRepo_WhenListed_ThenNoApplyStep", () => {
+    const text = nextSteps("pushed", "a/b");
+    expect(text).not.toContain("apply");
+    expect(text).toContain("gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo a/b");
+  });
+
+  it("GivenTheCli_WhenPrinted_ThenNpxFromGitHub", () => {
+    expect(CLI).toMatch(/^npx -y github:albernhagen\/andy-intelligence#v\d+\.\d+\.\d+$/);
   });
 });
 
@@ -89,8 +144,18 @@ describe("parseArgs", () => {
     });
   });
 
-  it("GivenFilesWithoutRef_WhenParsed_ThenError", () => {
-    expect(() => parseArgs(["files", "albernhagen/scratch"])).toThrow("needs --ref");
+  it("GivenNoRepoOrRef_WhenParsed_ThenBothLeftForDefaults", () => {
+    expect(parseArgs(["onboard"])).toMatchObject({ repo: undefined, ref: undefined });
+    expect(parseArgs(["files", "--deploy-kind", "cloud-run"])).toMatchObject({
+      repo: undefined,
+      deployKind: "cloud-run",
+    });
+  });
+
+  it("GivenFinishWithoutRef_WhenParsed_ThenError", () => {
+    expect(() => parseArgs(["finish", "a/b", "--branch", "baseline/abc1234"])).toThrow(
+      "needs --ref",
+    );
   });
 
   it("GivenFinishWithRefAndBaselineBranch_WhenParsed_ThenOptions", () => {

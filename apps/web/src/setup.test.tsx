@@ -306,7 +306,9 @@ describe("setup path", () => {
     const card = await screen.findByRole("region", { name: "Apply the repo settings" });
     expect(within(card).getAllByText("Can't tell").length).toBeGreaterThan(0);
     expect(
-      within(card).getByText(`node platform/baseline/baseline.mjs apply ${REPO} --dry-run`),
+      within(card).getByText(
+        `npx -y github:albernhagen/andy-intelligence#v1.2.0 apply ${REPO} --dry-run`,
+      ),
     ).toBeTruthy();
 
     await h.user.click(within(card).getByRole("button", { name: /^Mark done/ }));

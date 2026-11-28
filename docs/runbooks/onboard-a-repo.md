@@ -1,6 +1,6 @@
 # Onboard a repo to the project baseline — runbook (Andy)
 
-The **project baseline** is the set of guardrails every repo Andy manages gets: CI and security checks, review agents, local hooks, repo files, and GitHub settings (ADR-0031: Project baseline, ADR-0038: Baseline carried by composite actions; inventory in ARCHITECTURE §8.1). One script applies and checks it: `platform/baseline/baseline.mjs`. Run it from a clone of andy-intelligence on your machine; it uses your `gh` login (admin on your repos). Never run it in CI.
+The **project baseline** is the set of guardrails every repo Andy manages gets: CI and security checks, review agents, local hooks, repo files, and GitHub settings (ADR-0031: Project baseline, ADR-0038: Baseline carried by composite actions; inventory in ARCHITECTURE §8.1). One CLI applies and checks it: `platform/baseline/baseline.mjs`. Run it anywhere with `npx -y github:albernhagen/andy-intelligence#v1.2.0 <command>` (no checkout: it reads the baseline files at the ref through the GitHub API, AI-409); it uses your `gh` login (admin on your repos). Never run it in CI. `<owner/repo>` defaults to the current folder's `origin`; `--ref` defaults to the tag the CLI is pinned to (so code and files come from the same tag).
 
 | Term                  | Meaning                                                                                                                                                                                                                        |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -11,21 +11,22 @@ The **project baseline** is the set of guardrails every repo Andy manages gets: 
 | `.andy/baseline.json` | Which andy-intelligence commit the repo's files came from.                                                                                                                                                                     |
 | Drift                 | A live setting or managed file that differs from the baseline.                                                                                                                                                                 |
 
-| Command                                                                    | Does                                                                                                                                                 |
-| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node platform/baseline/baseline.mjs onboard <owner/repo> --ref <ref>`     | `files`, then `apply`                                                                                                                                |
-| `… files <owner/repo> --ref <ref>`                                         | Clones the repo, writes the files, runs `pnpm install` (lockfile + hooks). Empty repo: pushes to `main`. Otherwise: opens a PR from `baseline/<sha>` |
-| `… apply <owner/repo> [--dry-run]`                                         | Sets repo, security, Actions, labels and `protect-main` ruleset (without `github/source-only.json` checks); `--dry-run` only prints the diff         |
-| `… check <owner/repo> [--only repo,security,actions,labels,ruleset,files]` | Prints drift; exit 1 on drift, 2 on error                                                                                                            |
-| `… finish <owner/repo> --ref <sha> --branch baseline/<sha7>`               | Adds the workflows and agent settings the App's baseline PR left out to that PR's branch; missing ones only (AI-113)                                 |
+| Command                                                                                 | Does                                                                                                                                                 |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npx -y github:albernhagen/andy-intelligence#v1.2.0 onboard [owner/repo] [--ref <ref>]` | `files`, then `apply` (new or up-to-date repo) or the steps after the PR (existing repo); prints what's next                                         |
+| `… files <owner/repo> --ref <ref>`                                                      | Clones the repo, writes the files, runs `pnpm install` (lockfile + hooks). Empty repo: pushes to `main`. Otherwise: opens a PR from `baseline/<sha>` |
+| `… apply <owner/repo> [--dry-run]`                                                      | Sets repo, security, Actions, labels and `protect-main` ruleset (without `github/source-only.json` checks); `--dry-run` only prints the diff         |
+| `… check <owner/repo> [--only repo,security,actions,labels,ruleset,files]`              | Prints drift; exit 1 on drift, 2 on error                                                                                                            |
+| `… finish <owner/repo> --ref <sha> --branch baseline/<sha7>`                            | Adds the workflows and agent settings the App's baseline PR left out to that PR's branch; missing ones only (AI-113)                                 |
 
-Before you start: `gh auth status` shows you logged in; Node 22+; `pnpm` (or `npx` falls back to pnpm 10.28.0); `git fetch` in andy-intelligence so the ref resolves.
+Before you start: `gh auth status` shows you logged in; Node 22+; `pnpm` (or `npx` falls back to pnpm 10.28.0). The baseline commit uses your git identity where you run it: if your global `user.email` is private, run from a folder whose git config sets your noreply address (GitHub rejects the push otherwise).
 
 ## 1. Bring andy-intelligence itself to the baseline (once, after the M1.16 PR merges)
 
+This section and §1a, §6 change andy-intelligence's own settings right after a PR merges, so they run the CLI at that merge commit (the just-merged config), pinned by SHA, never `#main`: `SHA=$(gh api repos/albernhagen/andy-intelligence/commits/main --jq .sha)`, check it is the merge you reviewed, then use `#$SHA`.
+
 ```sh
-git switch main && git pull
-node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence --dry-run
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence --dry-run
 ```
 
 Expected drift on 2026-11-02 (everything else `ok`):
@@ -38,14 +39,20 @@ Expected drift on 2026-11-02 (everything else `ok`):
 | `labels[0]` (`security-accepted`) color, description | `7E8B33`, empty | `B60205`, the description in `github/labels.json`   |
 
 ```sh
-node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence
-node platform/baseline/baseline.mjs check albernhagen/andy-intelligence    # all ok; files: skipped (source repo)
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence
+npx -y github:albernhagen/andy-intelligence#$SHA check albernhagen/andy-intelligence    # all ok; files: skipped (source repo)
 ```
 
-Then tag the baseline version that repos will pin:
+Then tag the baseline version that repos will pin. Every command runs the CLI pinned to a tag (`BASELINE_CLI` in `platform/baseline/files.mjs` and `packages/domain/src/onboarding.ts`, R-AI-409): for a new tag, bump both in a PR, merge, then tag that merge commit:
 
 ```sh
-git tag v1.0.0 origin/main && git push origin v1.0.0
+git tag v1.2.0 origin/main && git push origin v1.2.0
+```
+
+Do this right after the merge, before anyone onboards or the API deploys: until the tag exists, every printed command fails. Then check the pinned CLI runs:
+
+```sh
+npx -y github:albernhagen/andy-intelligence#v1.2.0 check albernhagen/andy-intelligence --only files   # files: skipped (source repo)
 ```
 
 ### 1a. After a PR changes `github/ruleset-main.json` merges
@@ -53,10 +60,9 @@ git tag v1.0.0 origin/main && git push origin v1.0.0
 Apply only the ruleset to andy-intelligence, then check it took effect (e.g. AI-352 adds `sandbox-self-test`, `agent-evals`, `agent-evals-plumbing`):
 
 ```sh
-git switch main && git pull
-node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence --dry-run   # drift only in ruleset required checks; anything else: stop, ask
-node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence
-node platform/baseline/baseline.mjs check albernhagen/andy-intelligence --only ruleset   # exit 0
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence --dry-run   # drift only in ruleset required checks; anything else: stop, ask
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence
+npx -y github:albernhagen/andy-intelligence#$SHA check albernhagen/andy-intelligence --only ruleset   # exit 0
 ```
 
 Then open any PR: the new checks show as **Required** in its checks list.
@@ -75,8 +81,7 @@ Then open any PR: the new checks show as **Required** in its checks list.
 | Touches a kept path        | You, by hand. The gate and `merge_pr` refuse it; GitHub asks for no review when you authored the PR |
 
 ```sh
-git switch main && git pull
-node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence --dry-run
+npx -y github:albernhagen/andy-intelligence#v1.2.0 apply albernhagen/andy-intelligence --dry-run
 ```
 
 Expected: every section `ok` but the ruleset, then:
@@ -91,8 +96,8 @@ dry run: nothing changed
 Anything else in the diff: stop, ask. Then:
 
 ```sh
-node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence
-node platform/baseline/baseline.mjs check albernhagen/andy-intelligence --only ruleset   # ruleset: ok, exit 0
+npx -y github:albernhagen/andy-intelligence#v1.2.0 apply albernhagen/andy-intelligence
+npx -y github:albernhagen/andy-intelligence#v1.2.0 check albernhagen/andy-intelligence --only ruleset   # ruleset: ok, exit 0
 gh api repos/albernhagen/andy-intelligence/rulesets/26001673 --jq '{bypass_actors, codeowners: (.rules[] | select(.type=="pull_request") | .parameters.require_code_owner_review), strict: (.rules[] | select(.type=="required_status_checks") | .parameters.strict_required_status_checks_policy)}'
 ```
 
@@ -114,63 +119,61 @@ Adding a repo to a project (UI or MCP `create_project`) makes the App open `base
 
 An empty repo, or a PR the App couldn't open, shows in Needs-you as a ticket `Baseline … <repo>` with the error and the `onboard` command: run it (§3), then move that ticket to Done.
 
-## 3. Onboard a new repo
+## 3. Onboard a repo (new or existing)
 
 ```sh
-gh repo create albernhagen/<name> --public
-node platform/baseline/baseline.mjs onboard albernhagen/<name> --ref v1.1.0
+gh repo create albernhagen/<name> --public    # a new repo only
+npx -y github:albernhagen/andy-intelligence#v1.2.0 onboard albernhagen/<name>
 ```
 
-Then:
+It uses the CLI's own baseline tag and tells new from existing by itself:
+
+| The repo is…             | `onboard` does                                                                                        | Then (it prints these)                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Empty (new)              | Pushes the baseline and starter to `main`, applies the GitHub settings                                | Open a first PR so every check runs once                    |
+| Has commits (existing)   | Opens a PR from `baseline/<sha7>`; settings wait (the ruleset's required checks must exist on `main`) | Review and merge the PR, then `apply --dry-run` and `apply` |
+| Already at that baseline | Changes no file, applies the GitHub settings                                                          | Nothing extra                                               |
+
+Then, for every repo:
 
 1. Reviewer token (until it is set, the review agents report "not reviewed" and their checks fail, ADR-0140; nothing else needs it). Never paste it into chat or a file:
    ```sh
    claude setup-token
    gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo albernhagen/<name>
    ```
-2. Open a first PR so every check runs once.
-3. `node platform/baseline/baseline.mjs check albernhagen/<name>` → exit 0.
-4. To manage it from the control plane: Settings → GitHub → **Install on repos** → add it, then create its project with the repo in the UI (`docs/runbooks/github-app.md` §4).
-5. Before agent tasks run there: the `agent` environment with its own token (`docs/runbooks/agent-environment.md`). The baseline's `agent-run.yml` caller reads it.
+2. `npx -y github:albernhagen/andy-intelligence#v1.2.0 check albernhagen/<name>` → exit 0.
+3. To manage it from the control plane: Settings → GitHub → **Install on repos** → add it, then create its project with the repo in the UI (`docs/runbooks/github-app.md` §4).
+4. Before agent tasks run there: the `agent` environment with its own token (`docs/runbooks/agent-environment.md`). The baseline's `agent-run.yml` caller reads it.
 
-Use a **public** repo: on a free GitHub plan, rulesets and code scanning only work on public repos.
-
-## 4. Onboard an existing repo
-
-```sh
-node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.1.0   # opens a PR
-```
-
-Review and merge the PR (an existing repo needs `pnpm lint/typecheck/test/build` scripts, `.nvmrc`, and `lefthook` as a dev dependency with `"prepare": "lefthook install"`). Then `apply` (a dry run first) and `check`. Apply the ruleset only after the PR merges: before that, its required checks don't exist on `main`.
+Use a **public** repo: on a free GitHub plan, rulesets and code scanning only work on public repos. An existing repo needs `pnpm lint/typecheck/test/build` scripts, `.nvmrc`, and `lefthook` as a dev dependency with `"prepare": "lefthook install"`.
 
 `ci.yml` runs lint, typecheck, test (the whole suite with coverage, AI-407) and build as parallel `check-*` jobs; only the final `check` gate is required, so the ruleset is the same with an older baseline (AI-402). The `test` script must be vitest and accept `--coverage`; the repo needs `@vitest/coverage-v8` (same version as vitest) and floors in its vitest config (`coverage.thresholds`, reporters `json-summary` and `json`; the starter's `vitest.config.ts` is a template), or `check-test` fails naming what is missing.
 
-## 5. Update a repo to a newer baseline
+## 4. Update a repo to a newer baseline
 
 Dependabot bumps the action pins monthly. `check` then reports `pins …, but .andy/baseline.json says …`: run `files` at the new tag to update every managed file and the record in one PR.
 
 ```sh
-node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.2.0
+npx -y github:albernhagen/andy-intelligence#v1.2.0 files albernhagen/<name> --ref v1.2.0
 ```
 
-### 5a. A project that deploys (`deployKind` `cloud-run`, AI-206: M6.17)
+### 4a. A project that deploys (`deployKind` `cloud-run`, AI-206: M6.17)
 
 `files`, `onboard` and `finish` take `--deploy-kind none|cloud-run`; without it they use what the repo's `.andy/baseline.json` records, else `none`. `cloud-run` adds `deploy.yml` and `release.yml`; `check` reads the kind from the record. `files` and `onboard` also take `--environments prod-only|dev-and-prod` (default `prod-only`): `cloud-run` seeds the template Terraform root for it in `infra/`, plus `.terraform-version` (AI-109: M6.22; seed files, never overwritten). The App's baseline PR does the same from the project's settings. After setting the project to `cloud-run` (Settings or MCP `set_deploy_kind`), once per repo:
 
 ```sh
-node platform/baseline/baseline.mjs files albernhagen/<name> --ref origin/main --deploy-kind cloud-run --environments prod-only
+npx -y github:albernhagen/andy-intelligence#v1.2.0 files albernhagen/<name> --ref origin/main --deploy-kind cloud-run --environments prod-only
 ```
 
 Then apply `infra/` and set its repo variables (`project-env.md`): until they are, every push to `main` fails `deploy.yml` at its first step, naming what is missing. Back to `none` leaves both workflows in the repo: delete them by hand. `check` renders from the recorded kind, so it can't see a setting changed since; the App's baseline PR report flags that mismatch on `.andy/baseline.json` with the command to run.
 
-## 6. M1.16: Project baseline v1 demo ("Done when")
+## 5. M1.16: Project baseline v1 demo ("Done when")
 
-Run it before merging, from the PR branch. The scratch repo gets no Claude token, so both review agents report "not reviewed" under the same check names and use no quota. Since ADR-0140 those two checks fail; add `security-accepted` and `review-accepted` to the test PR.
+Run it before merging, with the PR branch as both the CLI (`#<branch>`) and the files (`--ref <branch>`). The scratch repo gets no Claude token, so both review agents report "not reviewed" under the same check names and use no quota. Since ADR-0140 those two checks fail; add `security-accepted` and `review-accepted` to the test PR.
 
 ```sh
-git fetch origin m1.16/project-baseline
 gh repo create albernhagen/baseline-scratch --public --description "M1.16 demo; delete after"
-node platform/baseline/baseline.mjs onboard albernhagen/baseline-scratch --ref origin/m1.16/project-baseline
+npx -y github:albernhagen/andy-intelligence#<branch> onboard albernhagen/baseline-scratch --ref <branch>
 ```
 
 Expect `pushed Project baseline … to main (empty repo)` and every section `ok`. Then a test PR:
@@ -183,18 +186,17 @@ gh pr create --fill && gh pr checks --watch
 ```
 
 1. **Same checks as andy-intelligence:** `check`, `actionlint`, `terraform`, `trufflehog`, `codeql (javascript-typescript)`, `codeql (actions)`, `dependency-review`, `terraform-misconfig`, `security-review`, `adversarial-review` all pass (`terraform` ones with a "no infra/" notice; reviews "not reviewed", passing on the two labels).
-2. **No drift:** `node platform/baseline/baseline.mjs check albernhagen/baseline-scratch` → every line `ok`, exit 0.
+2. **No drift:** `npx -y github:albernhagen/andy-intelligence#v1.2.0 check albernhagen/baseline-scratch` → every line `ok`, exit 0.
 3. **Hand change shows as drift:** Settings → Actions → General → Workflow permissions → **Read and write** → Save. `check` again → `actions: drift`, `workflow.default_workflow_permissions: want "read", have "write"`, exit 1. `apply` puts it back.
 4. Clean up: `gh auth refresh -s delete_repo` (once), then `gh repo delete albernhagen/baseline-scratch --yes`.
 
-## 7. Dependabot auto-merge and CODEOWNERS (ADR-0042)
+## 6. Dependabot auto-merge and CODEOWNERS (ADR-0042)
 
 Once, after the PR that adds them merges:
 
 ```sh
-git switch main && git pull
-node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence --dry-run   # expect: repo.allow_auto_merge false → true
-node platform/baseline/baseline.mjs apply albernhagen/andy-intelligence
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence --dry-run   # expect: repo.allow_auto_merge false → true
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence
 ```
 
 Check on the next Dependabot PR:
@@ -207,13 +209,14 @@ Check on the next Dependabot PR:
 
 Your next merge deploys the update. If `Deploy control plane` did deploy the bot's merge, note it in the build log: the `deploy.yml` guard failed.
 
-Managed repos get both with the next baseline tag (§5: Update a repo to a newer baseline).
+Managed repos get both with the next baseline tag (§4: Update a repo to a newer baseline).
 
 ## Troubleshooting
 
 | Symptom                                                                          | Fix                                                                                                                                       |
 | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `<sha> (<ref>) isn't on GitHub`                                                  | Push the ref first; managed repos can only pin commits that exist on GitHub.                                                              |
+| `<ref> isn't a commit on GitHub`                                                 | Push the ref first; managed repos can only pin commits that exist on GitHub.                                                              |
+| `push` rejected: would publish a private email                                   | Run from a folder whose git config sets your noreply `user.email` (the baseline commit uses the identity where you run it).               |
 | `security: unreadable` / `HTTP 403`                                              | Your `gh` login isn't an admin of that repo.                                                                                              |
 | `apply` fails on `private-vulnerability-reporting` or `automated-security-fixes` | Run it again: GitHub enables these after vulnerability alerts, which `apply` turns on first.                                              |
 | A check never reports on the new repo's PR                                       | Its job name doesn't match the ruleset; `pnpm test` in andy-intelligence checks this, so the repo's caller file was edited (see `check`). |

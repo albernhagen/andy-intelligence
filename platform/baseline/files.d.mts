@@ -49,3 +49,5 @@ export function baselineRecord(r: {
   deployKind?: DeployKind;
 }): string;
 export function deployFlags(p: { deployKind?: DeployKind; environments?: Environments }): string;
+
+export const BASELINE_CLI: string;

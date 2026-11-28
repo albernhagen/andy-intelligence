@@ -2,7 +2,14 @@
 // write into a registered repo and the report of what was applied, what differs and what was
 // skipped. The App never overwrites a file, never writes workflows or agent settings, and never
 // changes GitHub settings; the report says what Andy runs for those.
-import { baselineRecord, deployFlags, mergeLines, normalizePins, presentGroups } from "./files.mjs";
+import {
+  BASELINE_CLI,
+  baselineRecord,
+  deployFlags,
+  mergeLines,
+  normalizePins,
+  presentGroups,
+} from "./files.mjs";
 
 /**
  * Paths the App never writes: workflows (it has no `workflows` permission, and Andy won't grant
@@ -154,11 +161,11 @@ const list = (entries) => entries.map((e) => `- \`${e.path}\`: ${e.note}`).join(
 function settingsReport(settings, repo) {
   const apply = [
     "",
-    "The App doesn't change GitHub settings. To see and apply them, from an andy-intelligence checkout:",
+    "The App doesn't change GitHub settings. To see and apply them, with your `gh` login:",
     "",
     "```bash",
-    `node platform/baseline/baseline.mjs apply ${repo} --dry-run`,
-    `node platform/baseline/baseline.mjs apply ${repo}`,
+    `${BASELINE_CLI} apply ${repo} --dry-run`,
+    `${BASELINE_CLI} apply ${repo}`,
     "```",
   ];
   if (settings.error) {
@@ -214,10 +221,10 @@ export function renderReport({
       plan.held.length === 0
         ? "Nothing."
         : [
-            "The App can't write workflows or agent settings. From an up-to-date andy-intelligence checkout, this commits the missing ones to this PR's branch:",
+            "The App can't write workflows or agent settings. With your `gh` login, this commits the missing ones to this PR's branch:",
             "",
             "```bash",
-            `node platform/baseline/baseline.mjs finish ${repo} --ref ${sha} --branch ${branch}${kind}`,
+            `${BASELINE_CLI} finish ${repo} --ref ${sha} --branch ${branch}${kind}`,
             "```",
             "",
             list(plan.held),

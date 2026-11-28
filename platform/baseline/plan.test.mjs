@@ -156,7 +156,7 @@ describe("renderReport", () => {
   it("GivenHeldFiles_WhenRendered_ThenItGivesTheOneFinishCommand", () => {
     const md = renderReport({ ...base, settings: { results: [] } });
     expect(md).toContain(
-      `node platform/baseline/baseline.mjs finish albernhagen/web --ref ${SHA} --branch baseline/aaaaaaa`,
+      `npx -y github:albernhagen/andy-intelligence#v1.2.0 finish albernhagen/web --ref ${SHA} --branch baseline/aaaaaaa`,
     );
     expect(md).toContain("- `lefthook.yml`: differs from the baseline; left unchanged");
     expect(md).toContain("### Applied (");
@@ -191,7 +191,9 @@ describe("renderReport", () => {
     expect(md).toContain("- ruleset: differs; left unchanged");
     expect(md).toContain(`  - \`(whole)\`: want \`"present"\`, have \`"'missing'"\``);
     expect(md).toContain("- actions: couldn't read (the App has no administration permission)");
-    expect(md).toContain("node platform/baseline/baseline.mjs apply albernhagen/web --dry-run");
+    expect(md).toContain(
+      "npx -y github:albernhagen/andy-intelligence#v1.2.0 apply albernhagen/web --dry-run",
+    );
   });
 
   it("GivenManySettingDifferences_WhenRendered_ThenTheyAreCapped", () => {

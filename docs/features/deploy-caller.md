@@ -6,4 +6,4 @@ Repo variables, from `infra/modules/project-env` (`GCP_*` prod, `GCP_DEV_*` dev;
 
 **PR previews:** `preview.yml`, same baseline and variables: [`pr-previews.md`](pr-previews.md).
 
-**How to use:** `node platform/baseline/baseline.mjs files <owner/repo> --ref origin/main --deploy-kind cloud-run`, then set the variables ([runbook](../runbooks/project-env.md) "After")
+**How to use:** `npx -y github:albernhagen/andy-intelligence#v1.2.0 files <owner/repo> --ref origin/main --deploy-kind cloud-run`, then set the variables ([runbook](../runbooks/project-env.md) "After")

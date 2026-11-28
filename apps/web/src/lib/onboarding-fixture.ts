@@ -7,7 +7,7 @@ import type { Onboarding, OnboardingStatus, OnboardingStepKey } from "@andy/cont
 
 const REPO = "albernhagen/widgets";
 const gh = (path: string) => `https://github.com/${REPO}${path}`;
-const cmd = (c: string) => `node platform/baseline/baseline.mjs ${c}`;
+const cmd = (c: string) => `npx -y github:albernhagen/andy-intelligence#v1.2.0 ${c}`;
 
 type Base = Omit<Onboarding["steps"][number], "status" | "marked" | "checks">;
 
@@ -19,7 +19,7 @@ const BASE: Record<OnboardingStepKey, Base> = {
       "Create the repo (a new, empty one: run onboard now), then install the GitHub App on it.",
     commands: [
       { label: "Create the repo", text: `gh repo create ${REPO} --public` },
-      { label: "Onboard a new repo", text: cmd(`onboard ${REPO} --ref v1.1.0`) },
+      { label: "Onboard a new repo", text: cmd(`onboard ${REPO}`) },
     ],
     link: {
       label: "Install the GitHub App",
