@@ -2,14 +2,14 @@
 
 The **project baseline** is the set of guardrails every repo Andy manages gets: CI and security checks, review agents, local hooks, repo files, and GitHub settings (ADR-0031: Project baseline, ADR-0038: Baseline carried by composite actions; inventory in ARCHITECTURE §8.1). One script applies and checks it: `platform/baseline/baseline.mjs`. Run it from a clone of andy-intelligence on your machine; it uses your `gh` login (admin on your repos). Never run it in CI.
 
-| Term                  | Meaning                                                                                                                                 |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Ref                   | A tag (`v1.0.0`), branch (`origin/main`) or SHA of andy-intelligence. It must be pushed: managed repos pin its commit SHA.              |
-| Managed file          | Kept identical to the baseline (workflows, hooks, Dependabot, PR template, Prettier config). Edits show up as drift.                    |
-| Seed file             | Written once if missing (`AGENTS.md`, `.github/CODEOWNERS`, `docs/security/threat-model.md`, `design.md`); the repo owns it after that. |
-| Starter               | A minimal TypeScript project (`package.json`, `tsconfig.json`, `src/`), written only into a repo with no `package.json`.                |
-| `.andy/baseline.json` | Which andy-intelligence commit the repo's files came from.                                                                              |
-| Drift                 | A live setting or managed file that differs from the baseline.                                                                          |
+| Term                  | Meaning                                                                                                                                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Ref                   | A tag (`v1.1.0`), branch (`origin/main`) or SHA of andy-intelligence. It must be pushed: managed repos pin its commit SHA. The file list is that ref's `manifest.json`, so an older tag writes only the files it had (AI-408). |
+| Managed file          | Kept identical to the baseline (workflows, hooks, Dependabot, PR template, Prettier config). Edits show up as drift.                                                                                                           |
+| Seed file             | Written once if missing (`AGENTS.md`, `.github/CODEOWNERS`, `docs/security/threat-model.md`, `design.md`); the repo owns it after that.                                                                                        |
+| Starter               | A minimal TypeScript project (`package.json`, `tsconfig.json`, `src/`), written only into a repo with no `package.json`.                                                                                                       |
+| `.andy/baseline.json` | Which andy-intelligence commit the repo's files came from.                                                                                                                                                                     |
+| Drift                 | A live setting or managed file that differs from the baseline.                                                                                                                                                                 |
 
 | Command                                                                    | Does                                                                                                                                                 |
 | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -118,7 +118,7 @@ An empty repo, or a PR the App couldn't open, shows in Needs-you as a ticket `Ba
 
 ```sh
 gh repo create albernhagen/<name> --public
-node platform/baseline/baseline.mjs onboard albernhagen/<name> --ref v1.0.0
+node platform/baseline/baseline.mjs onboard albernhagen/<name> --ref v1.1.0
 ```
 
 Then:
@@ -138,7 +138,7 @@ Use a **public** repo: on a free GitHub plan, rulesets and code scanning only wo
 ## 4. Onboard an existing repo
 
 ```sh
-node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.0.0   # opens a PR
+node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.1.0   # opens a PR
 ```
 
 Review and merge the PR (an existing repo needs `pnpm lint/typecheck/test/build` scripts, `.nvmrc`, and `lefthook` as a dev dependency with `"prepare": "lefthook install"`). Then `apply` (a dry run first) and `check`. Apply the ruleset only after the PR merges: before that, its required checks don't exist on `main`.
@@ -150,7 +150,7 @@ Review and merge the PR (an existing repo needs `pnpm lint/typecheck/test/build`
 Dependabot bumps the action pins monthly. `check` then reports `pins …, but .andy/baseline.json says …`: run `files` at the new tag to update every managed file and the record in one PR.
 
 ```sh
-node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.1.0
+node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.2.0
 ```
 
 ### 5a. A project that deploys (`deployKind` `cloud-run`, AI-206: M6.17)

@@ -1,8 +1,25 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { configFor, deployKindFor, loadConfig, parseArgs, parseGhResponse } from "./baseline.mjs";
+import {
+  configFor,
+  deployKindFor,
+  loadConfig,
+  manifestAt,
+  parseArgs,
+  parseGhResponse,
+} from "./baseline.mjs";
+import { cleanGitEnv } from "../../scripts/git-env.mjs";
 import { pinActions, renderFiles, seedsToWrite } from "./files.mjs";
 import {
   ENVIRONMENT_VARIABLES,
@@ -17,6 +34,51 @@ const manifest = JSON.parse(
   readFileSync(path.join(ROOT, "platform/baseline/manifest.json"), "utf8"),
 );
 const read = (p) => readFileSync(path.join(ROOT, p), "utf8");
+
+describe("manifestAt", () => {
+  // A throwaway repo: commit 1 has no manifest, commit 2 an older one, commit 3 a newer one.
+  const repo = mkdtempSync(path.join(tmpdir(), "manifest-at-"));
+  const git = (...args) =>
+    execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", env: cleanGitEnv() }).trim();
+  const commit = (message) => {
+    git("add", "-A");
+    git(
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@example.invalid",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      message,
+    );
+    return git("rev-parse", "HEAD");
+  };
+  const writeManifest = (managed) => {
+    mkdirSync(path.join(repo, "platform/baseline"), { recursive: true });
+    writeFileSync(path.join(repo, "platform/baseline/manifest.json"), JSON.stringify({ managed }));
+  };
+  git("init", "-q");
+  const none = commit("no manifest");
+  writeManifest([{ path: "a" }]);
+  const older = commit("older");
+  writeManifest([{ path: "a" }, { path: "b" }]);
+  commit("newer");
+  const current = () => ({ managed: "current" });
+
+  it("GivenOlderCommit_WhenRead_ThenThatCommitsManifest", () => {
+    expect(manifestAt(older, repo, current)).toEqual({ managed: [{ path: "a" }] });
+  });
+
+  it("GivenCommitWithoutManifest_WhenRead_ThenCurrentManifest", () => {
+    expect(manifestAt(none, repo, current)).toEqual({ managed: "current" });
+  });
+
+  it("GivenUnknownCommit_WhenRead_ThenThrows", () => {
+    expect(() => manifestAt("0".repeat(40), repo, current)).toThrow(/ls-tree/);
+  });
+});
 
 describe("parseArgs", () => {
   it("GivenOnboardWithRef_WhenParsed_ThenOptions", () => {

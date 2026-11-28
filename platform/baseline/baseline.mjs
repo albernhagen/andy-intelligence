@@ -85,6 +85,20 @@ export function loadConfig(dir = path.join(HERE, "github")) {
 
 const manifest = () => JSON.parse(readFileSync(path.join(HERE, "manifest.json"), "utf8"));
 
+const MANIFEST_PATH = "platform/baseline/manifest.json";
+
+/**
+ * The manifest at the pinned commit, so the file list matches the files that exist there: an
+ * older tag predates files this checkout's manifest names (AI-408). This checkout's only when the
+ * commit has no manifest; any other git failure (unknown commit, bad root) throws.
+ */
+export function manifestAt(sha, root = SOURCE_ROOT, current = manifest) {
+  const env = cleanGitEnv();
+  const ls = ["-C", root, "ls-tree", "--name-only", sha, "--", MANIFEST_PATH];
+  if (run("git", ls, { env }).stdout.trim() === "") return current();
+  return JSON.parse(run("git", ["-C", root, "show", `${sha}:${MANIFEST_PATH}`], { env }).stdout);
+}
+
 /** Resolves a ref in this checkout to a commit that also exists on GitHub (pins must resolve). */
 function resolveRef(ref, source) {
   const sha = run("git", [
@@ -152,8 +166,8 @@ function repoEnv() {
 
 /** Clones the repo, writes the baseline files, and pushes (empty repo) or opens a PR. */
 function filesCommand(repo, ref, kindFlag, environments = "prod-only") {
-  const m = manifest();
-  const sha = resolveRef(ref, m.source);
+  const sha = resolveRef(ref, manifest().source);
+  const m = manifestAt(sha);
   const dir = mkdtempSync(path.join(tmpdir(), "baseline-"));
   const env = repoEnv();
   run("gh", ["repo", "clone", repo, dir, "--", "--quiet"], { env });
@@ -226,8 +240,8 @@ function filesCommand(repo, ref, kindFlag, environments = "prod-only") {
  * for review (AI-113).
  */
 function finishCommand(repo, ref, branch, kindFlag) {
-  const m = manifest();
-  const sha = resolveRef(ref, m.source);
+  const sha = resolveRef(ref, manifest().source);
+  const m = manifestAt(sha);
   const dir = mkdtempSync(path.join(tmpdir(), "baseline-finish-"));
   const env = repoEnv();
   run("gh", ["repo", "clone", repo, dir, "--", "--quiet", "--branch", branch], { env });
@@ -308,7 +322,11 @@ async function checkCommand(repo, only) {
       } else {
         const { version, ref } = JSON.parse(record);
         const deployKind = deployKindFor(undefined, record);
-        const rendered = renderFiles(m, readAt(version), { sha: version, ref, deployKind });
+        const rendered = renderFiles(manifestAt(version), readAt(version), {
+          sha: version,
+          ref,
+          deployKind,
+        });
         const drift = fileDrift(rendered, (f) => readRemote(repo, f), {
           source: m.source,
           version,

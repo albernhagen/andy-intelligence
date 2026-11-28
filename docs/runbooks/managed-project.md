@@ -39,7 +39,7 @@ The setup path puts the brief, plan and approve steps between 7 and 8: the brief
 ```sh
 # 1. Create the repo; a new, empty one: onboard it
 gh repo create <owner>/<name> --public
-node platform/baseline/baseline.mjs onboard <owner>/<name> --ref v1.0.0
+node platform/baseline/baseline.mjs onboard <owner>/<name> --ref v1.1.0
 
 # 4. Baseline PR, then the repo settings (from an andy-intelligence checkout)
 node platform/baseline/baseline.mjs finish <owner>/<name> --ref <sha> --branch baseline/<sha7>

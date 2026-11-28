@@ -86,7 +86,7 @@ function BeforeYouAdd({ repo }: { repo: string }) {
       <CommandLine label="Create the repo" text={`gh repo create ${name} --public`} />
       <CommandLine
         label="Onboard a new repo"
-        text={`node platform/baseline/baseline.mjs onboard ${name} --ref v1.0.0`}
+        text={`node platform/baseline/baseline.mjs onboard ${name} --ref v1.1.0`}
       />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm">2. Install the GitHub App on the repo.</p>

@@ -30,7 +30,7 @@ export const PROTECT_MAIN_RULESET = "protect-main";
 /** The environment agent tasks read their token from (runbook agent-environment.md). */
 export const AGENT_ENVIRONMENT = "agent";
 /** The baseline tag new repos are onboarded at (runbook onboard-a-repo.md §3). */
-export const ONBOARD_REF = "v1.0.0";
+export const ONBOARD_REF = "v1.1.0";
 
 /** Folders the API lists (one read each, ADR-0028): the limits' files and the baseline's. */
 export const ONBOARDING_DIRS = ["", ".github", ".github/workflows", ".claude", "scripts"] as const;
