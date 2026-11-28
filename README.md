@@ -43,7 +43,7 @@ Tools: Node from `.nvmrc`; pnpm (`corepack enable`); Terraform from `.terraform-
 
 ```sh
 pnpm install
-pnpm test        # vitest, all packages
+pnpm test        # vitest, all packages (`--coverage`: coverage and its floors, as CI runs it)
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -67,7 +67,7 @@ node scripts/coordinator/<tool>.mjs --help  # coordinator tools (runbook coordin
 | pre-commit | `prettier --check`, `eslint`, `terraform fmt -check`, actionlint (skipped if absent)  |
 | pre-push   | `pnpm typecheck`, tests the push affects on a quarter of the cores (ADR-0113, AI-219) |
 
-Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claude/settings.json`): Prettier + ESLint `--fix` on that file; unfixable lint errors go to the agent. CI runs these plus build and actionlint; job `check` waits on parallel parts (lint, typecheck, two test shards, build) and passes only when all succeed (AI-402). Format failure on commit: `pnpm format`, re-stage. `--no-verify` is for emergencies only.
+Claude Code runs `scripts/format-edited-file.mjs` after each Edit/Write (`.claude/settings.json`): Prettier + ESLint `--fix` on that file; unfixable lint errors go to the agent. CI runs these plus build and actionlint; job `check` waits on parallel parts (lint, typecheck, test with coverage, build) and passes only when all succeed (AI-402). Format failure on commit: `pnpm format`, re-stage. `--no-verify` is for emergencies only.
 
 Security checks on PRs, the project baseline and running locally: [`docs/develop-checks.md`](docs/develop-checks.md).
 

@@ -167,6 +167,7 @@
     { "path": ".nvmrc", "from": "template/starter/.nvmrc" },
     { "path": "tsconfig.json", "from": "template/starter/tsconfig.json.template" },
     { "path": "eslint.config.js", "from": "template/starter/eslint.config.js.template" },
+    { "path": "vitest.config.ts", "from": "template/starter/vitest.config.ts" },
     { "path": ".prettierignore", "from": "template/starter/.prettierignore" },
     { "path": "src/index.ts", "from": "template/starter/src/index.ts" },
     { "path": "src/index.test.ts", "from": "template/starter/src/index.test.ts" },
