@@ -85,16 +85,18 @@ export function loadConfig(dir = path.join(HERE, "github")) {
 
 const manifest = () => JSON.parse(readFileSync(path.join(HERE, "manifest.json"), "utf8"));
 
+const MANIFEST_PATH = "platform/baseline/manifest.json";
+
 /**
  * The manifest at the pinned commit, so the file list matches the files that exist there: an
- * older tag predates files this checkout's manifest names. This checkout's when the commit has
- * none.
+ * older tag predates files this checkout's manifest names (AI-408). This checkout's only when the
+ * commit has no manifest; any other git failure (unknown commit, bad root) throws.
  */
-function manifestAt(sha) {
-  const res = run("git", ["-C", SOURCE_ROOT, "show", `${sha}:platform/baseline/manifest.json`], {
-    allowFail: true,
-  });
-  return res.status === 0 ? JSON.parse(res.stdout) : manifest();
+export function manifestAt(sha, root = SOURCE_ROOT, current = manifest) {
+  const env = cleanGitEnv();
+  const ls = ["-C", root, "ls-tree", "--name-only", sha, "--", MANIFEST_PATH];
+  if (run("git", ls, { env }).stdout.trim() === "") return current();
+  return JSON.parse(run("git", ["-C", root, "show", `${sha}:${MANIFEST_PATH}`], { env }).stdout);
 }
 
 /** Resolves a ref in this checkout to a commit that also exists on GitHub (pins must resolve). */
