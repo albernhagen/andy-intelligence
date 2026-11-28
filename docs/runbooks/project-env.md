@@ -62,7 +62,7 @@ Check: `gh variable list --repo <owner>/<name>`. Then mark "Deploy environments"
 | `DEPLOYER_SA`               | output `deployer_email`               |
 | `IMAGE_REPO`                | output `image_repository`             |
 
-Plus `DEPLOY_SMOKE_CHECKS` (one check per line, `<path> <status>`, e.g. `/health 200`). A repo onboarded before AI-109: M6.22 has no `infra/`: run the baseline first with `--deploy-kind cloud-run --environments <policy>` (`onboard-a-repo.md` §5a), merge, then this runbook from the top. For PR previews (`preview.yml`, AI-207: M6.18; first environment only, with `preview_enabled = true`), also set, with the same prefix:
+Plus `DEPLOY_SMOKE_CHECKS` (one check per line, `<path> <status>`, e.g. `/health 200`). A repo onboarded before AI-109: M6.22 has no `infra/`: run the baseline first with `--deploy-kind cloud-run --environments <policy>` (`onboard-a-repo.md` §4a), merge, then this runbook from the top. For PR previews (`preview.yml`, AI-207: M6.18; first environment only, with `preview_enabled = true`), also set, with the same prefix:
 
 | Variable (after the prefix) | From                              |
 | --------------------------- | --------------------------------- |

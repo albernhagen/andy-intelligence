@@ -6,9 +6,18 @@
   "engines": {
     "node": ">=22"
   },
+  "bin": {
+    "andy-baseline": "platform/baseline/baseline.mjs"
+  },
+  "files": [
+    "platform/baseline/*.mjs",
+    "platform/baseline/*.json",
+    "platform/baseline/github/",
+    "scripts/git-env.mjs",
+    "scripts/postinstall.mjs"
+  ],
   "scripts": {
-    "prepare": "test -e .git || exit 0; lefthook install",
-    "postinstall": "node scripts/gen-exports.mjs",
+    "postinstall": "node scripts/postinstall.mjs",
     "gen:exports": "node scripts/gen-exports.mjs",
     "build": "node scripts/gen-exports.mjs && pnpm -r --if-present build",
     "typecheck": "node scripts/gen-exports.mjs && pnpm -r --if-present typecheck",

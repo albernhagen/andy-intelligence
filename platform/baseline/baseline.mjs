@@ -1,22 +1,35 @@
 #!/usr/bin/env node
 // Project baseline CLI (ADR-0031, ADR-0038). Runs on Andy's machine with his `gh` login (admin);
 // never in CI except `check --only labels,ruleset` in the system security review.
-// Runbook: docs/runbooks/onboard-a-repo.md.
+// Runbook: docs/runbooks/onboard-a-repo.md. Needs no andy-intelligence checkout (AI-409):
 //
-//   baseline.mjs onboard <owner/repo> --ref <tag|branch|sha>   files + apply
-//   baseline.mjs files   <owner/repo> --ref <tag|branch|sha>   write baseline files (push or PR)
+//   npx -y github:albernhagen/andy-intelligence <command> ...
+//
+// It reads the baseline files at the ref through the GitHub API. <owner/repo> defaults to the
+// current folder's `origin`; --ref defaults to the newest vX.Y.Z tag.
+//
+//   baseline.mjs onboard [owner/repo] [--ref <tag|branch|sha>]   files, then apply (a new repo)
+//                        or the steps after the PR (an existing repo)
+//   baseline.mjs files   [owner/repo] [--ref <tag|branch|sha>]   write baseline files (push or PR)
 //                        [--deploy-kind none|cloud-run] the project's `deployKind` (ADR-0114):
 //                        `cloud-run` adds deploy.yml and release.yml. Default: what the repo's
 //                        .andy/baseline.json records, else `none` (also for onboard and finish)
 //                        [--environments prod-only|dev-and-prod] for `cloud-run`: which
 //                        template Terraform root to seed in infra/ (AI-109). Default prod-only
-//   baseline.mjs apply   <owner/repo> [--dry-run]              GitHub config
-//   baseline.mjs check   <owner/repo> [--only a,b]             drift report; exit 1 on drift
-//   baseline.mjs finish  <owner/repo> --ref <sha> --branch <baseline/x>
+//   baseline.mjs apply   [owner/repo] [--dry-run]              GitHub config
+//   baseline.mjs check   [owner/repo] [--only a,b]             drift report; exit 1 on drift
+//   baseline.mjs finish  [owner/repo] --ref <sha> --branch <baseline/x>
 //                        add the workflows and agent settings the App's baseline PR left out
 //                        (AI-113) to that PR's branch; only missing ones, never overwrites
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,7 +48,6 @@ import { heldToAdd } from "./plan.mjs";
 import { cleanGitEnv } from "../../scripts/git-env.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SOURCE_ROOT = path.resolve(HERE, "../..");
 const ALL = [...SECTIONS.map((s) => s.name), "files"];
 
 function run(cmd, args, opts = {}) {
@@ -86,35 +98,89 @@ export function loadConfig(dir = path.join(HERE, "github")) {
 const manifest = () => JSON.parse(readFileSync(path.join(HERE, "manifest.json"), "utf8"));
 
 const MANIFEST_PATH = "platform/baseline/manifest.json";
+const SOURCE = manifest().source;
+
+/** How Andy runs this CLI anywhere, for the commands it prints (AI-409). */
+export const CLI = `npx -y github:${SOURCE}`;
+
+/** A file of the baseline source at `sha`, through the GitHub API; null when it isn't there. */
+function readSource(file, sha) {
+  const res = ghApi("GET", `repos/${SOURCE}/contents/${encodePath(file)}?ref=${sha}`);
+  if (res.status === 404) return null;
+  if (res.status !== 200 || typeof res.data?.content !== "string")
+    throw new Error(`read ${SOURCE}/${file} at ${sha.slice(0, 7)}: HTTP ${res.status}`);
+  return Buffer.from(res.data.content, "base64").toString("utf8");
+}
+
+const encodePath = (file) => file.split("/").map(encodeURIComponent).join("/");
+
+/** Reader for `renderFiles`: a file the manifest names must exist at the commit. */
+const readAt = (sha) => (from) => {
+  const text = readSource(from, sha);
+  if (text === null) throw new Error(`${from} isn't in ${SOURCE} at ${sha.slice(0, 7)}`);
+  return text;
+};
 
 /**
  * The manifest at the pinned commit, so the file list matches the files that exist there: an
- * older tag predates files this checkout's manifest names (AI-408). This checkout's only when the
- * commit has no manifest; any other git failure (unknown commit, bad root) throws.
+ * older tag predates files the current manifest names (AI-408). The current one (shipped with
+ * this CLI) only when the commit has none; any other read failure throws.
  */
-export function manifestAt(sha, root = SOURCE_ROOT, current = manifest) {
-  const env = cleanGitEnv();
-  const ls = ["-C", root, "ls-tree", "--name-only", sha, "--", MANIFEST_PATH];
-  if (run("git", ls, { env }).stdout.trim() === "") return current();
-  return JSON.parse(run("git", ["-C", root, "show", `${sha}:${MANIFEST_PATH}`], { env }).stdout);
+export function manifestAt(sha, read = readSource, current = manifest) {
+  const text = read(MANIFEST_PATH, sha);
+  return text === null ? current() : JSON.parse(text);
 }
 
-/** Resolves a ref in this checkout to a commit that also exists on GitHub (pins must resolve). */
-function resolveRef(ref, source) {
-  const sha = run("git", [
-    "-C",
-    SOURCE_ROOT,
-    "rev-parse",
-    "--verify",
-    `${ref}^{commit}`,
-  ]).stdout.trim();
-  const res = ghApi("GET", `repos/${source}/commits/${sha}`);
-  if (res.status !== 200)
-    throw new Error(`${sha} (${ref}) isn't on GitHub ${source}; push it first`);
-  return sha;
+/** Resolves a tag, branch (`origin/` optional) or SHA to a commit SHA on GitHub (pins must resolve). */
+function resolveRef(ref) {
+  const name = ref.replace(/^origin\//, "");
+  const res = ghApi("GET", `repos/${SOURCE}/commits/${encodeURIComponent(name)}`);
+  if (res.status !== 200 || !/^[0-9a-f]{40}$/.test(res.data?.sha ?? ""))
+    throw new Error(
+      `${ref} isn't a commit on GitHub ${SOURCE} (HTTP ${res.status}); push it first`,
+    );
+  return res.data.sha;
 }
 
-const readAt = (sha) => (from) => run("git", ["-C", SOURCE_ROOT, "show", `${sha}:${from}`]).stdout;
+/** The newest `vX.Y.Z` tag name, or null. */
+export function latestTag(names) {
+  const parse = (n) => /^v(\d+)\.(\d+)\.(\d+)$/.exec(n)?.slice(1).map(Number);
+  const tags = names.map((n) => ({ n, v: parse(n) })).filter((t) => t.v);
+  tags.sort((a, b) => b.v[0] - a.v[0] || b.v[1] - a.v[1] || b.v[2] - a.v[2]);
+  return tags[0]?.n ?? null;
+}
+
+/** --ref's default: the source's newest release tag. */
+function defaultRef() {
+  const res = ghApi("GET", `repos/${SOURCE}/tags?per_page=100`);
+  if (res.status !== 200) throw new Error(`list ${SOURCE} tags: HTTP ${res.status}; pass --ref`);
+  const tag = latestTag(res.data.map((t) => t.name));
+  if (!tag) throw new Error(`${SOURCE} has no vX.Y.Z tag; pass --ref`);
+  console.log(`--ref not given: using the newest baseline tag, ${tag}`);
+  return tag;
+}
+
+/** `owner/repo` from a GitHub remote URL (https or ssh), or null. */
+export function repoOfRemote(url) {
+  const m = /github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(url.trim());
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+/** <owner/repo>'s default: the current folder's `origin` remote. */
+function defaultRepo() {
+  const res = run("git", ["remote", "get-url", "origin"], { allowFail: true, env: cleanGitEnv() });
+  const repo = res.status === 0 ? repoOfRemote(res.stdout) : null;
+  if (!repo) throw new Error("no owner/repo given, and this folder has no GitHub `origin`");
+  console.log(`owner/repo not given: using this folder's origin, ${repo}`);
+  return repo;
+}
+
+/** Git identity for the baseline commit: the user's (here, else global), not the clone's. */
+function gitIdentity() {
+  const value = (key) =>
+    run("git", ["config", key], { allowFail: true, env: cleanGitEnv() }).stdout.trim();
+  return { "user.name": value("user.name"), "user.email": value("user.email") };
+}
 
 function readRemote(repo, file) {
   const res = ghApi("GET", `repos/${repo}/contents/${file}`);
@@ -164,9 +230,12 @@ function repoEnv() {
   return cleanGitEnv({ ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` });
 }
 
-/** Clones the repo, writes the baseline files, and pushes (empty repo) or opens a PR. */
+/**
+ * Clones the repo, writes the baseline files, and pushes (empty repo) or opens a PR. Returns
+ * what happened: "pushed" (to main), "pr" (opened) or "unchanged" (already at this baseline).
+ */
 function filesCommand(repo, ref, kindFlag, environments = "prod-only") {
-  const sha = resolveRef(ref, manifest().source);
+  const sha = resolveRef(ref);
   const m = manifestAt(sha);
   const dir = mkdtempSync(path.join(tmpdir(), "baseline-"));
   const env = repoEnv();
@@ -177,12 +246,10 @@ function filesCommand(repo, ref, kindFlag, environments = "prod-only") {
   const empty =
     run("git", ["-C", dir, "rev-parse", "--verify", "HEAD"], { allowFail: true, env }).status !== 0;
   const starter = !existsSync(path.join(dir, "package.json"));
-  // Commit as this checkout's identity (e.g. the noreply address set here), not the global one:
-  // GitHub rejects pushes that would publish a private email.
-  for (const key of ["user.name", "user.email"]) {
-    const value = run("git", ["-C", SOURCE_ROOT, "config", key], { allowFail: true }).stdout.trim();
+  // Commit as the identity where this runs (e.g. a noreply address set in the folder), not the
+  // clone's default: GitHub rejects pushes that would publish a private email.
+  for (const [key, value] of Object.entries(gitIdentity()))
     if (value) run("git", ["-C", dir, "config", key, value], { env });
-  }
 
   for (const f of rendered.managed) writeFile(dir, f.path, f.content);
   for (const f of rendered.lines) {
@@ -212,26 +279,27 @@ function filesCommand(repo, ref, kindFlag, environments = "prod-only") {
     run("git", ["-C", dir, "diff", "--cached", "--quiet"], { allowFail: true, env }).status === 0
   ) {
     console.log(`${repo}: files already match baseline ${ref} (${sha.slice(0, 7)})`);
-    return;
+    return "unchanged";
   }
   const message = `Project baseline ${ref} (${sha.slice(0, 7)})`;
   run("git", ["-C", dir, "commit", "-q", "-m", message], { stdio: "inherit", env });
   if (empty) {
     run("git", ["-C", dir, "push", "-q", "origin", "HEAD:main"], { stdio: "inherit", env });
     console.log(`${repo}: pushed ${message} to main (empty repo)`);
-    return;
+    return "pushed";
   }
   const branch = `baseline/${sha.slice(0, 7)}`;
   run("git", ["-C", dir, "push", "-q", "origin", `HEAD:refs/heads/${branch}`], {
     stdio: "inherit",
     env,
   });
-  const body = `Brings this repo to the andy-intelligence project baseline at \`${ref}\` (${sha}). Generated by \`platform/baseline/baseline.mjs files\`.${notes.length ? `\n\n**Before the first deploy:**\n${notes.join("\n")}` : ""}`;
+  const body = `Brings this repo to the andy-intelligence project baseline at \`${ref}\` (${sha}). Generated by \`${CLI} files\`.${notes.length ? `\n\n**Before the first deploy:**\n${notes.join("\n")}` : ""}`;
   run(
     "gh",
     ["pr", "create", "--repo", repo, "--head", branch, "--title", message, "--body", body],
     { stdio: "inherit", env },
   );
+  return "pr";
 }
 
 /**
@@ -240,7 +308,7 @@ function filesCommand(repo, ref, kindFlag, environments = "prod-only") {
  * for review (AI-113).
  */
 function finishCommand(repo, ref, branch, kindFlag) {
-  const sha = resolveRef(ref, manifest().source);
+  const sha = resolveRef(ref);
   const m = manifestAt(sha);
   const dir = mkdtempSync(path.join(tmpdir(), "baseline-finish-"));
   const env = repoEnv();
@@ -248,10 +316,8 @@ function finishCommand(repo, ref, branch, kindFlag) {
   const deployKind = deployKindFor(kindFlag, readIfExists(path.join(dir, ".andy/baseline.json")));
   console.log(`${repo}: deploy kind ${deployKind}`);
   const rendered = renderFiles(m, readAt(sha), { sha, ref, deployKind });
-  for (const key of ["user.name", "user.email"]) {
-    const value = run("git", ["-C", SOURCE_ROOT, "config", key], { allowFail: true }).stdout.trim();
+  for (const [key, value] of Object.entries(gitIdentity()))
     if (value) run("git", ["-C", dir, "config", key, value], { env });
-  }
   const added = [];
   for (const f of heldToAdd(rendered, (p) => existsSync(path.join(dir, p)))) {
     writeFile(dir, f.path, f.content);
@@ -344,7 +410,9 @@ async function checkCommand(repo, only) {
 
 /** Parses argv into { command, repo, ref, branch, dryRun, only, deployKind, environments }. */
 export function parseArgs(argv) {
-  const [command, repo, ...rest] = argv;
+  const [command, ...args] = argv;
+  const repo = args[0] && !args[0].startsWith("--") ? args[0] : undefined;
+  const rest = repo ? args.slice(1) : args;
   const opts = {
     command,
     repo,
@@ -366,9 +434,9 @@ export function parseArgs(argv) {
   }
   if (!["onboard", "files", "apply", "check", "finish"].includes(command))
     throw new Error(`unknown command ${command}`);
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo ?? "")) throw new Error("repo must be owner/name");
-  if (["onboard", "files", "finish"].includes(command) && !opts.ref)
-    throw new Error(`${command} needs --ref`);
+  if (repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(repo))
+    throw new Error("repo must be owner/name");
+  if (command === "finish" && !opts.ref) throw new Error("finish needs --ref <sha>");
   if (command === "finish" && !/^baseline\/[a-z0-9-]{1,60}$/.test(opts.branch ?? ""))
     throw new Error("finish needs --branch baseline/<name> (the App's baseline PR branch)");
   if (opts.deployKind && !["onboard", "files", "finish"].includes(command))
@@ -380,27 +448,56 @@ export function parseArgs(argv) {
   return opts;
 }
 
+/**
+ * What Andy does after `onboard`, by what `files` did: "pr" (an existing repo: settings wait for
+ * the merge, since the ruleset requires checks that must exist on main first), else the settings
+ * are applied already (a new or up-to-date repo).
+ */
+export function nextSteps(outcome, repo) {
+  const steps =
+    outcome === "pr"
+      ? [
+          "Review and merge the baseline PR (an existing repo needs `pnpm lint/typecheck/test/build` scripts, `.nvmrc`, and `lefthook` as a dev dependency).",
+          `After it merges, apply the GitHub settings: \`${CLI} apply ${repo} --dry-run\`, then \`${CLI} apply ${repo}\`.`,
+        ]
+      : ["Open a first PR so every check runs once."];
+  return [
+    "Next:",
+    ...[
+      ...steps,
+      `Reviewer token (never paste it anywhere): \`claude setup-token\`, then \`gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo ${repo}\`.`,
+      `\`${CLI} check ${repo}\` exits 0.`,
+    ].map((s, i) => `  ${i + 1}. ${s}`),
+  ].join("\n");
+}
+
 async function main(argv) {
   const o = parseArgs(argv);
+  const repo = o.repo ?? defaultRepo();
+  const ref = () => o.ref ?? defaultRef();
   if (o.command === "files") {
-    filesCommand(o.repo, o.ref, o.deployKind, o.environments);
+    filesCommand(repo, ref(), o.deployKind, o.environments);
     return 0;
   }
-  if (o.command === "apply") return applyCommand(o.repo, o.dryRun);
-  if (o.command === "check") return checkCommand(o.repo, o.only);
+  if (o.command === "apply") return applyCommand(repo, o.dryRun);
+  if (o.command === "check") return checkCommand(repo, o.only);
   if (o.command === "finish") {
-    finishCommand(o.repo, o.ref, o.branch, o.deployKind);
+    finishCommand(repo, o.ref, o.branch, o.deployKind);
     return 0;
   }
-  filesCommand(o.repo, o.ref, o.deployKind, o.environments);
-  const status = await applyCommand(o.repo, false);
-  console.log(
-    status === 0 ? "onboarded; run `check` to confirm no drift" : "apply left drift; see above",
-  );
+  const outcome = filesCommand(repo, ref(), o.deployKind, o.environments);
+  if (outcome === "pr") {
+    console.log(nextSteps(outcome, repo));
+    return 0;
+  }
+  const status = await applyCommand(repo, false);
+  if (status !== 0) console.log("apply left drift; see above");
+  console.log(nextSteps(outcome, repo));
   return status;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// Through `npx`, argv[1] is the bin symlink, so compare real paths.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main(process.argv.slice(2)).then(
     (code) => (process.exitCode = code),
     (e) => {

@@ -84,10 +84,12 @@ export class BaselineProposer {
         project,
         `Baseline for ${rest.length} more repo(s): not opened`,
         [
-          `One registration opens at most ${MAX_BASELINE_REPOS} baseline PRs. From an up-to-date andy-intelligence checkout, onboard the rest:`,
+          `One registration opens at most ${MAX_BASELINE_REPOS} baseline PRs. Onboard the rest:`,
           "",
           "```bash",
-          ...rest.map((r) => `node platform/baseline/baseline.mjs onboard ${r} --ref origin/main`),
+          ...rest.map(
+            (r) => `npx -y github:albernhagen/andy-intelligence onboard ${r} --ref origin/main`,
+          ),
           "```",
         ].join("\n"),
       );
@@ -112,10 +114,10 @@ export class BaselineProposer {
       project,
       `Baseline PR for ${repo} didn't finish`,
       [
-        `The App didn't finish the baseline PR in ${repo} within ${this.deadlineMs / 1000} s. Look for a \`baseline/\` branch or PR there; if there is none, from an up-to-date andy-intelligence checkout:`,
+        `The App didn't finish the baseline PR in ${repo} within ${this.deadlineMs / 1000} s. Look for a \`baseline/\` branch or PR there; if there is none:`,
         "",
         "```bash",
-        `node platform/baseline/baseline.mjs onboard ${repo} --ref origin/main${deployFlags(project)}`,
+        `npx -y github:albernhagen/andy-intelligence onboard ${repo} --ref origin/main${deployFlags(project)}`,
         "```",
       ].join("\n"),
     );
@@ -141,7 +143,7 @@ export class BaselineProposer {
         repo,
         error,
       });
-      const command = `node platform/baseline/baseline.mjs onboard ${repo} --ref ${sha ?? BASELINE_REF}${deployFlags(project)}`;
+      const command = `npx -y github:albernhagen/andy-intelligence onboard ${repo} --ref ${sha ?? BASELINE_REF}${deployFlags(project)}`;
       const ticket = await this.needsYou(
         project,
         empty ? `Baseline for ${repo}: the repo is empty` : `Baseline PR for ${repo} failed`,
@@ -150,7 +152,7 @@ export class BaselineProposer {
             ? `${repo} has no commits yet, so the App has nothing to open a PR against. The CLI pushes the baseline (with the starter and its lockfile, which need \`pnpm install\`) and applies the GitHub settings with your login.`
             : `The App couldn't open the baseline PR in ${repo}: ${error}`,
           "",
-          "From an up-to-date andy-intelligence checkout (runbook `docs/runbooks/onboard-a-repo.md`):",
+          "With your `gh` login (runbook `docs/runbooks/onboard-a-repo.md`):",
           "",
           "```bash",
           command,

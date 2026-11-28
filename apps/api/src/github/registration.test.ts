@@ -70,7 +70,7 @@ describe("BaselineProposer", () => {
       JSON.parse(proposal.files.find((f) => f.path === ".andy/baseline.json")!.content),
     ).toMatchObject({ source: BASELINE_SOURCE, version: SOURCE_TIP, updated: "2026-11-22" });
     expect(proposal.body).toContain(
-      `node platform/baseline/baseline.mjs finish ${TARGET} --ref ${SOURCE_TIP} --branch baseline/eeeeeee`,
+      `npx -y github:albernhagen/andy-intelligence finish ${TARGET} --ref ${SOURCE_TIP} --branch baseline/eeeeeee`,
     );
     expect(proposal.body).toContain("`.github/workflows/agent-run.yml`: missing");
     expect(await needsYou()).toEqual([]);
@@ -180,7 +180,7 @@ describe("BaselineProposer", () => {
     expect(body).toContain('`enforcement`: want `"active"`, have `"disabled"`');
     expect(body).toContain("- actions: couldn't read (the App has no administration permission)");
     expect(body).toContain('- repo: couldn\'t read: `"repo: HTTP 500 {\\"message\\":\\"boom\\"}"`');
-    expect(body).toContain(`node platform/baseline/baseline.mjs apply ${TARGET} --dry-run`);
+    expect(body).toContain(`npx -y github:albernhagen/andy-intelligence apply ${TARGET} --dry-run`);
     expect(host.settingReads.every((r) => r.startsWith(`${TARGET}#`))).toBe(true);
   });
 
@@ -199,7 +199,7 @@ describe("BaselineProposer", () => {
     const [ticket] = await needsYou();
     expect(ticket?.title).toBe(`Baseline PR for ${TARGET} failed`);
     expect(ticket?.body).toContain("422 Reference already exists");
-    expect(ticket?.body).toContain(`baseline.mjs onboard ${TARGET} --ref ${SOURCE_TIP}`);
+    expect(ticket?.body).toContain(`andy-intelligence onboard ${TARGET} --ref ${SOURCE_TIP}`);
   });
 
   it("GivenACloudRunProjectWhoseOpenFails_WhenProposed_ThenTheOnboardCommandCarriesItsDeployFlags", async () => {
@@ -210,7 +210,7 @@ describe("BaselineProposer", () => {
     );
     const [ticket] = await needsYou();
     expect(ticket?.body).toContain(
-      `baseline.mjs onboard ${TARGET} --ref ${SOURCE_TIP} --deploy-kind cloud-run --environments dev-and-prod`,
+      `andy-intelligence onboard ${TARGET} --ref ${SOURCE_TIP} --deploy-kind cloud-run --environments dev-and-prod`,
     );
   });
 
@@ -228,7 +228,7 @@ describe("BaselineProposer", () => {
     expect(outcome.kind).toBe("empty_repo");
     const [ticket] = await needsYou();
     expect(ticket?.title).toBe(`Baseline for ${TARGET}: the repo is empty`);
-    expect(ticket?.body).toContain(`node platform/baseline/baseline.mjs onboard ${TARGET}`);
+    expect(ticket?.body).toContain(`npx -y github:albernhagen/andy-intelligence onboard ${TARGET}`);
   });
 
   it("GivenEveryFileAlreadyThere_WhenProposed_ThenNoPrAndTheReportIsANeedsYouTicket", async () => {
@@ -266,8 +266,8 @@ describe("BaselineProposer", () => {
     expect(outcomes.get("albernhagen/r5")?.kind).toBe("over_cap");
     const tickets = (await tracker.listTickets(many.id)).filter((t) => t.needsAttention);
     expect(tickets).toHaveLength(1);
-    expect(tickets[0]?.body).toContain("baseline.mjs onboard albernhagen/r4");
-    expect(tickets[0]?.body).toContain("baseline.mjs onboard albernhagen/r5");
+    expect(tickets[0]?.body).toContain("andy-intelligence onboard albernhagen/r4");
+    expect(tickets[0]?.body).toContain("andy-intelligence onboard albernhagen/r5");
   });
 
   it("GivenAProposalPastTheDeadline_WhenTheProjectIsRegistered_ThenItStopsWaitingAndNeedsYouSaysSo", async () => {

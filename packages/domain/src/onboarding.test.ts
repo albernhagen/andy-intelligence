@@ -99,7 +99,9 @@ describe("onboarding", () => {
     const commands = onboardingCommands(facts()).map((c) => c.text);
 
     expect(commands).toContain(`gh repo create ${REPO} --public`);
-    expect(commands).toContain(`node platform/baseline/baseline.mjs apply ${REPO} --dry-run`);
+    expect(commands).toContain(
+      `npx -y github:albernhagen/andy-intelligence apply ${REPO} --dry-run`,
+    );
     expect(commands).toContain(`gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo ${REPO}`);
     expect(commands.filter((c) => c.includes("<owner>"))).toEqual([]);
   });

@@ -154,11 +154,11 @@ const list = (entries) => entries.map((e) => `- \`${e.path}\`: ${e.note}`).join(
 function settingsReport(settings, repo) {
   const apply = [
     "",
-    "The App doesn't change GitHub settings. To see and apply them, from an andy-intelligence checkout:",
+    "The App doesn't change GitHub settings. To see and apply them, with your `gh` login:",
     "",
     "```bash",
-    `node platform/baseline/baseline.mjs apply ${repo} --dry-run`,
-    `node platform/baseline/baseline.mjs apply ${repo}`,
+    `npx -y github:albernhagen/andy-intelligence apply ${repo} --dry-run`,
+    `npx -y github:albernhagen/andy-intelligence apply ${repo}`,
     "```",
   ];
   if (settings.error) {
@@ -214,10 +214,10 @@ export function renderReport({
       plan.held.length === 0
         ? "Nothing."
         : [
-            "The App can't write workflows or agent settings. From an up-to-date andy-intelligence checkout, this commits the missing ones to this PR's branch:",
+            "The App can't write workflows or agent settings. With your `gh` login, this commits the missing ones to this PR's branch:",
             "",
             "```bash",
-            `node platform/baseline/baseline.mjs finish ${repo} --ref ${sha} --branch ${branch}${kind}`,
+            `npx -y github:albernhagen/andy-intelligence finish ${repo} --ref ${sha} --branch ${branch}${kind}`,
             "```",
             "",
             list(plan.held),
