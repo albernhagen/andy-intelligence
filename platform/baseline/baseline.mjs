@@ -85,6 +85,18 @@ export function loadConfig(dir = path.join(HERE, "github")) {
 
 const manifest = () => JSON.parse(readFileSync(path.join(HERE, "manifest.json"), "utf8"));
 
+/**
+ * The manifest at the pinned commit, so the file list matches the files that exist there: an
+ * older tag predates files this checkout's manifest names. This checkout's when the commit has
+ * none.
+ */
+function manifestAt(sha) {
+  const res = run("git", ["-C", SOURCE_ROOT, "show", `${sha}:platform/baseline/manifest.json`], {
+    allowFail: true,
+  });
+  return res.status === 0 ? JSON.parse(res.stdout) : manifest();
+}
+
 /** Resolves a ref in this checkout to a commit that also exists on GitHub (pins must resolve). */
 function resolveRef(ref, source) {
   const sha = run("git", [
@@ -152,8 +164,8 @@ function repoEnv() {
 
 /** Clones the repo, writes the baseline files, and pushes (empty repo) or opens a PR. */
 function filesCommand(repo, ref, kindFlag, environments = "prod-only") {
-  const m = manifest();
-  const sha = resolveRef(ref, m.source);
+  const sha = resolveRef(ref, manifest().source);
+  const m = manifestAt(sha);
   const dir = mkdtempSync(path.join(tmpdir(), "baseline-"));
   const env = repoEnv();
   run("gh", ["repo", "clone", repo, dir, "--", "--quiet"], { env });
@@ -226,8 +238,8 @@ function filesCommand(repo, ref, kindFlag, environments = "prod-only") {
  * for review (AI-113).
  */
 function finishCommand(repo, ref, branch, kindFlag) {
-  const m = manifest();
-  const sha = resolveRef(ref, m.source);
+  const sha = resolveRef(ref, manifest().source);
+  const m = manifestAt(sha);
   const dir = mkdtempSync(path.join(tmpdir(), "baseline-finish-"));
   const env = repoEnv();
   run("gh", ["repo", "clone", repo, dir, "--", "--quiet", "--branch", branch], { env });
@@ -308,7 +320,11 @@ async function checkCommand(repo, only) {
       } else {
         const { version, ref } = JSON.parse(record);
         const deployKind = deployKindFor(undefined, record);
-        const rendered = renderFiles(m, readAt(version), { sha: version, ref, deployKind });
+        const rendered = renderFiles(manifestAt(version), readAt(version), {
+          sha: version,
+          ref,
+          deployKind,
+        });
         const drift = fileDrift(rendered, (f) => readRemote(repo, f), {
           source: m.source,
           version,
