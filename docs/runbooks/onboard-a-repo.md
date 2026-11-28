@@ -23,10 +23,10 @@ Before you start: `gh auth status` shows you logged in; Node 22+; `pnpm` (or `np
 
 ## 1. Bring andy-intelligence itself to the baseline (once, after the M1.16 PR merges)
 
-This section and §1a, §6 change andy-intelligence's own settings right after a PR merges, so they run the CLI at `#main` (the just-merged config), not the release tag.
+This section and §1a, §6 change andy-intelligence's own settings right after a PR merges, so they run the CLI at that merge commit (the just-merged config), pinned by SHA, never `#main`: `SHA=$(gh api repos/albernhagen/andy-intelligence/commits/main --jq .sha)`, check it is the merge you reviewed, then use `#$SHA`.
 
 ```sh
-npx -y github:albernhagen/andy-intelligence#main apply albernhagen/andy-intelligence --dry-run
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence --dry-run
 ```
 
 Expected drift on 2026-11-02 (everything else `ok`):
@@ -39,8 +39,8 @@ Expected drift on 2026-11-02 (everything else `ok`):
 | `labels[0]` (`security-accepted`) color, description | `7E8B33`, empty | `B60205`, the description in `github/labels.json`   |
 
 ```sh
-npx -y github:albernhagen/andy-intelligence#main apply albernhagen/andy-intelligence
-npx -y github:albernhagen/andy-intelligence#main check albernhagen/andy-intelligence    # all ok; files: skipped (source repo)
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence
+npx -y github:albernhagen/andy-intelligence#$SHA check albernhagen/andy-intelligence    # all ok; files: skipped (source repo)
 ```
 
 Then tag the baseline version that repos will pin. Every command runs the CLI pinned to a tag (`BASELINE_CLI` in `platform/baseline/files.mjs` and `packages/domain/src/onboarding.ts`, R-AI-409): for a new tag, bump both in a PR, merge, then tag that merge commit:
@@ -54,9 +54,9 @@ git tag v1.2.0 origin/main && git push origin v1.2.0
 Apply only the ruleset to andy-intelligence, then check it took effect (e.g. AI-352 adds `sandbox-self-test`, `agent-evals`, `agent-evals-plumbing`):
 
 ```sh
-npx -y github:albernhagen/andy-intelligence#main apply albernhagen/andy-intelligence --dry-run   # drift only in ruleset required checks; anything else: stop, ask
-npx -y github:albernhagen/andy-intelligence#main apply albernhagen/andy-intelligence
-npx -y github:albernhagen/andy-intelligence#main check albernhagen/andy-intelligence --only ruleset   # exit 0
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence --dry-run   # drift only in ruleset required checks; anything else: stop, ask
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence
+npx -y github:albernhagen/andy-intelligence#$SHA check albernhagen/andy-intelligence --only ruleset   # exit 0
 ```
 
 Then open any PR: the new checks show as **Required** in its checks list.
@@ -189,8 +189,8 @@ gh pr create --fill && gh pr checks --watch
 Once, after the PR that adds them merges:
 
 ```sh
-npx -y github:albernhagen/andy-intelligence#main apply albernhagen/andy-intelligence --dry-run   # expect: repo.allow_auto_merge false → true
-npx -y github:albernhagen/andy-intelligence#main apply albernhagen/andy-intelligence
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence --dry-run   # expect: repo.allow_auto_merge false → true
+npx -y github:albernhagen/andy-intelligence#$SHA apply albernhagen/andy-intelligence
 ```
 
 Check on the next Dependabot PR:
