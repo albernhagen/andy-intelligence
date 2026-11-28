@@ -19,7 +19,7 @@ const BASE: Record<OnboardingStepKey, Base> = {
       "Create the repo (a new, empty one: run onboard now), then install the GitHub App on it.",
     commands: [
       { label: "Create the repo", text: `gh repo create ${REPO} --public` },
-      { label: "Onboard a new repo", text: cmd(`onboard ${REPO} --ref v1.0.0`) },
+      { label: "Onboard a new repo", text: cmd(`onboard ${REPO} --ref v1.1.0`) },
     ],
     link: {
       label: "Install the GitHub App",

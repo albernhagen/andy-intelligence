@@ -25,7 +25,7 @@ The steps behind these checks live in composite actions in `platform/actions/`; 
 Every repo Andy manages gets the same checks, files and GitHub settings (ARCHITECTURE §8.1). Run from this repo with your `gh` login; never in CI. Steps: [`docs/runbooks/onboard-a-repo.md`](runbooks/onboard-a-repo.md).
 
 ```sh
-node platform/baseline/baseline.mjs onboard <owner/repo> --ref v1.0.0   # files + GitHub settings
+node platform/baseline/baseline.mjs onboard <owner/repo> --ref v1.1.0   # files + GitHub settings
 node platform/baseline/baseline.mjs apply <owner/repo> --dry-run        # show settings drift
 node platform/baseline/baseline.mjs check <owner/repo>                  # drift report; exit 1 on drift
 ```
