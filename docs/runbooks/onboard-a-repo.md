@@ -143,7 +143,7 @@ node platform/baseline/baseline.mjs files albernhagen/<name> --ref v1.0.0   # op
 
 Review and merge the PR (an existing repo needs `pnpm lint/typecheck/test/build` scripts, `.nvmrc`, and `lefthook` as a dev dependency with `"prepare": "lefthook install"`). Then `apply` (a dry run first) and `check`. Apply the ruleset only after the PR merges: before that, its required checks don't exist on `main`.
 
-`ci.yml` runs lint, typecheck, tests (two vitest shards, `--passWithNoTests` so a small suite's empty shard passes; shard 1 fails if `vitest list` finds no test files at all) and build as parallel `check-*` jobs; only the final `check` gate is required, so the ruleset is the same with an older baseline (AI-402). Sharding needs vitest: the `test` script must be vitest (or take its `--shard=<i>/<n>` and `--passWithNoTests`), and `pnpm exec vitest` must exist.
+`ci.yml` runs lint, typecheck, test (the whole suite with coverage, AI-407) and build as parallel `check-*` jobs; only the final `check` gate is required, so the ruleset is the same with an older baseline (AI-402). The `test` script must be vitest and accept `--coverage`; the repo needs `@vitest/coverage-v8` (same version as vitest) and floors in its vitest config (`coverage.thresholds`, reporters `json-summary` and `json`; the starter's `vitest.config.ts` is a template), or `check-test` fails naming what is missing.
 
 ## 5. Update a repo to a newer baseline
 
