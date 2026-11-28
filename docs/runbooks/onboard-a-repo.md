@@ -49,6 +49,12 @@ Then tag the baseline version that repos will pin. Every command runs the CLI pi
 git tag v1.2.0 origin/main && git push origin v1.2.0
 ```
 
+Do this right after the merge, before anyone onboards or the API deploys: until the tag exists, every printed command fails. Then check the pinned CLI runs:
+
+```sh
+npx -y github:albernhagen/andy-intelligence#v1.2.0 check albernhagen/andy-intelligence --only files   # files: skipped (source repo)
+```
+
 ### 1a. After a PR changes `github/ruleset-main.json` merges
 
 Apply only the ruleset to andy-intelligence, then check it took effect (e.g. AI-352 adds `sandbox-self-test`, `agent-evals`, `agent-evals-plumbing`):
