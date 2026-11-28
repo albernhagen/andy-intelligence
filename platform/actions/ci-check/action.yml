@@ -1,18 +1,22 @@
 name: Baseline — check
 description: >-
-  Lockfile sources, lint, context budget, typecheck, test and build a pnpm repo (ADR-0022, ADR-0046, project baseline ADR-0031/ADR-0038).
-  Needs package.json (packageManager pinned), pnpm-lock.yaml, .nvmrc and the scripts
-  lint, typecheck, test, build. Run after actions/checkout. `part` picks one piece so a caller can
+  Lockfile sources, lint, context budget, typecheck, test with coverage and build a pnpm repo (ADR-0022, ADR-0046, project baseline ADR-0031/ADR-0038).
+  Needs package.json (packageManager pinned), pnpm-lock.yaml, .nvmrc, the scripts
+  lint, typecheck, test (vitest), build, and @vitest/coverage-v8 with coverage floors in the vitest
+  config (AI-407). Run after actions/checkout. `part` picks one piece so a caller can
   run them as parallel jobs (AI-402); `part: result` is the final gate over those jobs' results.
 
 inputs:
   part:
     description: >-
       all (every step in order), lint (lockfile sources, lint, context budget), typecheck, test,
-      build, or result (fails unless every job in `results` succeeded; installs nothing).
+      coverage (merges the test shards' coverage and checks the floors), build, or result (fails
+      unless every job in `results` succeeded; installs nothing).
     default: all
   test-shard:
-    description: With part test, run one shard of the suite, as <index>/<count> (vitest `--shard`). Empty runs it whole.
+    description: >-
+      With part test, run one shard of the suite, as <index>/<count> (vitest `--shard`), and upload
+      its blob report for part coverage. Empty runs it whole and checks the coverage floors itself.
     default: ""
   results:
     description: With part result, the caller's `toJSON(needs)`.
@@ -28,7 +32,7 @@ runs:
         PART: ${{ inputs.part }}
         SHARD: ${{ inputs.test-shard }}
       run: |
-        case "$PART" in all|lint|typecheck|test|build|result) ;; *) echo "::error::Unknown part '$PART'"; exit 1 ;; esac
+        case "$PART" in all|lint|typecheck|test|coverage|build|result) ;; *) echo "::error::Unknown part '$PART'"; exit 1 ;; esac
         if [ -n "$SHARD" ] && { [ "$PART" != test ] || ! [[ "$SHARD" =~ ^[1-9][0-9]*/[1-9][0-9]*$ ]]; }; then
           echo "::error::test-shard '$SHARD' needs part test and the form <index>/<count>"; exit 1
         fi
@@ -69,18 +73,67 @@ runs:
       shell: bash
       run: pnpm typecheck
     - if: inputs.part == 'all' || inputs.part == 'test'
+      id: test
       shell: bash
       env:
         SHARD: ${{ inputs.test-shard }}
+        BLOB_DIR: ${{ runner.temp }}/vitest-blob
+      # Coverage is on in every test run (AI-407). Unsharded, vitest checks the floors itself. A
+      # shard sees only part of the suite, so it writes a blob report (results and coverage) with
+      # the floors off (COVERAGE_FLOORS=off, read by the vitest config); part coverage merges them.
       # A shard may hold no test files in a small repo (vitest refuses a count above the file
       # count unless --passWithNoTests), so a sharded run allows an empty shard. Shard 1 first
       # checks the whole suite isn't empty, so a broken test glob can't pass every shard.
       run: |
-        if [ -z "$SHARD" ]; then pnpm test; exit 0; fi
+        if ! node -e 'require.resolve("@vitest/coverage-v8/package.json", { paths: [process.cwd()] })' 2>/dev/null; then
+          echo "::error::@vitest/coverage-v8 is not installed: add it as a dev dependency at the same version as vitest (AI-407: test coverage)"
+          exit 1
+        fi
+        if [ -z "$SHARD" ]; then pnpm test --coverage; exit 0; fi
         if [ "${SHARD%%/*}" = 1 ]; then
           pnpm exec vitest list --filesOnly | node "$GITHUB_ACTION_PATH/../../../scripts/test-files-check.mjs"
         fi
-        pnpm test --shard="$SHARD" --passWithNoTests
+        COVERAGE_FLOORS=off pnpm test --shard="$SHARD" --passWithNoTests --coverage \
+          --reporter=default --reporter=blob --outputFile.blob="$BLOB_DIR/blob-${SHARD%%/*}-${SHARD##*/}.json"
+        echo "name=coverage-blob-${SHARD%%/*}-${SHARD##*/}" >> "$GITHUB_OUTPUT"
+    - name: Upload the shard's blob report
+      if: inputs.part == 'test' && inputs.test-shard != ''
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ steps.test.outputs.name }}
+        path: ${{ runner.temp }}/vitest-blob/
+        if-no-files-found: error
+        retention-days: 1
+        # A re-run of a failed shard uploads again under the same name.
+        overwrite: true
+    - name: Download the shards' blob reports
+      if: inputs.part == 'coverage'
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        pattern: coverage-blob-*
+        path: ${{ runner.temp }}/vitest-blob/
+        merge-multiple: true
+    - name: Coverage floors (merged shards)
+      if: inputs.part == 'coverage'
+      shell: bash
+      env:
+        BLOB_DIR: ${{ runner.temp }}/vitest-blob
+      run: pnpm test --merge-reports="$BLOB_DIR" --coverage
+    # Per-package table and, on a PR, changed-line coverage (a warning, never a failure) in the job
+    # summary. It runs when the floors fail too, so the table shows what dropped. The PR's change is
+    # HEAD^1..HEAD of the merge commit a pull_request checks out (the caller fetches depth 2).
+    - name: Coverage report
+      if: (success() || failure()) && (inputs.part == 'coverage' || (inputs.part == 'all' && steps.test.conclusion != 'skipped'))
+      shell: bash
+      env:
+        EVENT: ${{ github.event_name }}
+      run: |
+        DIFF=""
+        if [ "$EVENT" = pull_request ] && git rev-parse -q --verify HEAD^1 >/dev/null; then
+          DIFF="$RUNNER_TEMP/pr.diff"
+          git diff --unified=0 HEAD^1 HEAD > "$DIFF"
+        fi
+        node "$GITHUB_ACTION_PATH/../../../scripts/coverage-report.mjs" coverage $DIFF
     - if: inputs.part == 'all' || inputs.part == 'build'
       shell: bash
       run: pnpm build

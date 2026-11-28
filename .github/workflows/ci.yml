@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  # `check` runs as parallel parts (AI-402): lint, typecheck, two test shards and build, each a
+  # `check` runs as parallel parts (AI-402): lint, typecheck, two test shards, coverage and build, each a
   # `part` of platform/actions/ci-check. The final `check` job is the required check: it always
   # runs and passes only when every part's result is `success`, so a failed, skipped or cancelled
   # part fails it.
@@ -55,6 +55,22 @@ jobs:
           part: test
           test-shard: ${{ matrix.shard }}/2
 
+  # Merges the test shards' coverage, fails when a package drops below its floor, and writes the
+  # coverage table and the PR's changed-line coverage to the job summary (AI-407).
+  check-coverage:
+    needs: [check-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The PR's merge commit and its base parent, for changed-line coverage.
+          fetch-depth: 2
+      - uses: ./platform/actions/ci-check
+        with:
+          part: coverage
+
   check-build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -67,7 +83,7 @@ jobs:
           part: build
 
   check:
-    needs: [check-lint, check-typecheck, check-test, check-build]
+    needs: [check-lint, check-typecheck, check-test, check-coverage, check-build]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

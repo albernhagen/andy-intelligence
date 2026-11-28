@@ -43,7 +43,7 @@ Tools: Node from `.nvmrc`; pnpm (`corepack enable`); Terraform from `.terraform-
 
 ```sh
 pnpm install
-pnpm test        # vitest, all packages
+pnpm test        # vitest, all packages (`--coverage`: coverage and its floors, as CI runs it)
 pnpm typecheck
 pnpm lint
 pnpm build
