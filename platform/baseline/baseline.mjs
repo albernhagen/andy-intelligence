@@ -105,8 +105,8 @@ const SOURCE = manifest().source;
 export const CLI = BASELINE_CLI;
 
 /** A file of the baseline source at `sha`, through the GitHub API; null when it isn't there. */
-function readSource(file, sha) {
-  const res = ghApi("GET", `repos/${SOURCE}/contents/${encodePath(file)}?ref=${sha}`);
+export function readSource(file, sha, api = ghApi) {
+  const res = api("GET", `repos/${SOURCE}/contents/${encodePath(file)}?ref=${sha}`);
   if (res.status === 404) return null;
   if (res.status !== 200 || typeof res.data?.content !== "string")
     throw new Error(`read ${SOURCE}/${file} at ${sha.slice(0, 7)}: HTTP ${res.status}`);
@@ -116,11 +116,13 @@ function readSource(file, sha) {
 const encodePath = (file) => file.split("/").map(encodeURIComponent).join("/");
 
 /** Reader for `renderFiles`: a file the manifest names must exist at the commit. */
-const readAt = (sha) => (from) => {
-  const text = readSource(from, sha);
-  if (text === null) throw new Error(`${from} isn't in ${SOURCE} at ${sha.slice(0, 7)}`);
-  return text;
-};
+export const readAt =
+  (sha, api = ghApi) =>
+  (from) => {
+    const text = readSource(from, sha, api);
+    if (text === null) throw new Error(`${from} isn't in ${SOURCE} at ${sha.slice(0, 7)}`);
+    return text;
+  };
 
 /**
  * The manifest at the pinned commit, so the file list matches the files that exist there: an
@@ -133,9 +135,9 @@ export function manifestAt(sha, read = readSource, current = manifest) {
 }
 
 /** Resolves a tag, branch (`origin/` optional) or SHA to a commit SHA on GitHub (pins must resolve). */
-function resolveRef(ref) {
+export function resolveRef(ref, api = ghApi) {
   const name = ref.replace(/^origin\//, "");
-  const res = ghApi("GET", `repos/${SOURCE}/commits/${encodeURIComponent(name)}`);
+  const res = api("GET", `repos/${SOURCE}/commits/${encodeURIComponent(name)}`);
   if (res.status !== 200 || !/^[0-9a-f]{40}$/.test(res.data?.sha ?? ""))
     throw new Error(
       `${ref} isn't a commit on GitHub ${SOURCE} (HTTP ${res.status}); push it first`,
@@ -152,8 +154,8 @@ export function latestTag(names) {
 }
 
 /** --ref's default: the source's newest release tag. */
-function defaultRef() {
-  const res = ghApi("GET", `repos/${SOURCE}/tags?per_page=100`);
+export function defaultRef(api = ghApi) {
+  const res = api("GET", `repos/${SOURCE}/tags?per_page=100`);
   if (res.status !== 200) throw new Error(`list ${SOURCE} tags: HTTP ${res.status}; pass --ref`);
   const tag = latestTag(res.data.map((t) => t.name));
   if (!tag) throw new Error(`${SOURCE} has no vX.Y.Z tag; pass --ref`);

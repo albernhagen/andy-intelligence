@@ -8,8 +8,12 @@ import {
   deployKindFor,
   latestTag,
   loadConfig,
+  defaultRef,
   manifestAt,
   nextSteps,
+  readAt,
+  readSource,
+  resolveRef,
   parseArgs,
   parseGhResponse,
   repoOfRemote,
@@ -48,6 +52,55 @@ describe("manifestAt", () => {
 
   it("GivenAReadFailure_WhenRead_ThenThrows", () => {
     expect(() => manifestAt("unknown", read, current)).toThrow(/HTTP 422/);
+  });
+});
+
+describe("GitHub API reads", () => {
+  const SHA = "a".repeat(40);
+  const stub = (status, data) => {
+    const calls = [];
+    const api = (method, apiPath) => {
+      calls.push(apiPath);
+      return { status, data };
+    };
+    return { api, calls };
+  };
+  const b64 = (text) => Buffer.from(text).toString("base64");
+
+  it("GivenAFile_WhenRead_ThenDecodedFromTheRef", () => {
+    const { api, calls } = stub(200, { content: b64("hello") });
+    expect(readSource(".github/workflows/ci.yml", SHA, api)).toBe("hello");
+    expect(calls[0]).toBe(
+      `repos/albernhagen/andy-intelligence/contents/.github/workflows/ci.yml?ref=${SHA}`,
+    );
+  });
+
+  it("GivenAMissingFile_WhenRead_ThenNullAndReadAtThrows", () => {
+    const { api } = stub(404, {});
+    expect(readSource("x.yml", SHA, api)).toBeNull();
+    expect(() => readAt(SHA, api)("x.yml")).toThrow("x.yml isn't in");
+  });
+
+  it("GivenAnErrorOrNoContent_WhenRead_ThenThrows", () => {
+    expect(() => readSource("x", SHA, stub(500, {}).api)).toThrow("HTTP 500");
+    expect(() => readSource("big", SHA, stub(200, { content: null }).api)).toThrow("HTTP 200");
+  });
+
+  it("GivenABranchWithSlashOrOriginPrefix_WhenResolved_ThenCommitSha", () => {
+    const { api, calls } = stub(200, { sha: SHA });
+    expect(resolveRef("origin/m1.16/project-baseline", api)).toBe(SHA);
+    expect(calls[0]).toBe("repos/albernhagen/andy-intelligence/commits/m1.16%2Fproject-baseline");
+  });
+
+  it("GivenAnUnknownRef_WhenResolved_ThenThrowsPushItFirst", () => {
+    expect(() => resolveRef("nope", stub(422, {}).api)).toThrow("push it first");
+    expect(() => resolveRef("x", stub(200, { sha: "short" }).api)).toThrow("isn't a commit");
+  });
+
+  it("GivenTags_WhenDefaulted_ThenNewestReleaseElseThrows", () => {
+    expect(defaultRef(stub(200, [{ name: "v1.1.0" }, { name: "v1.2.0" }]).api)).toBe("v1.2.0");
+    expect(() => defaultRef(stub(200, [{ name: "x" }]).api)).toThrow("no vX.Y.Z tag");
+    expect(() => defaultRef(stub(403, {}).api)).toThrow("pass --ref");
   });
 });
 
