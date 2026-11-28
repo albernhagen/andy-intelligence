@@ -25,7 +25,7 @@ The steps behind these checks live in composite actions in `platform/actions/`; 
 Every repo Andy manages gets the same checks, files and GitHub settings (ARCHITECTURE §8.1). Run anywhere with your `gh` login (no checkout, AI-409); never in CI. Steps: [`docs/runbooks/onboard-a-repo.md`](runbooks/onboard-a-repo.md).
 
 ```sh
-npx -y github:albernhagen/andy-intelligence#v1.2.0 onboard <owner/repo>   # newest tag; files + settings, or PR then steps
+npx -y github:albernhagen/andy-intelligence#v1.2.0 onboard <owner/repo>   # CLI's tag; files + settings, or PR then steps
 npx -y github:albernhagen/andy-intelligence#v1.2.0 apply <owner/repo> --dry-run        # show settings drift
 npx -y github:albernhagen/andy-intelligence#v1.2.0 check <owner/repo>                  # drift report; exit 1 on drift
 ```

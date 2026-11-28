@@ -6,7 +6,7 @@
 //   npx -y github:albernhagen/andy-intelligence#v1.2.0 <command> ...
 //
 // It reads the baseline files at the ref through the GitHub API. <owner/repo> defaults to the
-// current folder's `origin`; --ref defaults to the newest vX.Y.Z tag.
+// current folder's `origin`; --ref defaults to the CLI's pinned tag (`BASELINE_CLI`).
 //
 //   baseline.mjs onboard [owner/repo] [--ref <tag|branch|sha>]   files, then apply (a new repo)
 //                        or the steps after the PR (an existing repo)
@@ -145,21 +145,19 @@ export function resolveRef(ref, api = ghApi) {
   return res.data.sha;
 }
 
-/** The newest `vX.Y.Z` tag name, or null. */
-export function latestTag(names) {
-  const parse = (n) => /^v(\d+)\.(\d+)\.(\d+)$/.exec(n)?.slice(1).map(Number);
-  const tags = names.map((n) => ({ n, v: parse(n) })).filter((t) => t.v);
-  tags.sort((a, b) => b.v[0] - a.v[0] || b.v[1] - a.v[1] || b.v[2] - a.v[2]);
-  return tags[0]?.n ?? null;
+/** The release tag in a pinned CLI command (`…#vX.Y.Z`), or null. */
+export function cliTag(cli = BASELINE_CLI) {
+  return /#(v\d+\.\d+\.\d+)$/.exec(cli)?.[1] ?? null;
 }
 
-/** --ref's default: the source's newest release tag. */
-export function defaultRef(api = ghApi) {
-  const res = api("GET", `repos/${SOURCE}/tags?per_page=100`);
-  if (res.status !== 200) throw new Error(`list ${SOURCE} tags: HTTP ${res.status}; pass --ref`);
-  const tag = latestTag(res.data.map((t) => t.name));
-  if (!tag) throw new Error(`${SOURCE} has no vX.Y.Z tag; pass --ref`);
-  console.log(`--ref not given: using the newest baseline tag, ${tag}`);
+/**
+ * --ref's default: the tag the printed commands pin the CLI to, so the code that runs and the
+ * files it writes share one trust anchor; never "whatever tag is newest" (security review, R-AI-409).
+ */
+export function defaultRef(cli = BASELINE_CLI) {
+  const tag = cliTag(cli);
+  if (!tag) throw new Error(`${cli} pins no vX.Y.Z tag; pass --ref`);
+  console.log(`--ref not given: using the CLI's baseline tag, ${tag}`);
   return tag;
 }
 

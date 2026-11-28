@@ -4,9 +4,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   CLI,
+  cliTag,
   configFor,
   deployKindFor,
-  latestTag,
   loadConfig,
   defaultRef,
   manifestAt,
@@ -97,22 +97,10 @@ describe("GitHub API reads", () => {
     expect(() => resolveRef("x", stub(200, { sha: "short" }).api)).toThrow("isn't a commit");
   });
 
-  it("GivenTags_WhenDefaulted_ThenNewestReleaseElseThrows", () => {
-    expect(defaultRef(stub(200, [{ name: "v1.1.0" }, { name: "v1.2.0" }]).api)).toBe("v1.2.0");
-    expect(() => defaultRef(stub(200, [{ name: "x" }]).api)).toThrow("no vX.Y.Z tag");
-    expect(() => defaultRef(stub(403, {}).api)).toThrow("pass --ref");
-  });
-});
-
-describe("latestTag", () => {
-  it("GivenTags_WhenPicked_ThenNewestSemverIgnoringOthers", () => {
-    expect(latestTag(["v1.2.0", "v1.10.0", "v1.9.9", "v2.0.0-rc1", "main", "v1.0.0"])).toBe(
-      "v1.10.0",
-    );
-  });
-
-  it("GivenNoReleaseTag_WhenPicked_ThenNull", () => {
-    expect(latestTag(["nightly", "v1"])).toBeNull();
+  it("GivenThePinnedCli_WhenDefaulted_ThenItsOwnTagElseThrows", () => {
+    expect(defaultRef("npx -y github:a/b#v1.2.0")).toBe("v1.2.0");
+    expect(cliTag(CLI)).toMatch(/^v\d+\.\d+\.\d+$/);
+    expect(() => defaultRef("npx -y github:a/b")).toThrow("pass --ref");
   });
 });
 

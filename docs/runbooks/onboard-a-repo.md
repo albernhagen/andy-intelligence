@@ -1,6 +1,6 @@
 # Onboard a repo to the project baseline — runbook (Andy)
 
-The **project baseline** is the set of guardrails every repo Andy manages gets: CI and security checks, review agents, local hooks, repo files, and GitHub settings (ADR-0031: Project baseline, ADR-0038: Baseline carried by composite actions; inventory in ARCHITECTURE §8.1). One CLI applies and checks it: `platform/baseline/baseline.mjs`. Run it anywhere with `npx -y github:albernhagen/andy-intelligence#v1.2.0 <command>` (no checkout: it reads the baseline files at the ref through the GitHub API, AI-409); it uses your `gh` login (admin on your repos). Never run it in CI. `<owner/repo>` defaults to the current folder's `origin`; `--ref` defaults to the newest `vX.Y.Z` tag.
+The **project baseline** is the set of guardrails every repo Andy manages gets: CI and security checks, review agents, local hooks, repo files, and GitHub settings (ADR-0031: Project baseline, ADR-0038: Baseline carried by composite actions; inventory in ARCHITECTURE §8.1). One CLI applies and checks it: `platform/baseline/baseline.mjs`. Run it anywhere with `npx -y github:albernhagen/andy-intelligence#v1.2.0 <command>` (no checkout: it reads the baseline files at the ref through the GitHub API, AI-409); it uses your `gh` login (admin on your repos). Never run it in CI. `<owner/repo>` defaults to the current folder's `origin`; `--ref` defaults to the tag the CLI is pinned to (so code and files come from the same tag).
 
 | Term                  | Meaning                                                                                                                                                                                                                        |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -120,7 +120,7 @@ gh repo create albernhagen/<name> --public    # a new repo only
 npx -y github:albernhagen/andy-intelligence#v1.2.0 onboard albernhagen/<name>
 ```
 
-It picks the newest baseline tag and tells new from existing by itself:
+It uses the CLI's own baseline tag and tells new from existing by itself:
 
 | The repo is…             | `onboard` does                                                                                        | Then (it prints these)                                      |
 | ------------------------ | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
