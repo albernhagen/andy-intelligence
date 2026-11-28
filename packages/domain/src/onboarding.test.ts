@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
 import type { OnboardingStepKey, ProvingRefine } from "@andy/contracts";
 import { describe, expect, it } from "vitest";
+import { BASELINE_CLI as PINNED_CLI } from "../../../platform/baseline/files.mjs";
 import { BASELINE_FILES } from "./setup-checklist";
 import {
+  BASELINE_CLI,
   missingBaselineFiles,
   onboarding,
   onboardingCommands,
@@ -100,7 +102,7 @@ describe("onboarding", () => {
 
     expect(commands).toContain(`gh repo create ${REPO} --public`);
     expect(commands).toContain(
-      `npx -y github:albernhagen/andy-intelligence apply ${REPO} --dry-run`,
+      `npx -y github:albernhagen/andy-intelligence#v1.2.0 apply ${REPO} --dry-run`,
     );
     expect(commands).toContain(`gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo ${REPO}`);
     expect(commands.filter((c) => c.includes("<owner>"))).toEqual([]);
@@ -338,5 +340,12 @@ describe("runbook managed-project.md", () => {
       facts({ repo: { kind: "no_repo" }, deployKind: "cloud-run" }),
     ).map((c) => c.text);
     for (const command of commands) expect(runbook).toContain(command);
+  });
+});
+
+describe("BASELINE_CLI", () => {
+  it("GivenTheCliPin_WhenCompared_ThenSameTagAsTheBaselineScripts", () => {
+    expect(BASELINE_CLI).toBe(PINNED_CLI);
+    expect(BASELINE_CLI).toMatch(/#v\d+\.\d+\.\d+$/);
   });
 });

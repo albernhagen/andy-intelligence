@@ -4,6 +4,13 @@
 const LOCAL_ACTION = /^(\s*(?:-\s+)?uses:\s+)\.\/platform\/actions\/([\w-]+)[ \t]*$/gm;
 
 /** Rewrites local `./platform/actions/X` uses to `<source>/platform/actions/X@<sha> # <ref>`. */
+/**
+ * How Andy runs the baseline CLI with no checkout (AI-409), pinned to a release tag: it runs with
+ * his admin `gh` login, so never unpinned `main` (R-AI-409). Cutting a new tag: bump this (and
+ * `BASELINE_CLI` in packages/domain/src/onboarding.ts) in a PR, merge, then tag that commit.
+ */
+export const BASELINE_CLI = "npx -y github:albernhagen/andy-intelligence#v1.2.0";
+
 export function pinActions(text, { source, sha, ref }) {
   return text.replace(
     LOCAL_ACTION,

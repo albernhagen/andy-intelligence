@@ -3,7 +3,7 @@
 // never in CI except `check --only labels,ruleset` in the system security review.
 // Runbook: docs/runbooks/onboard-a-repo.md. Needs no andy-intelligence checkout (AI-409):
 //
-//   npx -y github:albernhagen/andy-intelligence <command> ...
+//   npx -y github:albernhagen/andy-intelligence#v1.2.0 <command> ...
 //
 // It reads the baseline files at the ref through the GitHub API. <owner/repo> defaults to the
 // current folder's `origin`; --ref defaults to the newest vX.Y.Z tag.
@@ -35,6 +35,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applySections, checkSections, configFor, parseConfig, SECTIONS } from "./github.mjs";
 import {
+  BASELINE_CLI,
   baselineRecord,
   checkDeployKind,
   checkEnvironments,
@@ -100,8 +101,8 @@ const manifest = () => JSON.parse(readFileSync(path.join(HERE, "manifest.json"),
 const MANIFEST_PATH = "platform/baseline/manifest.json";
 const SOURCE = manifest().source;
 
-/** How Andy runs this CLI anywhere, for the commands it prints (AI-409). */
-export const CLI = `npx -y github:${SOURCE}`;
+/** How Andy runs this CLI anywhere, pinned to a tag, for the commands it prints (AI-409). */
+export const CLI = BASELINE_CLI;
 
 /** A file of the baseline source at `sha`, through the GitHub API; null when it isn't there. */
 function readSource(file, sha) {

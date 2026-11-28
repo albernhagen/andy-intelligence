@@ -90,7 +90,7 @@ describe("nextSteps", () => {
   });
 
   it("GivenTheCli_WhenPrinted_ThenNpxFromGitHub", () => {
-    expect(CLI).toBe("npx -y github:albernhagen/andy-intelligence");
+    expect(CLI).toMatch(/^npx -y github:albernhagen\/andy-intelligence#v\d+\.\d+\.\d+$/);
   });
 });
 

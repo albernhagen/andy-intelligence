@@ -96,8 +96,8 @@ export function isMarkable(key: OnboardingStepKey): key is MarkableStepKey {
   return MARKABLE.has(key);
 }
 
-/** The baseline CLI, run from GitHub with no checkout (AI-409). */
-export const BASELINE_CLI = "npx -y github:albernhagen/andy-intelligence";
+/** The baseline CLI, run from GitHub with no checkout, pinned to a tag (AI-409, R-AI-409); equals platform/baseline/files.mjs `BASELINE_CLI` (tested). */
+export const BASELINE_CLI = "npx -y github:albernhagen/andy-intelligence#v1.2.0";
 const baseline = (cmd: string) => `${BASELINE_CLI} ${cmd}`;
 const done = (label: string): OnboardingCheck => ({ label, status: "done", detail: null });
 const check = (label: string, ok: boolean, detail: string): OnboardingCheck =>

@@ -39,13 +39,13 @@ The setup path puts the brief, plan and approve steps between 7 and 8: the brief
 ```sh
 # 1. Create the repo; a new, empty one: onboard it
 gh repo create <owner>/<name> --public
-npx -y github:albernhagen/andy-intelligence onboard <owner>/<name>
+npx -y github:albernhagen/andy-intelligence#v1.2.0 onboard <owner>/<name>
 
 # 4. Baseline PR, then the repo settings (your gh login; no checkout)
-npx -y github:albernhagen/andy-intelligence finish <owner>/<name> --ref <sha> --branch baseline/<sha7>
-npx -y github:albernhagen/andy-intelligence apply <owner>/<name> --dry-run
-npx -y github:albernhagen/andy-intelligence apply <owner>/<name>
-npx -y github:albernhagen/andy-intelligence check <owner>/<name>
+npx -y github:albernhagen/andy-intelligence#v1.2.0 finish <owner>/<name> --ref <sha> --branch baseline/<sha7>
+npx -y github:albernhagen/andy-intelligence#v1.2.0 apply <owner>/<name> --dry-run
+npx -y github:albernhagen/andy-intelligence#v1.2.0 apply <owner>/<name>
+npx -y github:albernhagen/andy-intelligence#v1.2.0 check <owner>/<name>
 
 # 4a. cloud-run only, in a clone of the repo, after infra/terraform.tfvars has real values
 gcloud storage buckets create gs://<prod project>-tfstate --project <prod project> --location us-central1 --uniform-bucket-level-access --public-access-prevention

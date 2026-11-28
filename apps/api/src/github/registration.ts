@@ -1,6 +1,11 @@
 import type { CodeHost, Project, WorkTracker } from "@andy/contracts";
 import manifestFile from "../../../../platform/baseline/manifest.json";
-import { deployFlags, renderFiles, type Manifest } from "../../../../platform/baseline/files.mjs";
+import {
+  BASELINE_CLI,
+  deployFlags,
+  renderFiles,
+  type Manifest,
+} from "../../../../platform/baseline/files.mjs";
 import {
   checkSections,
   CONFIG_FILES,
@@ -87,9 +92,7 @@ export class BaselineProposer {
           `One registration opens at most ${MAX_BASELINE_REPOS} baseline PRs. Onboard the rest:`,
           "",
           "```bash",
-          ...rest.map(
-            (r) => `npx -y github:albernhagen/andy-intelligence onboard ${r} --ref origin/main`,
-          ),
+          ...rest.map((r) => `${BASELINE_CLI} onboard ${r} --ref origin/main`),
           "```",
         ].join("\n"),
       );
@@ -117,7 +120,7 @@ export class BaselineProposer {
         `The App didn't finish the baseline PR in ${repo} within ${this.deadlineMs / 1000} s. Look for a \`baseline/\` branch or PR there; if there is none:`,
         "",
         "```bash",
-        `npx -y github:albernhagen/andy-intelligence onboard ${repo} --ref origin/main${deployFlags(project)}`,
+        `${BASELINE_CLI} onboard ${repo} --ref origin/main${deployFlags(project)}`,
         "```",
       ].join("\n"),
     );
@@ -143,7 +146,7 @@ export class BaselineProposer {
         repo,
         error,
       });
-      const command = `npx -y github:albernhagen/andy-intelligence onboard ${repo} --ref ${sha ?? BASELINE_REF}${deployFlags(project)}`;
+      const command = `${BASELINE_CLI} onboard ${repo} --ref ${sha ?? BASELINE_REF}${deployFlags(project)}`;
       const ticket = await this.needsYou(
         project,
         empty ? `Baseline for ${repo}: the repo is empty` : `Baseline PR for ${repo} failed`,

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -149,7 +149,8 @@ describe("CLI", () => {
   const script = join(import.meta.dirname, "coverage-report.mjs");
 
   it("GivenACoverageDirAndDiff_WhenRun_ThenAppendsSummaryAndWarns", () => {
-    const dir = mkdtempSync(join(tmpdir(), "coverage-report-"));
+    // Real path: on macOS tmpdir() is /var/…, but process.cwd() there reports /private/var/….
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "coverage-report-")));
     writeFileSync(
       join(dir, "coverage-summary.json"),
       JSON.stringify({ [join(dir, "src/a.ts")]: metrics(1, 2) }),
@@ -170,7 +171,8 @@ describe("CLI", () => {
   });
 
   it("GivenNoSummaryFile_WhenRun_ThenFails", () => {
-    const dir = mkdtempSync(join(tmpdir(), "coverage-report-"));
+    // Real path: on macOS tmpdir() is /var/…, but process.cwd() there reports /private/var/….
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "coverage-report-")));
     expect(() => execFileSync("node", [script, dir], { cwd: dir, stdio: "pipe" })).toThrow();
   });
 });

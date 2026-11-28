@@ -7,7 +7,7 @@ import type { Onboarding, OnboardingStatus, OnboardingStepKey } from "@andy/cont
 
 const REPO = "albernhagen/widgets";
 const gh = (path: string) => `https://github.com/${REPO}${path}`;
-const cmd = (c: string) => `npx -y github:albernhagen/andy-intelligence ${c}`;
+const cmd = (c: string) => `npx -y github:albernhagen/andy-intelligence#v1.2.0 ${c}`;
 
 type Base = Omit<Onboarding["steps"][number], "status" | "marked" | "checks">;
 

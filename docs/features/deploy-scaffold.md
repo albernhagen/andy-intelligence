@@ -17,6 +17,6 @@ AI-109: M6.22, ADR-0114. When a repo is registered, its baseline PR carries what
 - **Setup path:** step "Deploy environments" lists the commands for a `cloud-run` project (marked done by hand) and reads done for `none`.
 - **A new kind** adds its own seed entries to `platform/baseline/manifest.json` (`deployKind`, optionally `environments`) and files under `template/infra/<kind>/`; registration doesn't change.
 
-**How to use:** set the deploy kind and environments before registering the repo (Settings or MCP `set_deploy_kind`, `set_environments`). Then runbook [`project-env.md`](../runbooks/project-env.md). For a repo onboarded by the CLI: `npx -y github:albernhagen/andy-intelligence files <repo> --deploy-kind cloud-run --environments <policy>`.
+**How to use:** set the deploy kind and environments before registering the repo (Settings or MCP `set_deploy_kind`, `set_environments`). Then runbook [`project-env.md`](../runbooks/project-env.md). For a repo onboarded by the CLI: `npx -y github:albernhagen/andy-intelligence#v1.2.0 files <repo> --deploy-kind cloud-run --environments <policy>`.
 
 **Code:** `template/infra/cloud-run/`, `template/docker/`, `platform/baseline/manifest.json` (seed entries), `platform/baseline/files.mjs` (`renderFiles`, `pinModules`), `apps/api/src/github/registration.ts`, `packages/domain/src/onboarding.ts` (`deploy_env`).

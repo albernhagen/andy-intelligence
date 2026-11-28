@@ -111,28 +111,28 @@ pnpm --filter @andy/web icons                # rebuild favicon and app icons fro
 
 ## Layout
 
-| Path                  | What                                                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA                                                                       |
-| `apps/web`            | React + Vite + shadcn UI; design rules in `design.md`                                                                           |
-| `apps/local-runner`   | Local runner CLI: claims agent tasks, runs them on Andy's Mac                                                                   |
-| `packages/contracts`  | Zod entities, ports, fakes, contract suites                                                                                     |
-| `packages/domain`     | Ticket and project rules: stages, DoR, Needs-you, repo registration                                                             |
-| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`                                                                            |
-| `packages/github`     | GitHub App adapter: `GitHubCodeHost`, webhook HMAC + mapping                                                                    |
-| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)                                                                              |
-| `infra/control-plane` | Control-plane GCP resources                                                                                                     |
-| `infra/billing`       | Budgets (control plane + managed projects), opt-in kill switches                                                                |
-| `infra/dns`           | Cloudflare records for `ai.andybernhagen.com` (local plans only)                                                                |
-| `infra/modules`       | Terraform modules, managed projects: `project-env`, `-budget`, `-alerts`                                                        |
-| `scripts`             | Repo tooling: format hook, review gate, coordinator tools                                                                       |
-| `platform/actions`    | Composite actions behind every required check (baseline)                                                                        |
-| `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs` (the root package's `bin`: `npx -y github:albernhagen/andy-intelligence`) |
-| `platform/executor`   | Permission profile for headless agent tasks (ADR-0051)                                                                          |
-| `platform/procedures` | Agent procedures and their output schemas                                                                                       |
-| `context-budget.json` | Size budgets for agent-loaded docs (`pnpm context:check`, ADR-0046)                                                             |
-| `template`            | Files copied into managed repos (managed, seed, starter)                                                                        |
-| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                                                                              |
-| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                                                                             |
+| Path                  | What                                                                                                                                   |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api`            | Hono API, MCP endpoint + its OAuth server; serves the SPA                                                                              |
+| `apps/web`            | React + Vite + shadcn UI; design rules in `design.md`                                                                                  |
+| `apps/local-runner`   | Local runner CLI: claims agent tasks, runs them on Andy's Mac                                                                          |
+| `packages/contracts`  | Zod entities, ports, fakes, contract suites                                                                                            |
+| `packages/domain`     | Ticket and project rules: stages, DoR, Needs-you, repo registration                                                                    |
+| `packages/store`      | Firestore client, converters, `FirestoreWorkTracker`                                                                                   |
+| `packages/github`     | GitHub App adapter: `GitHubCodeHost`, webhook HMAC + mapping                                                                           |
+| `infra/bootstrap`     | One-time GCP bootstrap (state bucket, GitHub OIDC)                                                                                     |
+| `infra/control-plane` | Control-plane GCP resources                                                                                                            |
+| `infra/billing`       | Budgets (control plane + managed projects), opt-in kill switches                                                                       |
+| `infra/dns`           | Cloudflare records for `ai.andybernhagen.com` (local plans only)                                                                       |
+| `infra/modules`       | Terraform modules, managed projects: `project-env`, `-budget`, `-alerts`                                                               |
+| `scripts`             | Repo tooling: format hook, review gate, coordinator tools                                                                              |
+| `platform/actions`    | Composite actions behind every required check (baseline)                                                                               |
+| `platform/baseline`   | Baseline manifest, GitHub config JSON, `baseline.mjs` (the root package's `bin`: `npx -y github:albernhagen/andy-intelligence#v1.2.0`) |
+| `platform/executor`   | Permission profile for headless agent tasks (ADR-0051)                                                                                 |
+| `platform/procedures` | Agent procedures and their output schemas                                                                                              |
+| `context-budget.json` | Size budgets for agent-loaded docs (`pnpm context:check`, ADR-0046)                                                                    |
+| `template`            | Files copied into managed repos (managed, seed, starter)                                                                               |
+| `lefthook.yml`        | Git hooks: pre-commit lint/format, pre-push checks                                                                                     |
+| `firebase.json`       | Firestore emulator config for `pnpm test:firestore`                                                                                    |
 
 Runbooks for every manual step: [`docs/runbooks/`](docs/runbooks/). Deploys (`deploy.yml`), and promote or rollback (`release.yml`, `workflow_dispatch` on `main`): [`deploy-and-rollback.md`](docs/runbooks/deploy-and-rollback.md).
